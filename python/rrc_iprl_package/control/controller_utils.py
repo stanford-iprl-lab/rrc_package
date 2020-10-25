@@ -3,9 +3,9 @@ import enum
 from scipy.spatial.transform import Rotation
 from scipy.spatial.distance import pdist, squareform
 
-from .contact_point import ContactPoint
-from trfinger_simulation.tasks import move_cube
-from rrc_iprl_package.fixed_contact_point_opt import FixedContactPointOpt
+from rrc_iprl_package.control.contact_point import ContactPoint
+from trifinger_simulation.tasks import move_cube
+from rrc_iprl_package.traj_opt.fixed_contact_point_opt import FixedContactPointOpt
 
 # Here, hard code the base position of the fingers (as angle on the arena)
 r = 0.15

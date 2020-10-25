@@ -6,11 +6,11 @@ import os.path as osp
 import time
 import numpy as np
 
-from stable_baselines import HER, SAC
-from stable_baselines.common.atari_wrappers import FrameStack
-from rrc_simulation.gym_wrapper.envs import custom_env
+from rrc_iprl_package.envs import custom_env
 from spinup.utils import rrc_utils
 from stable_baselines.common.vec_env import DummyVecEnv
+from stable_baselines import HER, SAC
+from stable_baselines.common.atari_wrappers import FrameStack
 
 
 def make_reorient_env():

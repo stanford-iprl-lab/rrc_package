@@ -12,9 +12,9 @@ import trifinger_simulation
 import trifinger_simulation.visual_objects
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
-from rrc_iprl_package import cube_env
-from rrc_simulation.control_env import PolicyMode
-from rrc_simulation.control_policy import HierarchicalControllerPolicy
+from rrc_iprl_package.envs import cube_env
+from rrc_iprl_package.control.controller_utils import PolicyMode
+from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
