@@ -7,7 +7,7 @@ dummy policy which uses random actions.
 import json
 import sys
 
-from rrc_iprl_package.envs import cube_env
+from rrc_iprl_package.envs import cube_env, custom_env
 from trifinger_simulation.tasks import move_cube 
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
@@ -41,7 +41,7 @@ def main():
                    initial_pose=initial_pose, goal_pose=goal_pose,
                    load_dir=rl_load_dir, difficulty=difficulty,
                    start_mode=start_mode)
-    env = ResidualPolicyWrapper(env, policy)
+    env = custom_env.ResidualPolicyWrapper(env, policy)
     obs = env.reset()
 
 
