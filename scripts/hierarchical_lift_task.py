@@ -42,12 +42,8 @@ def main():
                    load_dir=rl_load_dir, difficulty=difficulty,
                    start_mode=start_mode)
     env = custom_env.ResidualPolicyWrapper(env, policy)
-    obs = env.reset()
-
-
-
     observation = env.reset()
-    is_done = False
+
     accumulated_reward = 0
     while not is_done:
         action = policy.predict(observation)
