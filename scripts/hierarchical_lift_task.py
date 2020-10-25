@@ -46,6 +46,7 @@ def main():
 
     accumulated_reward = 0
     is_done = False
+    old_mode = policy.mode
     while not is_done:
         action = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
