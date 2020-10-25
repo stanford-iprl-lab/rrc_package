@@ -308,7 +308,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.env = env
         self.reward_range = self.env.reward_range
         # set observation_space and action_space below
-        spaces = TriFingerPlatform.spaces
+        spaces = trifinger_simulation.TriFingerPlatform.spaces
         self._action_space = gym.spaces.Dict({
             'torque': spaces.robot_torque.gym, 'position': spaces.robot_position.gym})
         self.set_policy(policy)
