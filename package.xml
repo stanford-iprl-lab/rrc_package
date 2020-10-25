@@ -1,12 +1,12 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>rrc_example_package</name>
+  <name>rrc_iprl_package</name>
   <version>1.0.0</version>
   <description>
-      Example package for the Real Robot Challenge Submission System.
+      RRC package for Team Yoda
   </description>
 
-  <maintainer email="felix.widmaier@tue.mpg.de">Felix Widmaier</maintainer>
+  <maintainer email="krshna@stanford.edu">Krishnan Srinivasan</maintainer>
 
   <license>BSD 3-clause</license>
 
