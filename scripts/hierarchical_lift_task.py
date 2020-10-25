@@ -9,6 +9,7 @@ import sys
 
 from rrc_iprl_package.envs import cube_env
 from trifinger_simulation.tasks import move_cube 
+from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 
@@ -39,8 +40,6 @@ def main():
                    initial_pose=initial_pose, goal_pose=goal_pose,
                    load_dir=rl_load_dir, difficulty=difficulty,
                    start_mode=start_mode)
-    eval_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',
-                 'final_ori_dist', 'final_ori_scaled']
     env = ResidualPolicyWrapper(env, policy)
     obs = env.reset()
 
