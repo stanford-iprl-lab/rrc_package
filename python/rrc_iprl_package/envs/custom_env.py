@@ -304,7 +304,7 @@ class PushCubeEnv(gym.Env):
 
 class ResidualPolicyWrapper(ObservationWrapper):
     def __init__(self, env, policy):
-        assert isinstance(env.unwrapped, cube_env.CubeEnv), 'env expects type CubeEnv'
+        assert isinstance(env.unwrapped, cube_env.RealRobotCubeEnv), 'env expects type CubeEnv'
         self.env = env
         self.reward_range = self.env.reward_range
         # set observation_space and action_space below
@@ -449,7 +449,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         return robot_action
 
     def step(self, action):
-        # CubeEnv handles gym_action_to_robot_action
+        # RealRobotCubeEnv handles gym_action_to_robot_action
         #print(self.mode)
         if self.mode == PolicyMode.RL_PUSH:
             self.unwrapped.frameskip = self.policy.rl_frameskip
