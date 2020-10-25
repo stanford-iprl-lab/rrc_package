@@ -8,7 +8,6 @@ import os.path as osp
 import numpy as np
 import joblib
 
-import torch
 import trifinger_simulation.visual_objects
 
 from datetime import date
@@ -28,6 +27,10 @@ try:
 except ImportError:
     sb_utils = None
 
+try:
+    import torch
+except ImportError:
+    torch = None
 
 
 class ImpedanceControllerPolicy:
