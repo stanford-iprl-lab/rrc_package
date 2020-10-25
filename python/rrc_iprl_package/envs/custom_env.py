@@ -15,6 +15,7 @@ from trifinger_simulation.tasks import move_cube
 
 from rrc_iprl_package import pybullet_utils as putils
 from rrc_iprl_package.envs import cube_env
+from rrc_iprl_package.envs.cube_env import ActionType
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
