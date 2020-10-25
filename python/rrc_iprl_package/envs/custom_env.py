@@ -12,29 +12,11 @@ import trifinger_simulation
 import trifinger_simulation.visual_objects
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
+
+from rrc_iprl_package import pybullet_utils as putils
 from rrc_iprl_package.envs import cube_env
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
-
-
-MAX_DIST = move_cube._max_cube_com_distance_to_center
-DIST_THRESH = move_cube._CUBE_WIDTH / 5
-ORI_THRESH = np.pi / 8
-REW_BONUS = 1
-POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
-                      0.203])
-
-
-def reset_camera():
-    camera_pos = (0.,0.2,-0.2)
-    camera_dist = 1.0
-    pitch = -45.
-    yaw = 0.
-    if pybullet.isConnected() != 0:
-        pybullet.resetDebugVisualizerCamera(cameraDistance=camera_dist,
-                                    cameraYaw=yaw,
-                                    cameraPitch=pitch,
-                                    cameraTargetPosition=camera_pos)
 
 
 class PushCubeEnv(gym.Env):
@@ -202,7 +184,7 @@ class PushCubeEnv(gym.Env):
                 orientation=self.goal["orientation"],
                 physicsClientId=self.platform.simfinger._pybullet_client_id,
             )
-            reset_camera()
+            putils.reset_camera()
 
     def reset(self):
         # reset simulation

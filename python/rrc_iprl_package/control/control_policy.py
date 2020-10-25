@@ -16,7 +16,6 @@ from trifinger_simulation.tasks import move_cube
 from trifinger_simulation import pinocchio_utils
 from trifinger_simulation import visual_objects
 
-from rrc_iprl_package.envs.custom_env import reset_camera
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
@@ -103,7 +102,6 @@ class ImpedanceControllerPolicy:
         self.custom_pinocchio_utils = CustomPinocchioUtils(
                 self.platform.simfinger.finger_urdf_path,
                 self.platform.simfinger.tip_link_names)
-        reset_camera()
 
       # Get object pose
         obj_pose = get_pose_from_observation(observation)
