@@ -177,16 +177,6 @@ class PushCubeEnv(gym.Env):
             initial_object_pose=initial_object_pose,
         )
 
-        # visualize the goal
-        if visualization:
-            self.goal_marker = trifinger_simulation.visual_objects.CubeMarker(
-                width=0.065,
-                position=self.goal["position"],
-                orientation=self.goal["orientation"],
-                physicsClientId=self.platform.simfinger._pybullet_client_id,
-            )
-            putils.reset_camera()
-
     def reset(self):
         # reset simulation
         del self.platform
@@ -391,7 +381,14 @@ class ResidualPolicyWrapper(ObservationWrapper):
 
     def reset(self):
         obs = super(ResidualPolicyWrapper, self).reset()
-        self.policy.platform = self.env.unwrapped.platform
+        # TODO remove hardcoded visualization object pose
+        visualization = True
+        initial_object_pose = move_cube.sample_goal(difficulty=-1)
+
+        self.policy.platform = trifinger_simulation.TriFingerPlatform(
+            visualization=visualization,
+            initial_object_pose=initial_object_pose,
+        )
         self.policy.reset_policy()
         self.step_count = 0
         return obs
