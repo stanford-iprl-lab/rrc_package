@@ -32,7 +32,7 @@ def main():
     goal = json.loads(goal_pose_json)
 
     env = cube_env.RealRobotCubeEnv(
-        goal, difficulty, cube_env.ActionType.POSITION, frameskip=200
+        goal, difficulty, cube_env.ActionType.TORQUE_AND_POSITION, frameskip=200
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
     initial_pose = move_cube.sample_goal(difficulty=-1)
