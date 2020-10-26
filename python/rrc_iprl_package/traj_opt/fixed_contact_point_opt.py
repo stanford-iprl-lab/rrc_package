@@ -128,7 +128,7 @@ class FixedContactPointOpt:
     l = self.system.l_unpack(l_flat) 
     x,dx = self.system.s_unpack(s_flat)
 
-    n = 0.2
+    n = 0.4
     target_normal_forces = np.zeros(l[0,:].shape)
     target_normal_forces[0,0] = n
     target_normal_forces[0,3] = n
