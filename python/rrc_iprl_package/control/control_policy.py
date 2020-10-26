@@ -34,7 +34,7 @@ except ImportError:
 
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
-                 npz_file=None, debug_waypoints=False):
+                 npz_file=None, debug_waypoints=True):
         self.action_space = action_space
         if npz_file is not None:
             self.load_npz(npz_file)
@@ -188,18 +188,17 @@ class ImpedanceControllerPolicy:
             if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
                 self.pre_traj_waypoint_i += 1
                 self.goal_reached = False
-            else:
-                if self.flipping:
-                    fingertips_current = self.custom_pinocchio_utils.forward_kinematics(
-                            current_position)
-                    self.flipping_wp, self.done_with_primitive = c_utils.get_flipping_waypoint(
-                            object_pose, self.init_face, self.goal_face,
-                            fingertips_current, self.fingertips_init, self.cp_params)
-                    self.goal_reached = False
-                elif self.traj_waypoint_i < self.nGrid:
-                    # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
-                    self.traj_waypoint_i += 1
-                    self.goal_reached = False
+            if self.flipping:
+                fingertips_current = self.custom_pinocchio_utils.forward_kinematics(
+                        current_position)
+                self.flipping_wp, self.done_with_primitive = c_utils.get_flipping_waypoint(
+                        object_pose, self.init_face, self.goal_face,
+                        fingertips_current, self.fingertips_init, self.cp_params)
+                self.goal_reached = False
+            elif self.traj_waypoint_i < self.nGrid:
+                # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
+                self.traj_waypoint_i += 1
+                self.goal_reached = False
         else:
             if self.flipping and self.step_count > self.max_step_count:
                 self.done_with_primitive = True

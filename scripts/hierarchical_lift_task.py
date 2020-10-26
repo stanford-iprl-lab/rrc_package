@@ -6,6 +6,7 @@ dummy policy which uses random actions.
 """
 import json
 import sys
+import numpy as np
 
 from rrc_iprl_package.envs import cube_env, custom_env
 from trifinger_simulation.tasks import move_cube 
@@ -30,9 +31,12 @@ def main():
     difficulty = int(sys.argv[1])
     goal_pose_json = sys.argv[2]
     goal = json.loads(goal_pose_json)
+    initial_pose = move_cube.sample_goal(-1)
+    initial_pose.position = np.array([0,0,.0325])
 
     env = cube_env.RealRobotCubeEnv(
-        goal, difficulty, cube_env.ActionType.TORQUE_AND_POSITION, frameskip=200
+        goal, initial_pose, difficulty,
+        cube_env.ActionType.TORQUE_AND_POSITION, frameskip=200
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
     initial_pose = move_cube.sample_goal(difficulty=2)

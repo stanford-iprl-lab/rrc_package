@@ -36,6 +36,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def __init__(
         self,
         cube_goal_pose: dict,
+        cube_initial_pose: dict,
         goal_difficulty: int,
         action_type: ActionType = ActionType.POSITION,
         frameskip: int = 1,
@@ -57,6 +58,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         self.goal = cube_goal_pose
         self.info = {"difficulty": goal_difficulty}
+        self.initial_pose = cube_initial_pose if cube_initial_pose else move_cube.sample_goal(-1)
 
         self.action_type = action_type
 
@@ -264,10 +266,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
         del self.platform
 
         # initialize simulation
-        initial_object_pose = move_cube.sample_goal(difficulty=-1)
         self.platform = trifinger_simulation.TriFingerPlatform(
             visualization=visualization,
-            initial_object_pose=initial_object_pose,
+            initial_object_pose=self.initial_pose,
         )
 
         # visualize the goal
