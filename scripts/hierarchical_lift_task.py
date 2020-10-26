@@ -35,7 +35,7 @@ def main():
         goal, difficulty, cube_env.ActionType.TORQUE_AND_POSITION, frameskip=200
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
-    initial_pose = move_cube.sample_goal(difficulty=-1)
+    initial_pose = move_cube.sample_goal(difficulty=2)
     goal_pose = move_cube.Pose.from_dict(goal)
     policy = HierarchicalControllerPolicy(action_space=env.action_space,
                    initial_pose=initial_pose, goal_pose=goal_pose,

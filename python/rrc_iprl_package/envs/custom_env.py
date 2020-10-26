@@ -382,11 +382,10 @@ class ResidualPolicyWrapper(ObservationWrapper):
     def reset(self):
         obs = super(ResidualPolicyWrapper, self).reset()
         # TODO remove hardcoded visualization object pose
-        visualization = True
         initial_object_pose = move_cube.sample_goal(difficulty=-1)
 
         self.policy.platform = trifinger_simulation.TriFingerPlatform(
-            visualization=visualization,
+            visualization=False,
             initial_object_pose=initial_object_pose,
         )
         self.policy.reset_policy()
