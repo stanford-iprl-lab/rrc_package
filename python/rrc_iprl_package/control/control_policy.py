@@ -32,7 +32,7 @@ except ImportError:
 
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
-                 npz_file=None, debug_waypoints=True):
+                 npz_file=None, debug_waypoints=False):
         self.action_space = action_space
         if npz_file is not None:
             self.load_npz(npz_file)
@@ -147,6 +147,7 @@ class ImpedanceControllerPolicy:
         self.step_count += 1
         observation = observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
+        print(self.pre_traj_waypoint_i, self.traj_waypoint_i)
         object_pose = move_cube.Pose(current_position, current_velocity)
         if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
             # Get fingertip goals from finger_waypoints_list

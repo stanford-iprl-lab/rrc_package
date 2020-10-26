@@ -127,7 +127,7 @@ def impedance_controller_single_finger(
                                       tip_force_wf = None,
                                       tol          = 0.008
                                       ):
-  n = 3
+  n = 1
   Kp_x = 200 //n
   Kp_y = 200 //n
   Kp_z = 400 //n
