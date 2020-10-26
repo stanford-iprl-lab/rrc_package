@@ -8,8 +8,6 @@ import os.path as osp
 import numpy as np
 import joblib
 
-import trifinger_simulation.visual_objects
-
 from datetime import date
 from trifinger_simulation import TriFingerPlatform
 from trifinger_simulation.tasks import move_cube
