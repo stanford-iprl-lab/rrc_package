@@ -40,7 +40,7 @@ class ImpedanceControllerPolicy:
             self.nGrid = 50
             self.dt = 0.01
         self.flipping = False
-        self.debug_waypoints = True
+        self.debug_waypoints = debug_waypoints
         self.set_init_goal(initial_pose, goal_pose)
         self.setup_logging()
         self.finger_waypoints = None
