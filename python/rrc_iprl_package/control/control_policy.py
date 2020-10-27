@@ -147,7 +147,7 @@ class ImpedanceControllerPolicy:
         self.step_count += 1
         observation = observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
-        print(self.pre_traj_waypoint_i, self.traj_waypoint_i)
+        print("pre traj waypoint: {}, traj waypoint: {}".format(self.pre_traj_waypoint_i, self.traj_waypoint_i))
         object_pose = move_cube.Pose(current_position, current_velocity)
         if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
             # Get fingertip goals from finger_waypoints_list
