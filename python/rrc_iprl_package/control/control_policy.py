@@ -163,9 +163,7 @@ class ImpedanceControllerPolicy:
             print("CURRENT: {}".format(cur_ft_pos))
             if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]):
                 # Get fingertip goals from finger_waypoints_list
-                self.fingertip_goal_list = []
-                for f_i in range(3):
-                    self.fingertip_goal_list.append(self.ft_tracking_waypoints_list[f_i][self.traj_waypoint_i])
+                self.fingertip_goal_list = self.ft_tracking_waypoints_list
                 self.tol = 0.005
                 self.tip_forces_wf = None
                 print("TARGET: {}".format(self.fingertip_goal_list))
