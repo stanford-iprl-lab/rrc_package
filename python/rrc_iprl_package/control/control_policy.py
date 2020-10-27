@@ -145,28 +145,32 @@ class ImpedanceControllerPolicy:
         self.goal_reached = False
 
         # Get ft position tracking trajectory
-        print(self.fingertips_init)
         self.ft_tracking_waypoints_list = copy.deepcopy(self.fingertips_init)
         for i in range(3):
             self.ft_tracking_waypoints_list[i][2] += 0.0
+
+        csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
+        print(csv_header)
 
     def predict(self, observation):
         self.step_count += 1
         observation = observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
   
-        print("STEP: {}".format(self.step_count))
-        print("CURRENT Q: {}".format(current_position))
+        # Formulate row to print
+        csv_row = "{},".format(self.step_count)
+        for f_i in range(3):
+            for d in range(3):
+                csv_row += "{},".format(self.ft_tracking_waypoints_list[f_i][d])
+        print(csv_row)
         # IF TESTING FINGERTIP TRACKING
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
-            print("CURRENT: {}".format(cur_ft_pos))
             if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]):
                 # Get fingertip goals from finger_waypoints_list
                 self.fingertip_goal_list = self.ft_tracking_waypoints_list
                 self.tol = 0.005
                 self.tip_forces_wf = None
-                print("TARGET: {}".format(self.fingertip_goal_list))
 
             # Compute torque with impedance controller, and clip
             torque, self.goal_reached = c_utils.impedance_controller(
@@ -184,7 +188,7 @@ class ImpedanceControllerPolicy:
 
         else:
             # ELSE, DO NORMAL PHASE 1 THINGS
-            print("pre traj waypoint: {}, traj waypoint: {}".format(self.pre_traj_waypoint_i, self.traj_waypoint_i))
+            #print("pre traj waypoint: {}, traj waypoint: {}".format(self.pre_traj_waypoint_i, self.traj_waypoint_i))
             object_pose = move_cube.Pose(current_position, current_velocity)
             if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
                 # Get fingertip goals from finger_waypoints_list
@@ -239,7 +243,7 @@ class ImpedanceControllerPolicy:
             else:
                 if self.flipping and self.step_count > self.max_step_count:
                     self.done_with_primitive = True
-        print("Torque from policy: {}".format(torque))
+        #print("Torque from policy: {}".format(torque))
 
         return torque
 

@@ -57,9 +57,9 @@ def main():
         action = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
         if old_mode != policy.mode:
-            print('mode changed: {} to {}'.format(old_mode, policy.mode))
+            #print('mode changed: {} to {}'.format(old_mode, policy.mode))
             old_mode = policy.mode
-        print("reward:", reward)
+        #print("reward:", reward)
         accumulated_reward += reward
         steps_so_far += 1
         if steps_so_far == 200: is_done = True
