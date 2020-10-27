@@ -64,8 +64,8 @@ def main():
         steps_so_far += 1
         if steps_so_far == 200: is_done = True
 
-    print("------")
-    print("Accumulated Reward: {:.3f}".format(accumulated_reward))
+    #print("------")
+    #print("Accumulated Reward: {:.3f}".format(accumulated_reward))
 
 
 if __name__ == "__main__":
