@@ -127,22 +127,22 @@ def impedance_controller_single_finger(
                                       tip_force_wf = None,
                                       tol          = 0.008
                                       ):
-  Kp_x = 100
-  Kp_y = 100
-  Kp_z = 200
+  Kp_x = 200
+  Kp_y = 200
+  Kp_z = 400
   Kp = np.diag([Kp_x, Kp_y, Kp_z])
-  Kv_x = 1
-  Kv_y = 1
-  Kv_z = 1
+  Kv_x = 7
+  Kv_y = 7
+  Kv_z = 7
   Kv = np.diag([Kv_x, Kv_y, Kv_z])
 
   # Compute current fingertip position
   x_current = custom_pinocchio_utils.forward_kinematics(q_current)[finger_id]
 
   delta_x = np.expand_dims(np.array(tip_desired) - np.array(x_current), 1)
-  #print("Current x: {}".format(x_current))
-  #print("Desired x: {}".format(tip_desired))
-  #print(delta_x)
+  print("Current x: {}".format(x_current))
+  print("Desired x: {}".format(tip_desired))
+  print("Delta: {}".format(delta_x))
   
   # Get full Jacobian for finger
   Ji = custom_pinocchio_utils.get_tip_link_jacobian(finger_id, q_current)
