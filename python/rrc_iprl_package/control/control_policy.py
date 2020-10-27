@@ -7,6 +7,7 @@ import os
 import os.path as osp
 import numpy as np
 import joblib
+import copy
 
 from datetime import date
 from trifinger_simulation import TriFingerPlatform
@@ -41,6 +42,7 @@ class ImpedanceControllerPolicy:
             self.dt = 0.01
         self.flipping = False
         self.debug_waypoints = debug_waypoints
+        self.debug_fingertip_tracking = True
         self.set_init_goal(initial_pose, goal_pose)
         self.setup_logging()
         self.finger_waypoints = None
@@ -143,65 +145,98 @@ class ImpedanceControllerPolicy:
         self.traj_waypoint_i = 0
         self.goal_reached = False
 
+        # Get ft position tracking trajectory
+        print(self.fingertips_init)
+        self.ft_tracking_waypoints_list = copy.deepcopy(self.fingertips_init)
+        for i in range(3):
+            self.ft_tracking_waypoints_list[i][2] += -0.03
+
     def predict(self, observation):
         self.step_count += 1
         observation = observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
-        print("pre traj waypoint: {}, traj waypoint: {}".format(self.pre_traj_waypoint_i, self.traj_waypoint_i))
-        object_pose = move_cube.Pose(current_position, current_velocity)
-        if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
-            # Get fingertip goals from finger_waypoints_list
-            self.fingertip_goal_list = []
-            for f_i in range(3):
-                self.fingertip_goal_list.append(self.finger_waypoints_list[f_i][self.pre_traj_waypoint_i])
-            self.tol = 0.009
-            self.tip_forces_wf = None
-        elif self.flipping:
-            self.fingertip_goal_list = self.flipping_wp
-            self.tip_forces_wf = None
-        # Follow trajectory to lift object
-        elif self.traj_waypoint_i < self.nGrid:
-            self.fingertip_goal_list = []
-            next_cube_pos_wf = self.x_soln[self.traj_waypoint_i, 0:3]
-            next_cube_quat_wf = self.x_soln[self.traj_waypoint_i, 3:]
+  
+        # IF TESTING FINGERTIP TRACKING
+        if self.debug_fingertip_tracking:
+            if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list):
+                # Get fingertip goals from finger_waypoints_list
+                self.fingertip_goal_list = []
+                for f_i in range(3):
+                    self.fingertip_goal_list.append(self.ft_tracking_waypoints_list[f_i][self.traj_waypoint_i])
+                self.tol = 0.005
+                self.tip_forces_wf = None
 
-            self.fingertip_goal_list = c_utils.get_cp_wf_list_from_cp_params(
-                    self.cp_params, next_cube_pos_wf, next_cube_quat_wf)
-            # Get target contact forces in world frame 
-            self.tip_forces_wf = self.l_wf_soln[self.traj_waypoint_i, :]
-            self.tol = 0.007
-        if self.debug_waypoints:
-            self.finger_waypoints.set_state(self.fingertip_goal_list)
-        # currently, torques are not limited to same range as what is used by simulator
-        # torque commands are breaking limits for initial and final goal poses that require 
-        # huge distances are covered in a few waypoints? Assign # waypoints wrt distance between
-        # start and goal
-        torque, self.goal_reached = c_utils.impedance_controller(
-            self.fingertip_goal_list, current_position, current_velocity,
-            self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf,
-            tol=self.tol)
-        torque = np.clip(torque, self.action_space.low, self.action_space.high)
+            # Compute torque with impedance controller, and clip
+            torque, self.goal_reached = c_utils.impedance_controller(
+                self.fingertip_goal_list, current_position, current_velocity,
+                self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf,
+                tol=self.tol)
+            torque = np.clip(torque, self.action_space.low, self.action_space.high)
 
-        if self.goal_reached:
-            self.step_count = 0 # Reset step count
-            if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
-                self.pre_traj_waypoint_i += 1
-                self.goal_reached = False
-            else:
-              if self.flipping:
-                  fingertips_current = self.custom_pinocchio_utils.forward_kinematics(
-                          current_position)
-                  self.flipping_wp, self.done_with_primitive = c_utils.get_flipping_waypoint(
-                          object_pose, self.init_face, self.goal_face,
-                          fingertips_current, self.fingertips_init, self.cp_params)
-                  self.goal_reached = False
-              elif self.traj_waypoint_i < self.nGrid:
-                  # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
-                  self.traj_waypoint_i += 1
-                  self.goal_reached = False
+            # Increment waypoint
+            if self.goal_reached:
+                if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list):
+                    # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
+                    self.traj_waypoint_i += 1
+                    self.goal_reached = False
+
         else:
-            if self.flipping and self.step_count > self.max_step_count:
-                self.done_with_primitive = True
+            # ELSE, DO NORMAL PHASE 1 THINGS
+            print("pre traj waypoint: {}, traj waypoint: {}".format(self.pre_traj_waypoint_i, self.traj_waypoint_i))
+            object_pose = move_cube.Pose(current_position, current_velocity)
+            if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
+                # Get fingertip goals from finger_waypoints_list
+                self.fingertip_goal_list = []
+                for f_i in range(3):
+                    self.fingertip_goal_list.append(self.finger_waypoints_list[f_i][self.pre_traj_waypoint_i])
+                self.tol = 0.009
+                self.tip_forces_wf = None
+            elif self.flipping:
+                self.fingertip_goal_list = self.flipping_wp
+                self.tip_forces_wf = None
+            # Follow trajectory to lift object
+            elif self.traj_waypoint_i < self.nGrid:
+                self.fingertip_goal_list = []
+                next_cube_pos_wf = self.x_soln[self.traj_waypoint_i, 0:3]
+                next_cube_quat_wf = self.x_soln[self.traj_waypoint_i, 3:]
+
+                self.fingertip_goal_list = c_utils.get_cp_wf_list_from_cp_params(
+                        self.cp_params, next_cube_pos_wf, next_cube_quat_wf)
+                # Get target contact forces in world frame 
+                self.tip_forces_wf = self.l_wf_soln[self.traj_waypoint_i, :]
+                self.tol = 0.007
+            if self.debug_waypoints:
+                self.finger_waypoints.set_state(self.fingertip_goal_list)
+            # currently, torques are not limited to same range as what is used by simulator
+            # torque commands are breaking limits for initial and final goal poses that require 
+            # huge distances are covered in a few waypoints? Assign # waypoints wrt distance between
+            # start and goal
+            torque, self.goal_reached = c_utils.impedance_controller(
+                self.fingertip_goal_list, current_position, current_velocity,
+                self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf,
+                tol=self.tol)
+            torque = np.clip(torque, self.action_space.low, self.action_space.high)
+
+            if self.goal_reached:
+                self.step_count = 0 # Reset step count
+                if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
+                    self.pre_traj_waypoint_i += 1
+                    self.goal_reached = False
+                else:
+                  if self.flipping:
+                      fingertips_current = self.custom_pinocchio_utils.forward_kinematics(
+                              current_position)
+                      self.flipping_wp, self.done_with_primitive = c_utils.get_flipping_waypoint(
+                              object_pose, self.init_face, self.goal_face,
+                              fingertips_current, self.fingertips_init, self.cp_params)
+                      self.goal_reached = False
+                  elif self.traj_waypoint_i < self.nGrid:
+                      # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
+                      self.traj_waypoint_i += 1
+                      self.goal_reached = False
+            else:
+                if self.flipping and self.step_count > self.max_step_count:
+                    self.done_with_primitive = True
         print("Torque from policy: {}".format(torque))
 
         return torque
