@@ -54,7 +54,6 @@ def main():
     old_mode = policy.mode
     steps_so_far = 0
     while not is_done:
-        if steps_so_far == 200: quit()
         action = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
         if old_mode != policy.mode:
@@ -63,6 +62,7 @@ def main():
         print("reward:", reward)
         accumulated_reward += reward
         steps_so_far += 1
+        if steps_so_far == 200: is_done = True
 
     print("------")
     print("Accumulated Reward: {:.3f}".format(accumulated_reward))
