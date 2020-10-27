@@ -156,7 +156,7 @@ class ImpedanceControllerPolicy:
         observation = observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
   
-        print("STEP: {}".format(step_count))
+        print("STEP: {}".format(self.step_count))
         # IF TESTING FINGERTIP TRACKING
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
