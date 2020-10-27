@@ -18,6 +18,7 @@ from trifinger_simulation import visual_objects
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
+import rrc_iprl_package.traj_opt.kinematics_utils as k_utils
 
 
 try:
@@ -157,6 +158,8 @@ class ImpedanceControllerPolicy:
         current_position, current_velocity = observation['position'], observation['velocity']
   
         print("STEP: {}".format(self.step_count))
+        print("CURRENT Q: {}".format(current_position))
+        print("Computed FK: {}".format(k_utils.FK(current_position)))
         # IF TESTING FINGERTIP TRACKING
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
