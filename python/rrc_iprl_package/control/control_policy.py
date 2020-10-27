@@ -161,14 +161,14 @@ class ImpedanceControllerPolicy:
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
             print("CURRENT: {}".format(cur_ft_pos))
-            if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list):
+            if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]):
                 # Get fingertip goals from finger_waypoints_list
                 self.fingertip_goal_list = []
                 for f_i in range(3):
                     self.fingertip_goal_list.append(self.ft_tracking_waypoints_list[f_i][self.traj_waypoint_i])
                 self.tol = 0.005
                 self.tip_forces_wf = None
-            print("TARGET: {}".format(self.fingertip_goal_list))
+                print("TARGET: {}".format(self.fingertip_goal_list))
 
             # Compute torque with impedance controller, and clip
             torque, self.goal_reached = c_utils.impedance_controller(
@@ -179,7 +179,7 @@ class ImpedanceControllerPolicy:
 
             # Increment waypoint
             if self.goal_reached:
-                if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list):
+                if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]):
                     # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
                     self.traj_waypoint_i += 1
                     self.goal_reached = False
