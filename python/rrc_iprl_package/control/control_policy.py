@@ -149,15 +149,19 @@ class ImpedanceControllerPolicy:
         print(self.fingertips_init)
         self.ft_tracking_waypoints_list = copy.deepcopy(self.fingertips_init)
         for i in range(3):
-            self.ft_tracking_waypoints_list[i][2] += -0.03
+            self.ft_tracking_waypoints_list[i][2] += 0.02
 
     def predict(self, observation):
         self.step_count += 1
         observation = observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
   
+        print("STEP: {}".format(step_count))
         # IF TESTING FINGERTIP TRACKING
         if self.debug_fingertip_tracking:
+            cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
+            print("CURRENT: {}".format(cur_ft_pos))
+            print("TARGET: {}".format(self.ft_tracking_waypoints_list))
             if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list):
                 # Get fingertip goals from finger_waypoints_list
                 self.fingertip_goal_list = []
