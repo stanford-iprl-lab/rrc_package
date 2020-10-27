@@ -233,8 +233,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
-        #self._reset_platform_frontend()
-        self._reset_direct_simulation()
+        self._reset_platform_frontend()
+        #self._reset_direct_simulation()
 
         self.step_count = 0
 
@@ -260,7 +260,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         With this the env can be used without backend.
         """
         # set this to false to disable pyBullet's simulation
-        visualization = True
+        visualization = False
 
         # reset simulation
         del self.platform

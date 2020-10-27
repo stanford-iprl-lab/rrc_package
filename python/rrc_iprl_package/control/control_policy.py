@@ -147,7 +147,7 @@ class ImpedanceControllerPolicy:
         # Get ft position tracking trajectory
         self.ft_tracking_waypoints_list = copy.deepcopy(self.fingertips_init)
         for i in range(3):
-            self.ft_tracking_waypoints_list[i][2] += 0.0
+            self.ft_tracking_waypoints_list[i][2] += 0.03
 
         csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
         print(csv_header)
