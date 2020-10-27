@@ -15,7 +15,6 @@ class FixedContactPointSystem:
                obj_mass  = None,
                log_file  = None,
               ):
-    print("Initialize fixed contact point system")
     
     # Time parameters
     self.nGrid = nGrid
