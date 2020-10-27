@@ -140,9 +140,9 @@ def impedance_controller_single_finger(
   x_current = custom_pinocchio_utils.forward_kinematics(q_current)[finger_id]
 
   delta_x = np.expand_dims(np.array(tip_desired) - np.array(x_current), 1)
-  print("Current x: {}".format(x_current))
-  print("Desired x: {}".format(tip_desired))
-  print("Delta: {}".format(delta_x))
+  #print("Current x: {}".format(x_current))
+  #print("Desired x: {}".format(tip_desired))
+  #print("Delta: {}".format(delta_x))
   
   # Get full Jacobian for finger
   Ji = custom_pinocchio_utils.get_tip_link_jacobian(finger_id, q_current)
