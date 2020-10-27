@@ -202,6 +202,7 @@ class ImpedanceControllerPolicy:
         else:
             if self.flipping and self.step_count > self.max_step_count:
                 self.done_with_primitive = True
+        print("Torque from policy: {}".format(torque))
 
         return torque
 
