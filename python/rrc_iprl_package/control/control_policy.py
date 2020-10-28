@@ -156,14 +156,13 @@ class ImpedanceControllerPolicy:
         self.step_count += 1
         observation = observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
-
+  
         # Formulate row to print
         csv_row = "{},".format(self.step_count)
         for f_i in range(3):
             for d in range(3):
                 csv_row += "{},".format(self.ft_tracking_waypoints_list[f_i][d])
         print(csv_row)
-  
         # IF TESTING FINGERTIP TRACKING
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
@@ -173,7 +172,8 @@ class ImpedanceControllerPolicy:
                 self.tol = 0.005
                 self.tip_forces_wf = None
 
-            # Compute torque with impedance controller, and clip torque, self.goal_reached = c_utils.impedance_controller(
+            # Compute torque with impedance controller, and clip
+            torque, self.goal_reached = c_utils.impedance_controller(
                 self.fingertip_goal_list, current_position, current_velocity,
                 self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf,
                 tol=self.tol)
