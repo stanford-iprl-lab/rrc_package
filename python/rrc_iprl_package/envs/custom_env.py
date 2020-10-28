@@ -450,7 +450,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         if self.mode == PolicyMode.RL_PUSH:
             self.unwrapped.frameskip = self.policy.rl_frameskip
         else:
-            self.unwrapped.frameskip = 1
+            self.unwrapped.frameskip = 4
 
         obs, r, d, i = self._step(action)
         obs = self.observation(obs)
