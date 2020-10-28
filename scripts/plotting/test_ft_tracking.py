@@ -18,12 +18,14 @@ def main():
     data = pandas.read_csv(args.filename, delim_whitespace=True, header=0, low_memory=False)
     stdout = pandas.read_csv(args.stdout, delim_whitespace=False, header=0, low_memory=False)
 
-    n = 30
-    #n = len(data.index)
+    n = int(len(data.index) / 4) + 1
     # Get actual joint positions from data
     observation_ft_pos = np.zeros((n, 9))
+    i = 0
     for index, row in data.iterrows():
-        if index == n: break
+        if index % 4 != 0: continue
+        print(index)
+        print(i)
         cur_q = [
                 row["observation_position_0"],
                 row["observation_position_1"],
@@ -36,8 +38,9 @@ def main():
                 row["observation_position_8"],
                 ]
         cur_ft_pos = k_utils.FK(cur_q)
-        observation_ft_pos[index, :] = cur_ft_pos
+        observation_ft_pos[i, :] = cur_ft_pos
         #print(custom_pinocchio_utils.forward_kinematics(np.array(cur_q)))
+        i += 1
 
     # Goal fingertip positions...? Need to be parsed from user_stdout.txt
 
@@ -50,7 +53,7 @@ def main():
             plt.subplot(3,3,f_i*3+d_i+1)
             plt.title("Finger {} dimension {}".format(f_i, dim))
             plt.scatter(range(observation_ft_pos.shape[0]), observation_ft_pos[:,f_i*3+d_i],label="Observed")
-            plt.scatter(range(observation_ft_pos.shape[0]), stdout[["desired_ft{}".format(f_i*3+d_i)]].to_numpy(), label="Desired")
+            plt.scatter(range(len(stdout.index)), stdout[["desired_ft{}".format(f_i*3+d_i)]].to_numpy(), label="Desired")
             plt.legend()
     plt.savefig(args.fig_file)
 
