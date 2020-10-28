@@ -14,7 +14,7 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 MAX_STEPS = 5 * 1000 / 4
-MAX_STEPS = None
+#MAX_STEPS = None
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
