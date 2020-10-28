@@ -6,8 +6,14 @@ import pybullet
 from gym import wrappers
 from gym import ObservationWrapper
 
-import robot_interfaces
-import robot_fingers
+try:
+    import robot_interfaces
+    import robot_fingers
+    from robot_interfaces.trifinger import Action
+except ImportError:
+    robot_interfaces = robot_fingers = None
+    from trifinger_simulation.action import Action
+
 import trifinger_simulation
 import trifinger_simulation.visual_objects
 from trifinger_simulation import trifingerpro_limits
@@ -35,6 +41,7 @@ class PushCubeEnv(gym.Env):
         goal_difficulty=1,
         action_type=ActionType.POSITION,
         frameskip=1,
+        num_steps=None,
         visualization=False,
         ):
         """Initialize.
@@ -59,6 +66,7 @@ class PushCubeEnv(gym.Env):
         if frameskip < 1:
             raise ValueError("frameskip cannot be less than 1.")
         self.frameskip = frameskip
+        self.episode_length = num_steps * frameskip if num_steps else move_cube.episode_length
 
         # will be initialized in reset()
         self.platform = None
@@ -137,11 +145,11 @@ class PushCubeEnv(gym.Env):
     def _gym_action_to_robot_action(self, gym_action):
         # construct robot action depending on action type
         if self.action_type == ActionType.TORQUE:
-            robot_action = robot_interfaces.trifinger.Action(torque=gym_action)
+            robot_action = Action(torque=gym_action)
         elif self.action_type == ActionType.POSITION:
-            robot_action = robot_interfaces.trifinger.Action(position=gym_action)
+            robot_action = Action(position=gym_action)
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
-            robot_action = robot_interfaces.trifinger.Action(
+            robot_action = Action(
                 torque=gym_action["torque"], position=gym_action["position"]
             )
         else:
@@ -179,8 +187,7 @@ class PushCubeEnv(gym.Env):
 
     def reset(self):
         # reset simulation
-        del self.platform
-        if self._sim_backend:
+        if robot_fingers:
             self._reset_platform_frontend()
         else: 
             self._reset_direct_simulation()
@@ -332,7 +339,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
     def frameskip(self):
         if self.mode == PolicyMode.RL_PUSH:
             return self.policy.rl_frameskip
-        return 1
+        return 4
 
     def set_policy(self, policy):
         self.policy = policy
@@ -430,15 +437,15 @@ class ResidualPolicyWrapper(ObservationWrapper):
                 self.unwrapped.info,
             )
 
-        is_done = self.step_count == move_cube.episode_length
+        is_done = self.step_count == self.episode_length
 
         return observation, reward, is_done, self.env.info
 
     def _gym_action_to_robot_action(self, gym_action):
         if self.action_type == ActionType.TORQUE:
-            robot_action = robot_interfaces.trifinger.Action(torque=gym_action)
+            robot_action = Action(torque=gym_action, position=np.repeat(np.nan, 9))
         elif self.action_type == ActionType.POSITION:
-            robot_action = robot_interfaces.trifinger.Action(position=gym_action)
+            robot_action = Action(position=gym_action, torque=np.zeros(9))
         else:
             raise ValueError("Invalid action_type")
 
@@ -447,10 +454,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
     def step(self, action):
         # RealRobotCubeEnv handles gym_action_to_robot_action
         #print(self.mode)
-        if self.mode == PolicyMode.RL_PUSH:
-            self.unwrapped.frameskip = self.policy.rl_frameskip
-        else:
-            self.unwrapped.frameskip = 1
+        self.unwrapped.frameskip = self.frameskip
 
         obs, r, d, i = self._step(action)
         obs = self.observation(obs)

@@ -6,6 +6,7 @@ dummy policy which uses random actions.
 """
 import json
 import sys
+import os
 import numpy as np
 
 from rrc_iprl_package.envs import cube_env, custom_env
@@ -14,6 +15,8 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 
+FRAMESKIP = 4
+MAX_STEPS = 15 * 1000 // FRAMESKIP
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -30,13 +33,18 @@ def main():
     # arguments
     difficulty = int(sys.argv[1])
     goal_pose_json = sys.argv[2]
-    goal = json.loads(goal_pose_json)
+    if os.path.exists(goal_pose_json):
+        with open(goal_pose_json) as f:
+            goal = json.load(f)['_goal']
+    else:
+        goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)
     initial_pose.position = np.array([0,0,.0325])
 
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose, difficulty,
-        cube_env.ActionType.TORQUE_AND_POSITION, frameskip=200
+        cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP
+        num_steps=MAX_STEPS
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
     initial_pose = move_cube.sample_goal(difficulty=-1)
@@ -58,7 +66,6 @@ def main():
         if old_mode != policy.mode:
             print('mode changed: {} to {}'.format(old_mode, policy.mode))
             old_mode = policy.mode
-        print("reward:", reward)
         accumulated_reward += reward
 
     print("------")

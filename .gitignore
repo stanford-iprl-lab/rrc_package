@@ -1,2 +1,5 @@
-__pycache__/
+**/__pycache__/
 python/rrc_iprl_package.egg-info/
+*.pyc
+
+logs/

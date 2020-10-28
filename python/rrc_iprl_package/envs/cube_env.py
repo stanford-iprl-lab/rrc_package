@@ -3,8 +3,14 @@ import enum
 
 import gym
 
-import robot_interfaces
-import robot_fingers
+try:
+    import robot_interfaces
+    import robot_fingers
+    from robot_interfaces.trifinger import Action
+except ImportError:
+    robot_interfaces = robot_fingers = None
+    from trifinger_simulation.action import Action
+
 import trifinger_simulation
 import trifinger_simulation.visual_objects
 from trifinger_simulation import trifingerpro_limits
@@ -39,7 +45,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
         cube_initial_pose: dict,
         goal_difficulty: int,
         action_type: ActionType = ActionType.POSITION,
+        visualization: bool = True,
         frameskip: int = 1,
+        num_steps: int = None,
     ):
         """Initialize.
 
@@ -69,9 +77,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if frameskip < 1:
             raise ValueError("frameskip cannot be less than 1.")
         self.frameskip = frameskip
+        self.episode_length = num_steps * frameskip if num_steps else move_cube.episode_length
 
         # will be initialized in reset()
         self.platform = None
+        self.visualization = visualization
 
         # Create the action and observation spaces
         # ========================================
@@ -224,7 +234,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             if self.step_count >= move_cube.episode_length - 1:
                 break
 
-        is_done = self.step_count == move_cube.episode_length
+        is_done = self.step_count == self.episode_length
 
         return observation, reward, is_done, self.info
 
@@ -233,8 +243,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
-        self._reset_platform_frontend()
-        # self._reset_direct_simulation()
+        if robot_fingers:
+            self._reset_platform_frontend()
+        else:
+            self._reset_direct_simulation()
 
         self.step_count = 0
 
@@ -259,20 +271,17 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         With this the env can be used without backend.
         """
-        # set this to false to disable pyBullet's simulation
-        visualization = True
-
         # reset simulation
         del self.platform
 
         # initialize simulation
         self.platform = trifinger_simulation.TriFingerPlatform(
-            visualization=visualization,
+            visualization=self.visualization,
             initial_object_pose=self.initial_pose,
         )
 
         # visualize the goal
-        if visualization:
+        if self.visualization:
             self.goal_marker = trifinger_simulation.visual_objects.CubeMarker(
                 width=0.065,
                 position=self.goal["position"],
@@ -320,13 +329,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def _gym_action_to_robot_action(self, gym_action):
         # construct robot action depending on action type
         if self.action_type == ActionType.TORQUE:
-            robot_action = robot_interfaces.trifinger.Action(torque=gym_action)
+            robot_action = Action(torque=gym_action, position=np.repeat(np.nan, 9))
         elif self.action_type == ActionType.POSITION:
-            robot_action = robot_interfaces.trifinger.Action(
-                position=gym_action
-            )
+            robot_action = Action(position=gym_action, torque=np.zeros(9))
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
-            robot_action = robot_interfaces.trifinger.Action(
+            robot_action = Action(
                 torque=gym_action["torque"], position=gym_action["position"]
             )
         else:
