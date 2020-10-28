@@ -14,6 +14,7 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 MAX_STEPS = 5 * 1000 / 4
+MAX_STEPS = None
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -54,7 +55,7 @@ def main():
     old_mode = policy.mode
     steps_so_far = 0
     while not is_done:
-        if steps_so_far == MAX_STEPS: break
+        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
         action = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
         if old_mode != policy.mode:
