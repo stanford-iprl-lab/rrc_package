@@ -19,7 +19,7 @@ import trifinger_simulation.visual_objects
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
 
-from rrc_iprl_package import pybullet_utils as putils
+import rrc_iprl_package.pybullet_utils as pbutils
 from rrc_iprl_package.envs import cube_env
 from rrc_iprl_package.envs.cube_env import ActionType
 from rrc_iprl_package.control.controller_utils import PolicyMode
@@ -184,6 +184,17 @@ class PushCubeEnv(gym.Env):
             visualization=visualization,
             initial_object_pose=initial_object_pose,
         )
+
+        # visualize the goal
+        if self.visualization:
+            self.goal_marker = trifinger_simulation.visual_objects.CubeMarker(
+                width=0.065,
+                position=self.goal["position"],
+                orientation=self.goal["orientation"],
+                physicsClientId=self.platform.simfinger._pybullet_client_id,
+            )
+            pbutils.reset_camera()
+
 
     def reset(self):
         # reset simulation

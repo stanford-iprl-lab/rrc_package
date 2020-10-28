@@ -13,6 +13,7 @@ except ImportError:
 
 import trifinger_simulation
 import trifinger_simulation.visual_objects
+import rrc_iprl_package.pybullet_utils as pbutils
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
 
@@ -211,8 +212,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         # ensure episode length is not exceeded due to frameskip
         step_count_after = self.step_count + num_steps
-        if step_count_after > move_cube.episode_length:
-            excess = step_count_after - move_cube.episode_length
+        if step_count_after > self.episode_length:
+            excess = step_count_after - self.episode_length
             num_steps = max(1, num_steps - excess)
 
         reward = 0.0
@@ -231,7 +232,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
             self.step_count = t
             # make sure to not exceed the episode length
-            if self.step_count >= move_cube.episode_length - 1:
+            if self.step_count >= self.episode_length - 1:
                 break
 
         is_done = self.step_count == self.episode_length
@@ -288,6 +289,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 orientation=self.goal["orientation"],
                 physicsClientId=self.platform.simfinger._pybullet_client_id,
             )
+            pbutils.reset_camera()
 
     def seed(self, seed=None):
         """Sets the seed for this env’s random number generator.

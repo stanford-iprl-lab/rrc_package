@@ -16,7 +16,7 @@ from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 
 FRAMESKIP = 4
-MAX_STEPS = 15 * 1000 // FRAMESKIP
+MAX_STEPS = 60 * 1000 // FRAMESKIP
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""

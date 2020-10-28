@@ -161,7 +161,7 @@ class ImpedanceControllerPolicy:
         # Follow trajectory to lift object
         elif self.traj_waypoint_i < self.nGrid:
             self.fingertip_goal_list = []
-            next_cube_pos_wf = self.x_soln[self.traj_waypoint_i, 0:3]
+            next_cube_pos_wf = self.x_soln[self.traj_waypoint_i, :3]
             next_cube_quat_wf = self.x_soln[self.traj_waypoint_i, 3:]
 
             self.fingertip_goal_list = c_utils.get_cp_wf_list_from_cp_params(
@@ -178,7 +178,7 @@ class ImpedanceControllerPolicy:
         torque, self.goal_reached = c_utils.impedance_controller(
             self.fingertip_goal_list, current_position, current_velocity,
             self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf,
-            tol=self.tol)
+            tol=self.tol) 
         torque = np.clip(torque, self.action_space.low, self.action_space.high)
 
         if self.goal_reached:
@@ -194,7 +194,7 @@ class ImpedanceControllerPolicy:
                         fingertips_current, self.fingertips_init, self.cp_params)
                 self.goal_reached = False
             elif self.traj_waypoint_i < self.nGrid:
-                # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
+                print("trajectory waypoint: {}".format(self.traj_waypoint_i))
                 self.traj_waypoint_i += 1
                 self.goal_reached = False
         else:
@@ -455,6 +455,4 @@ def load_pytorch_policy(fpath, itr, deterministic=False):
         return action
 
     return get_action
-
-
 
