@@ -41,7 +41,7 @@ class ImpedanceControllerPolicy:
             self.dt = 0.01
         self.flipping = False
         self.debug_waypoints = debug_waypoints
-        self.debug_fingertip_tracking = False
+        self.debug_fingertip_tracking = True
         self.set_init_goal(initial_pose, goal_pose)
         self.setup_logging()
         self.finger_waypoints = None
