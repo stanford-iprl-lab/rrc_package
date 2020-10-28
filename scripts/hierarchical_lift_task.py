@@ -43,7 +43,7 @@ def main():
 
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose, difficulty,
-        cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP
+        cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
         num_steps=MAX_STEPS
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT

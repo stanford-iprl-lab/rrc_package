@@ -14,7 +14,7 @@ import pathlib
 import sys
 
 
-episode_length = 2 * 60 * 1000
+episode_length = 15 * 1000
 
 
 class LocalExecutionConfig:
