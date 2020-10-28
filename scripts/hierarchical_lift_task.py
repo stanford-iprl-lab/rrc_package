@@ -13,7 +13,7 @@ from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
-MAX_STEPS = 15 * 1000 / 4
+MAX_STEPS = 5 * 1000 / 4
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
