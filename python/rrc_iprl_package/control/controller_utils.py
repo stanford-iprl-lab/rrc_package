@@ -131,9 +131,9 @@ def impedance_controller_single_finger(
   Kp_y = 200
   Kp_z = 400
   Kp = np.diag([Kp_x, Kp_y, Kp_z])
-  Kv_x = 20
-  Kv_y = 20
-  Kv_z = 20
+  Kv_x = 40
+  Kv_y = 40
+  Kv_z = 40
   Kv = np.diag([Kv_x, Kv_y, Kv_z])
 
   # Compute current fingertip position
