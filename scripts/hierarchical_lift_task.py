@@ -15,6 +15,7 @@ from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 #MAX_STEPS = 1 * 1000 / 1
 MAX_STEPS = None
+FRAMESKIP = 1
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -37,7 +38,7 @@ def main():
 
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose, difficulty,
-        cube_env.ActionType.TORQUE_AND_POSITION, frameskip=200
+        cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
     initial_pose = move_cube.sample_goal(difficulty=-1)
