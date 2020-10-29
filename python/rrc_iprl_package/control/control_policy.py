@@ -30,6 +30,14 @@ except ImportError:
     torch = None
 
 
+KP = [25, 25, 25,
+      25, 25, 25,
+      25, 25, 25]
+
+KV = [1, 1, 1, 
+      1, 1, 1,
+      1, 1, 1]
+
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False):
@@ -51,6 +59,8 @@ class ImpedanceControllerPolicy:
         self.platform = None
         self.step_count = 0 # To keep track of time spent reaching 1 waypoint
         self.max_step_count = 200
+        print("KP: {}".format(KP))
+        print("KV: {}".format(KV))
 
     def reset_policy(self, platform=None):
         self.step_count = 0
@@ -182,7 +192,7 @@ class ImpedanceControllerPolicy:
             torque, self.goal_reached = c_utils.impedance_controller(
                 self.fingertip_goal_list, current_position, current_velocity,
                 self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf,
-                tol=self.tol)
+                tol=self.tol, Kp = KP, Kv = KV)
             torque = np.clip(torque, self.action_space.low, self.action_space.high)
 
             # Increment waypoint

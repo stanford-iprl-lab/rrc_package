@@ -83,7 +83,9 @@ def impedance_controller(
                         dq_current,
                         custom_pinocchio_utils,
                         tip_forces_wf = None,
-                        tol           = 0.008
+                        tol           = 0.008,
+                        Kp           = [25,25,25,25,25,25,25,25,25],
+                        Kv           = [1,1,1,1,1,1,1,1,1],
                         ):
   torque = 0
   goal_reached = True
@@ -100,7 +102,9 @@ def impedance_controller(
                                                 dq_current,
                                                 custom_pinocchio_utils,
                                                 tip_force_wf = f_wf,
-                                                tol          = tol
+                                                tol          = tol,
+                                                Kp           = Kp,
+                                                Kv           = Kv,
                                                 )
     goal_reached = goal_reached and finger_goal_reached
     torque += finger_torque
@@ -125,15 +129,18 @@ def impedance_controller_single_finger(
                                       dq_current,
                                       custom_pinocchio_utils,
                                       tip_force_wf = None,
-                                      tol          = 0.008
+                                      tol          = 0.008,
+                                      Kp           = [25,25,25,25,25,25,25,25,25],
+                                      Kv           = [1,1,1,1,1,1,1,1,1]
                                       ):
-  Kp_x = 25
-  Kp_y = 25
-  Kp_z = 25
+  Kp_x = Kp[finger_id*3 + 0]
+  Kp_y = Kp[finger_id*3 + 1]
+  Kp_z = Kp[finger_id*3 + 2]
   Kp = np.diag([Kp_x, Kp_y, Kp_z])
-  Kv_x = 2
-  Kv_y = 2
-  Kv_z = 2
+
+  Kv_x = Kv[finger_id*3 + 0]
+  Kv_y = Kv[finger_id*3 + 1]
+  Kv_z = Kv[finger_id*3 + 2]
   Kv = np.diag([Kv_x, Kv_y, Kv_z])
 
   # Compute current fingertip position
