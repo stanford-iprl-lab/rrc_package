@@ -127,9 +127,9 @@ def impedance_controller_single_finger(
                                       tip_force_wf = None,
                                       tol          = 0.008
                                       ):
-  Kp_x = 10
-  Kp_y = 10
-  Kp_z = 10
+  Kp_x = 15
+  Kp_y = 15
+  Kp_z = 15
   Kp = np.diag([Kp_x, Kp_y, Kp_z])
   Kv_x = 1
   Kv_y = 1
