@@ -34,12 +34,12 @@ KP = [25, 25, 25,
       25, 25, 25,
       25, 25, 25]
 
-#KV = [0.5, 0.5, 0.5, 
-#      0.5, 0.5, 0.5,
-#      0.5, 0.5, 0.5]
-KV = [1, 1, 1, 
-      1, 1, 1,
-      1, 1, 1]
+KV = [0.5, 0.5, 0.5, 
+      0.5, 0.5, 0.5,
+      0.5, 0.5, 0.5]
+#KV = [1, 1, 1, 
+#      1, 1, 1,
+#      1, 1, 1]
 
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
