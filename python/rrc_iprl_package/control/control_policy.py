@@ -37,12 +37,12 @@ KP = [150, 150, 150,
 #      1, 1, 1,
 #      1, 1, 1]
 
-KV = [0.5, 0.5, 0.5, 
-      0.5, 0.5, 0.5,
-      0.5, 0.5, 0.5]
-#KV = [0.3, 0.3, 0.3, 
-#      0.3, 0.3, 0.3,
-#      0.3, 0.3, 0.3]
+#KV = [0.5, 0.5, 0.5, 
+#      0.5, 0.5, 0.5,
+#      0.5, 0.5, 0.5]
+KV = [0.3, 0.3, 0.3, 
+      0.3, 0.3, 0.3,
+      0.3, 0.3, 0.3]
 #KV = [0, 0, 0, 
 #      0, 0, 0,
 #      0, 0, 0]
@@ -168,19 +168,16 @@ class ImpedanceControllerPolicy:
         self.ft_tracking_waypoints_list = [[],[],[]]
 
         # waypoints 2
-        self.ft_tracking_waypoints_list[0].append(np.array([0.1, 0.05, 0.09]))
-        self.ft_tracking_waypoints_list[1].append(np.array([-0.1, -0.05, 0.09]))
-        self.ft_tracking_waypoints_list[2].append(np.array([-0.05, 0.02, 0.09]))
+        #self.ft_tracking_waypoints_list[0].append(np.array([0.1, 0.05, 0.09]))
+        #self.ft_tracking_waypoints_list[1].append(np.array([-0.1, -0.05, 0.09]))
+        #self.ft_tracking_waypoints_list[2].append(np.array([-0.05, 0.02, 0.09]))
 
-        # waypoints 2
-        self.ft_tracking_waypoints_list[0].append(np.array([0.12, 0.05, 0.09]))
-        self.ft_tracking_waypoints_list[1].append(np.array([-0.08, -0.05, 0.09]))
-        self.ft_tracking_waypoints_list[2].append(np.array([-0.07, 0.02, 0.09]))
-
-        # waypoints 3
-        self.ft_tracking_waypoints_list[0].append(np.array([0.14, 0.05, 0.09]))
-        self.ft_tracking_waypoints_list[1].append(np.array([-0.06, -0.05, 0.09]))
-        self.ft_tracking_waypoints_list[2].append(np.array([-0.09, 0.02, 0.09]))
+        # sine wave
+        for i in np.linspace(0, 6*np.pi, 13):
+            z = np.sin(i) * 0.04 + 0.06
+            self.ft_tracking_waypoints_list[0].append(np.array([0.01, 0.05, z]))
+            self.ft_tracking_waypoints_list[1].append(np.array([-0.01, -0.05, z]))
+            self.ft_tracking_waypoints_list[2].append(np.array([-0.05, 0.02, z]))
 
         csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
         print(csv_header)
