@@ -206,7 +206,7 @@ class ImpedanceControllerPolicy:
                     self.fingertip_goal_list.append(self.ft_tracking_waypoints_list[f_i][self.traj_waypoint_i])
                 self.tol = 0.01
                 self.tip_forces_wf = None
-
+            print("ft goal: {}".format(self.fingertip_goal_list))
             # Compute torque with impedance controller, and clip
             torque, self.goal_reached = c_utils.impedance_controller(
                 self.fingertip_goal_list, current_position, current_velocity,
