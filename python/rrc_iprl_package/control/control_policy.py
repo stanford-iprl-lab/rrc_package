@@ -30,16 +30,16 @@ except ImportError:
     torch = None
 
 
-KP = [35, 70, 70,
-      45, 70, 35,
-      70, 35, 70]
+KP = [60, 70, 100,
+      60, 70, 100,
+      60, 70, 100]
 
 #KV = [0.5, 0.5, 0.5, 
 #      0.5, 0.5, 0.5,
 #      0.5, 0.5, 0.5]
 KV = [0.5, 1, 1, 
-      0.5, 1, 0.5,
-      1, 0.5, 1]
+      0.5, 1, 1,
+      1, 1, 1]
 
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
