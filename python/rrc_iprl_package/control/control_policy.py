@@ -210,7 +210,8 @@ class ImpedanceControllerPolicy:
                 self.fingertip_goal_list, current_position, current_velocity,
                 self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf,
                 tol=self.tol, Kp = KP, Kv = KV)
-            torque = np.clip(torque, self.action_space.low, self.action_space.high)
+            torque = np.clip(torque, -0.2, 0.2)
+            #torque = np.clip(torque, self.action_space.low, self.action_space.high)
             #print("goal reached: {}".format(self.goal_reached))
 
             # Increment waypoint
