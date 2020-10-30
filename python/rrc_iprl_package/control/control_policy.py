@@ -167,9 +167,20 @@ class ImpedanceControllerPolicy:
         fingertips_init = copy.deepcopy(self.fingertips_init)
         self.ft_tracking_waypoints_list = [[],[],[]]
 
+        # waypoints 2
         self.ft_tracking_waypoints_list[0].append(np.array([0.1, 0.05, 0.09]))
         self.ft_tracking_waypoints_list[1].append(np.array([-0.1, -0.05, 0.09]))
         self.ft_tracking_waypoints_list[2].append(np.array([-0.05, 0.02, 0.09]))
+
+        # waypoints 2
+        self.ft_tracking_waypoints_list[0].append(np.array([0.12, 0.05, 0.09]))
+        self.ft_tracking_waypoints_list[1].append(np.array([-0.08, -0.05, 0.09]))
+        self.ft_tracking_waypoints_list[2].append(np.array([-0.07, 0.02, 0.09]))
+
+        # waypoints 3
+        self.ft_tracking_waypoints_list[0].append(np.array([0.14, 0.05, 0.09]))
+        self.ft_tracking_waypoints_list[1].append(np.array([-0.06, -0.05, 0.09]))
+        self.ft_tracking_waypoints_list[2].append(np.array([-0.09, 0.02, 0.09]))
 
         csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
         print(csv_header)
