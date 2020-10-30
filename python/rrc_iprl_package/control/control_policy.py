@@ -37,9 +37,9 @@ KP = [80, 80, 110,
 #KV = [0.5, 0.5, 0.5, 
 #      0.5, 0.5, 0.5,
 #      0.5, 0.5, 0.5]
-KV = [0.3, 0.3, 0.3, 
-      1, 1, 1,
-      0.5, 0.5, 0.5]
+KV = [0.1, 0.1, 0.1, 
+      0.2, 0.2, 0.2,
+      0.3, 0.3, 0.3]
 
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
@@ -160,21 +160,21 @@ class ImpedanceControllerPolicy:
         # Get ft position tracking trajectory
         self.ft_tracking_waypoints_list = copy.deepcopy(self.fingertips_init)
         for i in range(3):
-            self.ft_tracking_waypoints_list[i][2] = 0.1
-            #self.ft_tracking_waypoints_list[i][2] = 0.07
-        self.ft_tracking_waypoints_list[0][0] = -0.02
-        self.ft_tracking_waypoints_list[0][1] = 0.05
-        self.ft_tracking_waypoints_list[1][0] = 0.03
-        self.ft_tracking_waypoints_list[1][1] = -0.05
-        self.ft_tracking_waypoints_list[2][0] = -0.05
-        self.ft_tracking_waypoints_list[2][1] = -0.03
+            #self.ft_tracking_waypoints_list[i][2] = 0.1
+            self.ft_tracking_waypoints_list[i][2] = 0.07
+        #self.ft_tracking_waypoints_list[0][0] = -0.02
+        #self.ft_tracking_waypoints_list[0][1] = 0.05
+        #self.ft_tracking_waypoints_list[1][0] = 0.03
+        #self.ft_tracking_waypoints_list[1][1] = -0.05
+        #self.ft_tracking_waypoints_list[2][0] = -0.05
+        #self.ft_tracking_waypoints_list[2][1] = -0.03
 
-        #self.ft_tracking_waypoints_list[0][0] = 0.0
-        #self.ft_tracking_waypoints_list[0][1] = 0.08
-        #self.ft_tracking_waypoints_list[1][0] = 0.0
-        #self.ft_tracking_waypoints_list[1][1] = -0.08
-        #self.ft_tracking_waypoints_list[2][0] = -0.08
-        #self.ft_tracking_waypoints_list[2][1] = 0
+        self.ft_tracking_waypoints_list[0][0] = 0.0
+        self.ft_tracking_waypoints_list[0][1] = 0.08
+        self.ft_tracking_waypoints_list[1][0] = 0.0
+        self.ft_tracking_waypoints_list[1][1] = -0.08
+        self.ft_tracking_waypoints_list[2][0] = -0.08
+        self.ft_tracking_waypoints_list[2][1] = 0
 
         csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
         print(csv_header)
