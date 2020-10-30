@@ -167,32 +167,9 @@ class ImpedanceControllerPolicy:
         fingertips_init = copy.deepcopy(self.fingertips_init)
         self.ft_tracking_waypoints_list = [[],[],[]]
 
-        for i in range(3):
-            self.ft_tracking_waypoints_list[i].append(np.array(fingertips_init[i]) - np.array([0, 0.03, 0.0]))
-
-        #for f_i in range(3):
-        #    for i in range(1,5):
-        #        next_waypoint = self.ft_tracking_waypoints_list[f_i][i-1] - np.array([0,0.01,0.0])
-        #        self.ft_tracking_waypoints_list[f_i].append(next_waypoint)
-
-        #for i in range(3):
-        #    #self.ft_tracking_waypoints_list[i][2] = 0.1
-        #    self.ft_tracking_waypoints_list[i][2] = 0.07
-        ##self.ft_tracking_waypoints_list[0][0] = -0.02
-        ##self.ft_tracking_waypoints_list[0][1] = 0.05
-        ##self.ft_tracking_waypoints_list[1][0] = 0.03
-        ##self.ft_tracking_waypoints_list[1][1] = -0.05
-        ##self.ft_tracking_waypoints_list[2][0] = -0.05
-        ##self.ft_tracking_waypoints_list[2][1] = -0.03
-
-        #self.ft_tracking_waypoints_list[0][0] = 0.0
-        #self.ft_tracking_waypoints_list[0][1] = 0.08
-        #self.ft_tracking_waypoints_list[1][0] = 0.0
-        #self.ft_tracking_waypoints_list[1][1] = -0.08
-        #self.ft_tracking_waypoints_list[2][0] = -0.08
-        #self.ft_tracking_waypoints_list[2][1] = 0
-
-        #print(self.ft_tracking_waypoints_list)
+        self.ft_tracking_waypoints_list[0].append(np.array([0.1, 0.05, 0.09]))
+        self.ft_tracking_waypoints_list[1].append(np.array([-0.1, -0.05, 0.09]))
+        self.ft_tracking_waypoints_list[2].append(np.array([-0.05, 0.02, 0.09]))
 
         csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
         print(csv_header)
