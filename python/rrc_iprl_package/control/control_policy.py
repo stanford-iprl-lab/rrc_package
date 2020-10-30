@@ -166,7 +166,7 @@ class ImpedanceControllerPolicy:
 
         for f_i in range(3):
             for i in range(1,5):
-                self.ft_tracking_waypoints_list[f_i].append(self.ft_tracking_waypoints[f_i][i-1][2] - 0.01)
+                self.ft_tracking_waypoints_list[f_i].append(self.ft_tracking_waypoints_list[f_i][i-1][2] - 0.01)
 
         #for i in range(3):
         #    #self.ft_tracking_waypoints_list[i][2] = 0.1
