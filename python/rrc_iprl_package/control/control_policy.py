@@ -33,9 +33,9 @@ except ImportError:
 #KP = [90, 90, 120,
 #      90, 90, 120,
 #      90, 90, 120]
-KP = [10, 10, 10,
-      10, 10, 10,
-      10, 10, 10]
+KP = [1, 1, 1,
+      1, 1, 1,
+      1, 1, 1]
 
 #KV = [0.5, 0.5, 0.5, 
 #      0.5, 0.5, 0.5,
@@ -168,12 +168,12 @@ class ImpedanceControllerPolicy:
         self.ft_tracking_waypoints_list = [[],[],[]]
 
         for i in range(3):
-            self.ft_tracking_waypoints_list[i].append(np.array(fingertips_init[i]))
+            self.ft_tracking_waypoints_list[i].append(np.array(fingertips_init[i]) - np.array([0, 0.03, 0.0]))
 
-        for f_i in range(3):
-            for i in range(1,5):
-                next_waypoint = self.ft_tracking_waypoints_list[f_i][i-1] - np.array([0,0.01,0.0])
-                self.ft_tracking_waypoints_list[f_i].append(next_waypoint)
+        #for f_i in range(3):
+        #    for i in range(1,5):
+        #        next_waypoint = self.ft_tracking_waypoints_list[f_i][i-1] - np.array([0,0.01,0.0])
+        #        self.ft_tracking_waypoints_list[f_i].append(next_waypoint)
 
         #for i in range(3):
         #    #self.ft_tracking_waypoints_list[i][2] = 0.1
