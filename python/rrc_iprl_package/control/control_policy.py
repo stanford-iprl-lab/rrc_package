@@ -208,7 +208,6 @@ class ImpedanceControllerPolicy:
                 self.fingertip_goal_list = []
                 for f_i in range(3):
                     self.fingertip_goal_list.append(self.ft_tracking_waypoints_list[f_i][self.pre_traj_waypoint_i])
-                print(self.fingertip_goal_list)
                 self.tol = 0.005
                 self.tip_forces_wf = None
 
@@ -221,7 +220,7 @@ class ImpedanceControllerPolicy:
 
             # Increment waypoint
             if self.goal_reached:
-                if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]):
+                if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]) - 1:
                     # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
                     self.traj_waypoint_i += 1
                     self.goal_reached = False
