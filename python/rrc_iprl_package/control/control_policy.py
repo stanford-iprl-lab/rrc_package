@@ -186,8 +186,7 @@ class ImpedanceControllerPolicy:
         #self.ft_tracking_waypoints_list[2][0] = -0.08
         #self.ft_tracking_waypoints_list[2][1] = 0
 
-        print(self.ft_tracking_waypoints_list)
-        quit()
+        #print(self.ft_tracking_waypoints_list)
 
         csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
         print(csv_header)
@@ -223,6 +222,7 @@ class ImpedanceControllerPolicy:
 
             # Increment waypoint
             if self.goal_reached:
+                print(len(self.ft_tracking_waypoints_list[0]))
                 if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]) - 1:
                     # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
                     self.traj_waypoint_i += 1
