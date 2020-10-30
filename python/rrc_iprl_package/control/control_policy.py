@@ -37,9 +37,9 @@ KP = [90, 90, 120,
 #KV = [0.5, 0.5, 0.5, 
 #      0.5, 0.5, 0.5,
 #      0.5, 0.5, 0.5]
-KV = [0.1, 0.1, 0.1, 
+KV = [0.2, 0.2, 0.2, 
       0.2, 0.2, 0.2,
-      0.3, 0.3, 0.3]
+      0.2, 0.2, 0.2]
 
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
@@ -158,23 +158,32 @@ class ImpedanceControllerPolicy:
         self.goal_reached = False
 
         # Get ft position tracking trajectory
-        self.ft_tracking_waypoints_list = copy.deepcopy(self.fingertips_init)
-        for i in range(3):
-            #self.ft_tracking_waypoints_list[i][2] = 0.1
-            self.ft_tracking_waypoints_list[i][2] = 0.07
-        #self.ft_tracking_waypoints_list[0][0] = -0.02
-        #self.ft_tracking_waypoints_list[0][1] = 0.05
-        #self.ft_tracking_waypoints_list[1][0] = 0.03
-        #self.ft_tracking_waypoints_list[1][1] = -0.05
-        #self.ft_tracking_waypoints_list[2][0] = -0.05
-        #self.ft_tracking_waypoints_list[2][1] = -0.03
+        fingertips_init = copy.deepcopy(self.fingertips_init)
+        self.ft_tracking_waypoints_list = [[],[],[]]
 
-        self.ft_tracking_waypoints_list[0][0] = 0.0
-        self.ft_tracking_waypoints_list[0][1] = 0.08
-        self.ft_tracking_waypoints_list[1][0] = 0.0
-        self.ft_tracking_waypoints_list[1][1] = -0.08
-        self.ft_tracking_waypoints_list[2][0] = -0.08
-        self.ft_tracking_waypoints_list[2][1] = 0
+        for i in range(3):
+            self.ft_tracking_waypoints[i].append(np.array(fingertips_init[i]))
+
+        for f_i in range(3):
+            for i in range(1,5):
+                self.ft_tracking_waypoints[f_i].append(self.ft_tracking_waypoints[f_i][i-1][2] - 0.01)
+
+        #for i in range(3):
+        #    #self.ft_tracking_waypoints_list[i][2] = 0.1
+        #    self.ft_tracking_waypoints_list[i][2] = 0.07
+        ##self.ft_tracking_waypoints_list[0][0] = -0.02
+        ##self.ft_tracking_waypoints_list[0][1] = 0.05
+        ##self.ft_tracking_waypoints_list[1][0] = 0.03
+        ##self.ft_tracking_waypoints_list[1][1] = -0.05
+        ##self.ft_tracking_waypoints_list[2][0] = -0.05
+        ##self.ft_tracking_waypoints_list[2][1] = -0.03
+
+        #self.ft_tracking_waypoints_list[0][0] = 0.0
+        #self.ft_tracking_waypoints_list[0][1] = 0.08
+        #self.ft_tracking_waypoints_list[1][0] = 0.0
+        #self.ft_tracking_waypoints_list[1][1] = -0.08
+        #self.ft_tracking_waypoints_list[2][0] = -0.08
+        #self.ft_tracking_waypoints_list[2][1] = 0
 
         csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
         print(csv_header)
@@ -188,13 +197,16 @@ class ImpedanceControllerPolicy:
         csv_row = "{},".format(self.step_count)
         for f_i in range(3):
             for d in range(3):
-                csv_row += "{},".format(self.ft_tracking_waypoints_list[f_i][d])
+                csv_row += "{},".format(self.ft_tracking_waypoints_list[f_i][self.traj_waypoint_i][d])
         print(csv_row)
         # IF TESTING FINGERTIP TRACKING
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
             if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]):
                 # Get fingertip goals from finger_waypoints_list
+                self.fingertip_goal_list = []
+                for f_i in range(3):
+                    self.fingertip_goal_list.append(self.finger_waypoints_list[f_i][self.pre_traj_waypoint_i])
                 self.fingertip_goal_list = self.ft_tracking_waypoints_list
                 self.tol = 0.005
                 self.tip_forces_wf = None
