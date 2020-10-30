@@ -30,9 +30,12 @@ except ImportError:
     torch = None
 
 
-KP = [90, 90, 120,
-      90, 90, 120,
-      90, 90, 120]
+#KP = [90, 90, 120,
+#      90, 90, 120,
+#      90, 90, 120]
+KP = [30, 30, 40,
+      30, 30, 40,
+      30, 30, 40]
 
 #KV = [0.5, 0.5, 0.5, 
 #      0.5, 0.5, 0.5,
@@ -222,7 +225,6 @@ class ImpedanceControllerPolicy:
 
             # Increment waypoint
             if self.goal_reached:
-                print(len(self.ft_tracking_waypoints_list[0]))
                 if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]) - 1:
                     # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
                     self.traj_waypoint_i += 1
