@@ -168,17 +168,17 @@ class ImpedanceControllerPolicy:
         self.ft_tracking_waypoints_list = [[],[],[]]
 
         # waypoints 2
-        #self.ft_tracking_waypoints_list[0].append(np.array([0.1, 0.05, 0.09]))
-        #self.ft_tracking_waypoints_list[1].append(np.array([-0.1, -0.05, 0.09]))
-        #self.ft_tracking_waypoints_list[2].append(np.array([-0.05, 0.02, 0.09]))
+        self.ft_tracking_waypoints_list[0].append(np.array([0.1, 0.05, 0.09]))
+        self.ft_tracking_waypoints_list[1].append(np.array([-0.1, -0.05, 0.09]))
+        self.ft_tracking_waypoints_list[2].append(np.array([-0.05, 0.02, 0.09]))
 
         # sine wave
-        cycles = 5
-        for i in np.linspace(0, cycles*2*np.pi, cycles*4+1):
-            z = np.sin(i) * 0.04 + 0.06
-            self.ft_tracking_waypoints_list[0].append(np.array([0.01, 0.08, z]))
-            self.ft_tracking_waypoints_list[1].append(np.array([-0.01, -0.08, z]))
-            self.ft_tracking_waypoints_list[2].append(np.array([-0.08, 0.02, z]))
+        #cycles = 5
+        #for i in np.linspace(0, cycles*2*np.pi, cycles*4+1):
+        #    z = np.sin(i) * 0.04 + 0.06
+        #    self.ft_tracking_waypoints_list[0].append(np.array([0.01, 0.08, z]))
+        #    self.ft_tracking_waypoints_list[1].append(np.array([-0.01, -0.08, z]))
+        #    self.ft_tracking_waypoints_list[2].append(np.array([-0.08, 0.02, z]))
 
         csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
         print(csv_header)
