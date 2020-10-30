@@ -30,16 +30,16 @@ except ImportError:
     torch = None
 
 
-KP = [25, 25, 25,
-      25, 25, 25,
-      25, 25, 25]
+KP = [35, 35, 35,
+      35, 35, 35,
+      35, 35, 35]
 
-KV = [0.5, 0.5, 0.5, 
-      0.5, 0.5, 0.5,
-      0.5, 0.5, 0.5]
-#KV = [1, 1, 1, 
-#      1, 1, 1,
-#      1, 1, 1]
+#KV = [0.5, 0.5, 0.5, 
+#      0.5, 0.5, 0.5,
+#      0.5, 0.5, 0.5]
+KV = [1, 1, 1, 
+      1, 1, 1,
+      1, 1, 1]
 
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
@@ -160,7 +160,7 @@ class ImpedanceControllerPolicy:
         # Get ft position tracking trajectory
         self.ft_tracking_waypoints_list = copy.deepcopy(self.fingertips_init)
         for i in range(3):
-            self.ft_tracking_waypoints_list[i][2] = 0.05
+            self.ft_tracking_waypoints_list[i][2] = 0.07
         self.ft_tracking_waypoints_list[0][0] = 0.0
         self.ft_tracking_waypoints_list[0][1] = 0.08
         self.ft_tracking_waypoints_list[1][0] = 0.0
