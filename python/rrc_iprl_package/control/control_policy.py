@@ -170,9 +170,9 @@ class ImpedanceControllerPolicy:
         fingertips_init = copy.deepcopy(self.fingertips_init)
 
         self.ft_tracking_waypoints_list = []
-        self.ft_tracking_waypoints_list.append(np.array([0.01, 0.08, 0.09]))
-        self.ft_tracking_waypoints_list.append(np.array([-0.01, -0.08, 0.09]))
-        self.ft_tracking_waypoints_list.append(np.array([-0.08, 0.02, 0.09]))
+        self.ft_tracking_waypoints_list.append(np.array([0.01, 0.12, 0.09]))
+        self.ft_tracking_waypoints_list.append(np.array([-0.01, -0.12, 0.09]))
+        self.ft_tracking_waypoints_list.append(np.array([-0.12, 0.02, 0.09]))
 
         # sine wave
         #cycles = 5
