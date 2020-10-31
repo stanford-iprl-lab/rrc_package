@@ -97,6 +97,8 @@ def impedance_controller(
     print(Kv)
     print(tip_pos_desired_list[finger_id])
     print(tip_vel_desired_list[finger_id])
+    print(q_current)
+    print(dq_current)
     finger_torque, finger_goal_reached = impedance_controller_single_finger(
                                                 finger_id,
                                                 tip_pos_desired_list[finger_id],
