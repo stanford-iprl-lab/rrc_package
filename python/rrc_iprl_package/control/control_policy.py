@@ -8,6 +8,7 @@ import os.path as osp
 import numpy as np
 import joblib
 import copy
+import time
 
 from datetime import date
 from trifinger_simulation import TriFingerPlatform
@@ -181,7 +182,7 @@ class ImpedanceControllerPolicy:
         #    self.ft_tracking_waypoints_list[1].append(np.array([-0.01, -0.08, z]))
         #    self.ft_tracking_waypoints_list[2].append(np.array([-0.08, 0.02, z]))
 
-        csv_row = "step,"
+        csv_row = "step,timestamp,"
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for i in range(9):
             csv_row += "desired_ft_pos_{},".format(i)
@@ -207,7 +208,7 @@ class ImpedanceControllerPolicy:
                 fingertip_pos_goal_list.append(new_pos)
                 fingertip_vel_goal_list.append(np.array([0, 0, dz]))
 
-            csv_row = "{},".format(self.step_count)
+            csv_row = "{},{},".format(self.step_count,time.time())
             # Formulate row to print csv_row = "{},".format(self.step_count)
             for f_i in range(3):
                 for d in range(3):
