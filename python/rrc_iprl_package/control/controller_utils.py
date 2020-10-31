@@ -133,13 +133,13 @@ def impedance_controller_single_finger(
     dq_current,
     custom_pinocchio_utils,
     tip_force_wf = None,
-    Kp                   = [25,25,25,25,25,25,25,25,25],
-    Kv                   = [1,1,1,1,1,1,1,1,1]
+    Kp           = [25,25,25,25,25,25,25,25,25],
+    Kv           = [1,1,1,1,1,1,1,1,1]
     ):
     
     print(Kv)
-    print(tip_pos_desired)
-    print(tip_vel_desired)
+    print(tip_pos_desired.shape)
+    print(tip_vel_desired.shape)
     print(q_current)
     print(dq_current)
     Kp_x = Kp[finger_id*3 + 0]
