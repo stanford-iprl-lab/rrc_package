@@ -30,9 +30,9 @@ except ImportError:
     torch = None
 
 
-KP = [170, 170, 170,
-      170, 170, 170,
-      170, 170, 170]
+KP = [50, 50, 50,
+      50, 50, 50,
+      50, 50, 50]
 #KP = [1, 1, 1,
 #      1, 1, 1,
 #      1, 1, 1]
@@ -40,12 +40,9 @@ KP = [170, 170, 170,
 #KV = [0.5, 0.5, 0.5, 
 #      0.5, 0.5, 0.5,
 #      0.5, 0.5, 0.5]
-#KV = [0.3, 0.3, 0.3, 
-#      0.3, 0.3, 0.3,
-#      0.3, 0.3, 0.3]
-KV = [0.7, 0.7, 0.7, 
-      0.7, 0.7, 0.7,
-      0.7, 0.7, 0.7]
+KV = [0.3, 0.3, 0.3, 
+      0.3, 0.3, 0.3,
+      0.3, 0.3, 0.3]
 
 A = 0.05
 B = np.pi/2
@@ -265,7 +262,6 @@ class ImpedanceControllerPolicy:
                 self.fingertip_goal_list, current_position, current_velocity,
                 self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf)
             torque = np.clip(torque, self.action_space.low, self.action_space.high)
-            print("i like big butts")
 
             if self.goal_reached:
                 self.step_count = 0 # Reset step count
