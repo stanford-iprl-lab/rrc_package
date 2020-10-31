@@ -31,9 +31,9 @@ except ImportError:
     torch = None
 
 
-KP = [70, 70, 70,
-      70, 70, 70,
-      70, 70, 70]
+KP = [90, 90, 90,
+      90, 90, 90,
+      90, 90, 90]
 #KP = [1, 1, 1,
 #      1, 1, 1,
 #      1, 1, 1]
@@ -171,12 +171,9 @@ class ImpedanceControllerPolicy:
         fingertips_init = copy.deepcopy(self.fingertips_init)
 
         self.ft_tracking_waypoints_list = []
-        #self.ft_tracking_waypoints_list.append(np.array([0.01, 0.12, 0.09]))
-        #self.ft_tracking_waypoints_list.append(np.array([-0.01, -0.12, 0.09]))
-        #self.ft_tracking_waypoints_list.append(np.array([-0.12, 0.02, 0.09]))
-        self.ft_tracking_waypoints_list.append(fingertips_init[0])
-        self.ft_tracking_waypoints_list.append(fingertips_init[1])
-        self.ft_tracking_waypoints_list.append(fingertips_init[2])
+        self.ft_tracking_waypoints_list.append(np.array([0.08, 0.07, 0.09]))
+        self.ft_tracking_waypoints_list.append(np.array([0.01, -0.1, 0.09]))
+        self.ft_tracking_waypoints_list.append(np.array([-0.1, 0.04, 0.09]))
 
         # sine wave
         #cycles = 5
