@@ -45,9 +45,9 @@ KV = [0.3, 0.3, 0.3,
       0.3, 0.3, 0.3,
       0.3, 0.3, 0.3]
 
-A = 0.05
+A = 0.06
 B = np.pi/2
-D = 0.07
+D = 0.09
 DT = 0.001
 
 class ImpedanceControllerPolicy:
