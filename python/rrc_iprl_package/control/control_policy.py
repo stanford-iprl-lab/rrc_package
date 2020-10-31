@@ -205,7 +205,9 @@ class ImpedanceControllerPolicy:
             fingertip_pos_goal_list = []
             fingertip_vel_goal_list = []
             for f_i in range(3):
-                fingertip_pos_goal_list.append(self.ft_tracking_waypoints_list[f_i][2] = z)
+                new_pos = self.ft_tracking_waypoints_list[f_i]
+                new_pos[2] = z
+                fingertip_pos_goal_list.append(new_pos)
                 fingertip_vel_goal_list.append(np.array([0, 0, dz]))
 
             csv_row = "{},".format(self.step_count)
