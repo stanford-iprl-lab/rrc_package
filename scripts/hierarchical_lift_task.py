@@ -13,8 +13,8 @@ from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
-#MAX_STEPS = 3 * 1000 / 1
-MAX_STEPS = None
+MAX_STEPS = 3 * 1000 / 1
+#MAX_STEPS = None
 FRAMESKIP = 1
 
 class RandomPolicy:
