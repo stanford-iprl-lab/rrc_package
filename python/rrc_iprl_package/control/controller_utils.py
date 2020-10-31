@@ -94,12 +94,8 @@ def impedance_controller(
             f_wf = None
         else:
             f_wf = np.expand_dims(np.array(tip_forces_wf[finger_id * 3:finger_id*3 + 3]),1)
-        print(Kv)
-        print(tip_pos_desired_list[finger_id])
-        print(tip_vel_desired_list[finger_id])
-        print(q_current)
-        print(dq_current)
-        finger_torque, finger_goal_reached = impedance_controller_single_finger(
+
+        finger_torque = impedance_controller_single_finger(
                                                     finger_id,
                                                     tip_pos_desired_list[finger_id],
                                                     tip_vel_desired_list[finger_id],
@@ -137,11 +133,6 @@ def impedance_controller_single_finger(
     Kv           = [1,1,1,1,1,1,1,1,1]
     ):
     
-    print(Kv)
-    print(tip_pos_desired.shape)
-    print(tip_vel_desired.shape)
-    print(q_current)
-    print(dq_current)
     Kp_x = Kp[finger_id*3 + 0]
     Kp_y = Kp[finger_id*3 + 1]
     Kp_z = Kp[finger_id*3 + 2]

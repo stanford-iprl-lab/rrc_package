@@ -261,11 +261,11 @@ class ImpedanceControllerPolicy:
             # torque commands are breaking limits for initial and final goal poses that require 
             # huge distances are covered in a few waypoints? Assign # waypoints wrt distance between
             # start and goal
-            torque, self.goal_reached = c_utils.impedance_controller(
+            torque = c_utils.impedance_controller(
                 self.fingertip_goal_list, current_position, current_velocity,
-                self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf,
-                tol=self.tol)
+                self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf)
             torque = np.clip(torque, self.action_space.low, self.action_space.high)
+            print("i like big butts")
 
             if self.goal_reached:
                 self.step_count = 0 # Reset step count
