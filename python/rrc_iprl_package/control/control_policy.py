@@ -223,8 +223,7 @@ class ImpedanceControllerPolicy:
             self.tip_forces_wf = None
             #print("ft goal: {}".format(self.fingertip_goal_list))
             # Compute torque with impedance controller, and clip
-            torque = c_utils.impedance_controller(
-                fingertip_pos_goal_list, fingertip_vel_goal_list, current_position, current_velocity,
+            torque = c_utils.impedance_controller(fingertip_pos_goal_list, fingertip_vel_goal_list, current_position, current_velocity,\
                 self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf, Kp = KP, Kv = KV)
 
             #torque = np.clip(torque, -0.2, 0.2)

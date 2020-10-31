@@ -136,6 +136,7 @@ def impedance_controller_single_finger(
                                       Kp           = [25,25,25,25,25,25,25,25,25],
                                       Kv           = [1,1,1,1,1,1,1,1,1]
                                       ):
+  print(Kv)
   Kp_x = Kp[finger_id*3 + 0]
   Kp_y = Kp[finger_id*3 + 1]
   Kp_z = Kp[finger_id*3 + 2]
