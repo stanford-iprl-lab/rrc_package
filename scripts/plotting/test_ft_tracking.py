@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 
 import rrc_iprl_package.traj_opt.kinematics_utils as k_utils
 
+POINT_SKIP = 100
+STEPS_TO_PLOT = 20000
+
 """
 Test fingertip position tracking
 """
@@ -16,16 +19,33 @@ def main():
     args = parser.parse_args()
 
     data = pandas.read_csv(args.filename, delim_whitespace=True, header=0, low_memory=False)
+    # Logs from user code
     stdout = pandas.read_csv(args.stdout, delim_whitespace=False, header=0, low_memory=False)
 
-    n = int(len(data.index) / 4) + 1
     # Get actual joint positions from data
-    observation_ft_pos = np.zeros((n, 9))
+    observation_times = []
+    observation_ft_pos = []
+    observation_start_time = data[["timestamp"]].iloc[0]
+    stdout_times = []
+    stdout_start_time = stdout[["timestamp"]].iloc[0]
+
+    startup_time = stdout_start_time - observation_start_time
+    print("observation start time: {}".format(observation_start_time))
+    print("stdout start time: {}".format(stdout_start_time - observation_start_time))
     i = 0
+
+    # Find index in data with timestamp closest to stdout_start_time
+    # Sort by timestamp value differences to stdout_start_time
+    user_code_start_idx = int(data.iloc[(data["timestamp"]-stdout_start_time["timestamp"]).abs().argsort()[:1]]["#time_index"].tolist()[0])
+
+    plot_range = [user_code_start_idx, user_code_start_idx + STEPS_TO_PLOT]
+
     for index, row in data.iterrows():
-        if index % 4 != 0: continue
+        if index % POINT_SKIP != 0: continue
+        if index <= plot_range[0] or index >= plot_range[1]: continue
         print(index)
-        print(i)
+        #print(i)
+        observation_times.append(row["timestamp"] - observation_start_time)
         cur_q = [
                 row["observation_position_0"],
                 row["observation_position_1"],
@@ -38,11 +58,13 @@ def main():
                 row["observation_position_8"],
                 ]
         cur_ft_pos = k_utils.FK(cur_q)
-        observation_ft_pos[i, :] = cur_ft_pos
-        #print(custom_pinocchio_utils.forward_kinematics(np.array(cur_q)))
+        observation_ft_pos.append(cur_ft_pos)
         i += 1
 
     # Goal fingertip positions...? Need to be parsed from user_stdout.txt
+    observation_ft_pos = np.array(observation_ft_pos)
+    print(len(observation_times))
+    print(observation_ft_pos.shape)
 
     # Plot
     plt.figure(figsize=(20,20))
@@ -52,8 +74,8 @@ def main():
         for d_i, dim in enumerate(["x","y","z"]):
             plt.subplot(3,3,f_i*3+d_i+1)
             plt.title("Finger {} dimension {}".format(f_i, dim))
-            plt.scatter(range(observation_ft_pos.shape[0]), observation_ft_pos[:,f_i*3+d_i],label="Observed")
-            plt.scatter(range(len(stdout.index)), stdout[["desired_ft{}".format(f_i*3+d_i)]].to_numpy(), label="Desired")
+            plt.scatter(observation_times, observation_ft_pos[:,f_i*3+d_i],label="Observed")
+            plt.scatter(stdout[["timestamp"]].iloc[plot_range[0]:plot_range[1]] - stdout_start_time + startup_time, stdout[["desired_ft_pos_{}".format(f_i*3+d_i)]].iloc[plot_range[0]:plot_range[1]].to_numpy(), label="Desired")
             plt.legend()
     plt.savefig(args.fig_file)
 
