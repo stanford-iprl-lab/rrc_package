@@ -73,6 +73,7 @@ class ImpedanceControllerPolicy:
         self.max_step_count = 200
         print("KP: {}".format(KP))
         print("KV: {}".format(KV))
+        self.start_time = time.time()
 
     def reset_policy(self, platform=None):
         self.step_count = 0
@@ -198,8 +199,10 @@ class ImpedanceControllerPolicy:
         # IF TESTING FINGERTIP TRACKING
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
-            z = A * np.sin(B * DT * (self.step_count-1)) + D
-            dz = A * B * np.cos(B * DT * (self.step_count-1))
+            #t = DT * (self.step_count-1)
+            t = time.time() - self.start_time
+            z = A * np.sin(B * t) + D
+            dz = A * B * np.cos(B * t)
             fingertip_pos_goal_list = []
             fingertip_vel_goal_list = []
             for f_i in range(3):
