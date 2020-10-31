@@ -47,6 +47,11 @@ KV = [0.7, 0.7, 0.7,
       0.7, 0.7, 0.7,
       0.7, 0.7, 0.7]
 
+A = 0.05
+B = np.pi/2
+D = 0.07
+DT = 0.001
+
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False):
@@ -165,12 +170,11 @@ class ImpedanceControllerPolicy:
 
         # Get ft position tracking trajectory
         fingertips_init = copy.deepcopy(self.fingertips_init)
-        self.ft_tracking_waypoints_list = [[],[],[]]
 
-        # waypoints 2
-        self.ft_tracking_waypoints_list[0].append(np.array([0.1, 0.05, 0.09]))
-        self.ft_tracking_waypoints_list[1].append(np.array([-0.1, -0.05, 0.09]))
-        self.ft_tracking_waypoints_list[2].append(np.array([-0.05, 0.02, 0.09]))
+        self.ft_tracking_waypoints_list = []
+        self.ft_tracking_waypoints_list.append(np.array([0.01, 0.08, 0.09]))
+        self.ft_tracking_waypoints_list.append(np.array([-0.01, -0.08, 0.09]))
+        self.ft_tracking_waypoints_list.append(np.array([-0.08, 0.02, 0.09]))
 
         # sine wave
         #cycles = 5
@@ -180,46 +184,50 @@ class ImpedanceControllerPolicy:
         #    self.ft_tracking_waypoints_list[1].append(np.array([-0.01, -0.08, z]))
         #    self.ft_tracking_waypoints_list[2].append(np.array([-0.08, 0.02, z]))
 
-        csv_header = "step,desired_ft0,desired_ft1,desired_ft2,desired_ft3,desired_ft4,desired_ft5,desired_ft6,desired_ft7,desired_ft8,"
-        print(csv_header)
+        csv_row = "step,"
+        # Formulate row to print csv_row = "{},".format(self.step_count)
+        for i in range(9):
+            csv_row += "desired_ft_pos_{},".format(i)
+        for i in range(9):
+            csv_row += "desired_ft_vel_{},".format(i)
+        print(csv_row)
 
     def predict(self, observation):
         self.step_count += 1
         observation = observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
   
-        # Formulate row to print
-        csv_row = "{},".format(self.step_count)
-        for f_i in range(3):
-            for d in range(3):
-                csv_row += "{},".format(self.ft_tracking_waypoints_list[f_i][self.traj_waypoint_i][d])
-        print(csv_row)
         # IF TESTING FINGERTIP TRACKING
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
-            if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]):
-                # Get fingertip goals from finger_waypoints_list
-                self.fingertip_goal_list = []
-                for f_i in range(3):
-                    self.fingertip_goal_list.append(self.ft_tracking_waypoints_list[f_i][self.traj_waypoint_i])
-                self.tol = 0.01
-                self.tip_forces_wf = None
+            z = A * np.sin(B * DT * (self.step_count-1)) + D
+            dz = A * B * np.cos(B * DT * (self.step_count-1))
+            fingertip_pos_goal_list = []
+            fingertip_vel_goal_list = []
+            for f_i in range(3):
+                fingertip_pos_goal_list.append(self.ft_tracking_waypoints_list[f_i][2] = z)
+                fingertip_vel_goal_list.append(np.array([0, 0, dz]))
+
+            csv_row = "{},".format(self.step_count)
+            # Formulate row to print csv_row = "{},".format(self.step_count)
+            for f_i in range(3):
+                for d in range(3):
+                    csv_row += "{},".format(fingertip_pos_goal_list[f_i][d])
+            for f_i in range(3):
+                for d in range(3):
+                    csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
+            print(csv_row)
+
+            self.tip_forces_wf = None
             #print("ft goal: {}".format(self.fingertip_goal_list))
             # Compute torque with impedance controller, and clip
-            torque, self.goal_reached = c_utils.impedance_controller(
-                self.fingertip_goal_list, current_position, current_velocity,
-                self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf,
-                tol=self.tol, Kp = KP, Kv = KV)
-            torque = np.clip(torque, -0.2, 0.2)
-            #torque = np.clip(torque, self.action_space.low, self.action_space.high)
-            #print("goal reached: {}".format(self.goal_reached))
+            torque = c_utils.impedance_controller(
+                fingertip_pos_goal_list, fingertip_vel_goal_list, current_position, current_velocity,
+                self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf, Kp = KP, Kv = KV)
 
-            # Increment waypoint
-            if self.goal_reached:
-                if self.traj_waypoint_i < len(self.ft_tracking_waypoints_list[0]) - 1:
-                    # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
-                    self.traj_waypoint_i += 1
-                    self.goal_reached = False
+            #torque = np.clip(torque, -0.2, 0.2)
+            torque = np.clip(torque, self.action_space.low, self.action_space.high)
+            #print("goal reached: {}".format(self.goal_reached))
 
         else:
             # ELSE, DO NORMAL PHASE 1 THINGS

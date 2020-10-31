@@ -79,16 +79,15 @@ tol: tolerance for determining when fingers have reached goal
 """
 def impedance_controller(
                         tip_pos_desired_list,
+                        tip_vel_desired_list,
                         q_current,  
                         dq_current,
                         custom_pinocchio_utils,
                         tip_forces_wf = None,
-                        tol           = 0.008,
                         Kp           = [25,25,25,25,25,25,25,25,25],
                         Kv           = [1,1,1,1,1,1,1,1,1],
                         ):
   torque = 0
-  goal_reached = True
   for finger_id in range(3):
     # Get contact forces for single finger
     if tip_forces_wf is None:
@@ -98,17 +97,16 @@ def impedance_controller(
     finger_torque, finger_goal_reached = impedance_controller_single_finger(
                                                 finger_id,
                                                 tip_pos_desired_list[finger_id],
+                                                tip_vel_desired_list[finger_id],
                                                 q_current,
                                                 dq_current,
                                                 custom_pinocchio_utils,
                                                 tip_force_wf = f_wf,
-                                                tol          = tol,
                                                 Kp           = Kp,
                                                 Kv           = Kv,
                                                 )
-    goal_reached = goal_reached and finger_goal_reached
     torque += finger_torque
-  return torque, goal_reached
+  return torque
 
 """
 Compute joint torques to move fingertip to desired location
@@ -124,12 +122,12 @@ tol: tolerance for determining when fingers have reached goal
 """
 def impedance_controller_single_finger(
                                       finger_id,
-                                      tip_desired,
+                                      tip_pos_desired,
+                                      tip_vel_desired,
                                       q_current,
                                       dq_current,
                                       custom_pinocchio_utils,
                                       tip_force_wf = None,
-                                      tol          = 0.008,
                                       Kp           = [25,25,25,25,25,25,25,25,25],
                                       Kv           = [1,1,1,1,1,1,1,1,1]
                                       ):
@@ -146,7 +144,7 @@ def impedance_controller_single_finger(
   # Compute current fingertip position
   x_current = custom_pinocchio_utils.forward_kinematics(q_current)[finger_id]
 
-  delta_x = np.expand_dims(np.array(tip_desired) - np.array(x_current), 1)
+  delta_x = np.expand_dims(np.array(tip_pos_desired) - np.array(x_current), 1)
   #print("Current x: {}".format(x_current))
   #print("Desired x: {}".format(tip_desired))
   #print("Delta: {}".format(delta_x))
@@ -159,16 +157,16 @@ def impedance_controller_single_finger(
   # Get current fingertip velocity
   dx_current = Ji @ np.expand_dims(np.array(dq_current), 1)
 
-  if tip_force_wf is not None:
-    torque = np.squeeze(Ji.T @ (Kp @ delta_x - Kv @ dx_current) + Ji.T @ tip_force_wf)
-  else:
-    torque = np.squeeze(Ji.T @ (Kp @ delta_x - Kv @ dx_current))
+  delta_dx = np.expand_dims(np.array(tip_vel_desired),1) - np.array(dx_current)
 
-  goal_reached = (np.linalg.norm(delta_x) < tol)
+  if tip_force_wf is not None:
+    torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx) + Ji.T @ tip_force_wf)
+  else:
+    torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx))
+
   #print("Finger {} delta".format(finger_id))
   #print(np.linalg.norm(delta_x))
-  #print(goal_reached)
-  return torque, goal_reached
+  return torque
 
 """
 Compute contact point position in world frame
