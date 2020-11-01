@@ -200,8 +200,6 @@ class ImpedanceControllerPolicy:
                 else:
                     A = 0.05
                     D = self.ft_tracking_init_pos_list[f_i][SINE_WAVE_DIM]
-                print(D)
-                print(A)
                 B = np.pi/2
 
                 x = A * np.sin(B * t) + D
@@ -211,11 +209,10 @@ class ImpedanceControllerPolicy:
                 new_pos[SINE_WAVE_DIM] = x
                 new_vel = np.array([0,0,0])
                 new_vel[SINE_WAVE_DIM] = dx
-                print(new_pos, new_vel)
 
                 fingertip_pos_goal_list.append(new_pos)
                 fingertip_vel_goal_list.append(new_vel)
-            quit()
+
             csv_row = "{},{},".format(self.step_count,time.time())
             # Formulate row to print csv_row = "{},".format(self.step_count)
             for f_i in range(3):
