@@ -32,21 +32,19 @@ except ImportError:
 
 
 # Parameters for tuning gains
-KP = [220, 220, 220,
-      220, 220, 220,
-      220, 220, 220]
-KV = [5, 5, 5,
-      5, 5, 5,
-      5, 5, 5]
+KP = [200, 200, 200,
+      200, 200, 200,
+      200, 200, 200]
+KV = [2, 2, 2,
+      2, 2, 2,
+      2, 2, 2]
 
 #KV = [0.5, 0.5, 0.5, 
 #      0.5, 0.5, 0.5,
 #      0.5, 0.5, 0.5]
 
 # Sine wave parameters
-A = 0.06
-B = np.pi/2
-D = 0.09
+SINE_WAVE_DIM = 2
 
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
@@ -190,15 +188,28 @@ class ImpedanceControllerPolicy:
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
             t = time.time() - self.start_time
-            z = A * np.sin(B * t) + D
-            dz = A * B * np.cos(B * t)
             fingertip_pos_goal_list = []
             fingertip_vel_goal_list = []
             for f_i in range(3):
+                if SINE_WAVE_DIM == 0:
+                    A = 0.02
+                elif SINE_WAVE_DIM == 1:
+                    A = 0.01
+                else:
+                    A = 0.05
+                D = self.ft_tracking_init_pos_list[f_i][SINE_WAVE_DIM]
+                B = np.pi/2
+
+                x = A * np.sin(B * t) + D
+                dx = A * B * np.cos(B * t)
+
                 new_pos = self.ft_tracking_init_pos_list[f_i]
-                new_pos[2] = z
+                new_pos[SINE_WAVE_DIM] = x
+                new_vel = np.array([0,0,0])
+                new_vel[SINE_WAVE_DIM] = dx
+
                 fingertip_pos_goal_list.append(new_pos)
-                fingertip_vel_goal_list.append(np.array([0, 0, dz]))
+                fingertip_vel_goal_list.append(new_vel))
 
             csv_row = "{},{},".format(self.step_count,time.time())
             # Formulate row to print csv_row = "{},".format(self.step_count)
