@@ -31,21 +31,22 @@ except ImportError:
     torch = None
 
 
-KP = [160, 160, 160,
-      160, 160, 160,
-      160, 160, 160]
-KV = [1.5, 1.5, 1.5,
-      1.5, 1.5, 1.5,
-      1.5, 1.5, 1.5]
+# Parameters for tuning gains
+KP = [200, 200, 200,
+      200, 200, 200,
+      200, 200, 200]
+KV = [2, 2, 2,
+      2, 2, 2,
+      2, 2, 2]
 
 #KV = [0.5, 0.5, 0.5, 
 #      0.5, 0.5, 0.5,
 #      0.5, 0.5, 0.5]
 
+# Sine wave parameters
 A = 0.06
 B = np.pi/2
 D = 0.09
-DT = 0.001
 
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
@@ -196,7 +197,6 @@ class ImpedanceControllerPolicy:
         # IF TESTING FINGERTIP TRACKING
         if self.debug_fingertip_tracking:
             cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
-            #t = DT * (self.step_count-1)
             t = time.time() - self.start_time
             z = A * np.sin(B * t) + D
             dz = A * B * np.cos(B * t)
