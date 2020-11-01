@@ -209,7 +209,7 @@ class ImpedanceControllerPolicy:
                 new_vel[SINE_WAVE_DIM] = dx
 
                 fingertip_pos_goal_list.append(new_pos)
-                fingertip_vel_goal_list.append(new_vel))
+                fingertip_vel_goal_list.append(new_vel)
 
             csv_row = "{},{},".format(self.step_count,time.time())
             # Formulate row to print csv_row = "{},".format(self.step_count)
