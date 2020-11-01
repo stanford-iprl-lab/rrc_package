@@ -198,8 +198,8 @@ class ImpedanceControllerPolicy:
                     A = 0.01
                     D = self.ft_tracking_init_pos_list[f_i][SINE_WAVE_DIM]
                 else:
-                    A = 0.06
-                    D = 0.09
+                    A = 0.05
+                    D = self.ft_tracking_init_pos_list[f_i][SINE_WAVE_DIM]
                 B = np.pi/2
 
                 x = A * np.sin(B * t) + D
