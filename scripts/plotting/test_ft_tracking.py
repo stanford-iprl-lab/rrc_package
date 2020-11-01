@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import rrc_iprl_package.traj_opt.kinematics_utils as k_utils
 
 POINT_SKIP = 100
-STEPS_TO_PLOT = 20000
+STEPS_TO_PLOT = 10000
 
 """
 Test fingertip position tracking
@@ -16,35 +16,43 @@ def main():
     parser.add_argument("filename", type=str)
     parser.add_argument("stdout", type=str)
     parser.add_argument("fig_file", type=str)
+    parser.add_argument(
+        "--no_stdout",
+        "-n",
+        action="store_true",
+        help="Use flag if stdout.txt file was not saved in run",
+    )
     args = parser.parse_args()
 
     data = pandas.read_csv(args.filename, delim_whitespace=True, header=0, low_memory=False)
-    # Logs from user code
-    stdout = pandas.read_csv(args.stdout, delim_whitespace=False, header=0, low_memory=False)
+    if not args.no_stdout:
+        # Logs from user code
+        stdout = pandas.read_csv(args.stdout, delim_whitespace=False, header=0, low_memory=False)
 
     # Get actual joint positions from data
     observation_times = []
     observation_ft_pos = []
     observation_start_time = data[["timestamp"]].iloc[0]
-    stdout_times = []
-    stdout_start_time = stdout[["timestamp"]].iloc[0]
+    if not args.no_stdout:
+        stdout_times = []
+        stdout_start_time = stdout[["timestamp"]].iloc[0]
 
-    startup_time = stdout_start_time - observation_start_time
-    print("observation start time: {}".format(observation_start_time))
-    print("stdout start time: {}".format(stdout_start_time - observation_start_time))
-    i = 0
+        startup_time = stdout_start_time - observation_start_time
+        print("observation start time: {}".format(observation_start_time))
+        print("stdout start time: {}".format(stdout_start_time - observation_start_time))
+        # Find index in data with timestamp closest to stdout_start_time
+        # Sort by timestamp value differences to stdout_start_time
+        user_code_start_idx = int(data.iloc[(data["timestamp"]-stdout_start_time["timestamp"]).abs().argsort()[:1]]["#time_index"].tolist()[0])
 
-    # Find index in data with timestamp closest to stdout_start_time
-    # Sort by timestamp value differences to stdout_start_time
-    user_code_start_idx = int(data.iloc[(data["timestamp"]-stdout_start_time["timestamp"]).abs().argsort()[:1]]["#time_index"].tolist()[0])
-
-    plot_range = [user_code_start_idx, user_code_start_idx + STEPS_TO_PLOT]
+    if not args.no_stdout:
+        plot_range = [user_code_start_idx, user_code_start_idx + STEPS_TO_PLOT]
+    else:
+        plot_range = [0, STEPS_TO_PLOT]
 
     for index, row in data.iterrows():
         if index % POINT_SKIP != 0: continue
         if index <= plot_range[0] or index >= plot_range[1]: continue
         print(index)
-        #print(i)
         observation_times.append(row["timestamp"] - observation_start_time)
         cur_q = [
                 row["observation_position_0"],
@@ -59,12 +67,9 @@ def main():
                 ]
         cur_ft_pos = k_utils.FK(cur_q)
         observation_ft_pos.append(cur_ft_pos)
-        i += 1
 
     # Goal fingertip positions...? Need to be parsed from user_stdout.txt
     observation_ft_pos = np.array(observation_ft_pos)
-    print(len(observation_times))
-    print(observation_ft_pos.shape)
 
     # Plot
     plt.figure(figsize=(20,20))
@@ -75,7 +80,8 @@ def main():
             plt.subplot(3,3,f_i*3+d_i+1)
             plt.title("Finger {} dimension {}".format(f_i, dim))
             plt.scatter(observation_times, observation_ft_pos[:,f_i*3+d_i],label="Observed")
-            plt.scatter(stdout[["timestamp"]].iloc[plot_range[0]:plot_range[1]] - stdout_start_time + startup_time, stdout[["desired_ft_pos_{}".format(f_i*3+d_i)]].iloc[plot_range[0]:plot_range[1]].to_numpy(), label="Desired")
+            if not args.no_stdout:
+                plt.scatter(stdout[["timestamp"]].iloc[0:STEPS_TO_PLOT] - stdout_start_time + startup_time, stdout[["desired_ft_pos_{}".format(f_i*3+d_i)]].iloc[0:STEPS_TO_PLOT].to_numpy(), label="Desired")
             plt.legend()
     plt.savefig(args.fig_file)
 

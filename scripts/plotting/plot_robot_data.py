@@ -21,8 +21,8 @@ names = data_array[0,:]
 data_array = data_array[1:,:].astype(np.float)
 ##
 dof = 9;
-tstart = 0
-tn = 120000
+tstart = 2000
+tn = 5000
 step = 100
 time = data_array[1+tstart:tn+tstart:step,1]
 time = time - time[0]
