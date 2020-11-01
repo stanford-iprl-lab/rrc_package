@@ -35,9 +35,9 @@ except ImportError:
 KP = [220, 220, 220,
       220, 220, 220,
       220, 220, 220]
-KV = [3, 3, 3,
-      3, 3, 3,
-      3, 3, 3]
+KV = [5, 5, 5,
+      5, 5, 5,
+      5, 5, 5]
 
 #KV = [0.5, 0.5, 0.5, 
 #      0.5, 0.5, 0.5,
@@ -168,18 +168,10 @@ class ImpedanceControllerPolicy:
         # Get ft position tracking trajectory
         fingertips_init = copy.deepcopy(self.fingertips_init)
 
-        self.ft_tracking_waypoints_list = []
-        self.ft_tracking_waypoints_list.append(np.array([0.08, 0.07, 0.09]))
-        self.ft_tracking_waypoints_list.append(np.array([0.01, -0.1, 0.09]))
-        self.ft_tracking_waypoints_list.append(np.array([-0.1, 0.04, 0.09]))
-
-        # sine wave
-        #cycles = 5
-        #for i in np.linspace(0, cycles*2*np.pi, cycles*4+1):
-        #    z = np.sin(i) * 0.04 + 0.06
-        #    self.ft_tracking_waypoints_list[0].append(np.array([0.01, 0.08, z]))
-        #    self.ft_tracking_waypoints_list[1].append(np.array([-0.01, -0.08, z]))
-        #    self.ft_tracking_waypoints_list[2].append(np.array([-0.08, 0.02, z]))
+        self.ft_tracking_init_pos_list = []
+        self.ft_tracking_init_pos_list.append(np.array([0.08, 0.07, 0.07]))
+        self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
+        self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
         csv_row = "step,timestamp,"
         # Formulate row to print csv_row = "{},".format(self.step_count)
@@ -203,7 +195,7 @@ class ImpedanceControllerPolicy:
             fingertip_pos_goal_list = []
             fingertip_vel_goal_list = []
             for f_i in range(3):
-                new_pos = self.ft_tracking_waypoints_list[f_i]
+                new_pos = self.ft_tracking_init_pos_list[f_i]
                 new_pos[2] = z
                 fingertip_pos_goal_list.append(new_pos)
                 fingertip_vel_goal_list.append(np.array([0, 0, dz]))
