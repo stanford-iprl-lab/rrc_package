@@ -1,7 +1,7 @@
 """Gym environment for the Real Robot Challenge Phase 1 (Simulation)."""
 import enum
-
 import gym
+import numpy as np
 
 try:
     import robot_interfaces
@@ -244,7 +244,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
-        if robot_fingers:
+        if robot_fingers is not None:
             self._reset_platform_frontend()
         else:
             self._reset_direct_simulation()
@@ -342,3 +342,39 @@ class RealRobotCubeEnv(gym.GoalEnv):
             raise ValueError("Invalid action_type")
 
         return robot_action
+
+
+class CubeEnv(RealRobotCubeEnv):
+    def __init__(
+        self,
+        initializer ,
+        goal_difficulty: int,
+        action_type: ActionType = ActionType.POSITION,
+        visualization: bool = True,
+        frameskip: int = 1,
+        num_steps: int = None,
+    ):
+        """Initialize.
+
+        Args:
+            cube_goal_pose (dict): Goal pose for the cube.  Dictionary with
+                keys "position" and "orientation".
+            goal_difficulty (int): Difficulty level of the goal (needed for
+                reward computation).
+            action_type (ActionType): Specify which type of actions to use.
+                See :class:`ActionType` for details.
+            frameskip (int):  Number of actual control steps to be performed in
+                one call of step().
+        """
+        self.initializer = initializer
+        initial_pose = self.initializer.get_initial_state().to_dict()
+        goal_pose = self.initializer.get_goal().to_dict()
+        super().__init__(goal_pose, initial_pose,goal_difficulty,
+        action_type, visualization, frameskip, num_steps)
+
+    def reset(self): 
+        self.initial_pose = self.initializer.get_initial_state()
+        self.goal = self.initializer.get_goal()
+        return super(CubeEnv, self).reset()
+
+

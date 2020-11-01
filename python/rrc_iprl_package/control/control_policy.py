@@ -18,12 +18,6 @@ from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
 
-
-try:
-    from rrc_iprl_package import run_rrc_sb as sb_utils
-except ImportError:
-    sb_utils = None
-
 try:
     import torch
 except ImportError:
@@ -132,6 +126,11 @@ class ImpedanceControllerPolicy:
             # target_cps_wf = control_trifinger_platform.get_cp_wf_list_from_cp_params(self.cp_params, self.x0_pos, self.x0_quat)
             # init_cps.set_state(target_cps_wf)
 
+        self.run_pre_traj_opt(current_position, obj_pose)
+        self.traj_waypoint_i = 0
+        self.goal_reached = False
+
+    def run_pre_traj_opt(self, current_position, obj_pose):
         # Get initial contact points and waypoints to them
         self.finger_waypoints_list = []
         self.fingertips_init = self.custom_pinocchio_utils.forward_kinematics(current_position)
@@ -140,14 +139,12 @@ class ImpedanceControllerPolicy:
             waypoints = c_utils.get_waypoints_to_cp_param(obj_pose, tip_current, self.cp_params[f_i])
             self.finger_waypoints_list.append(waypoints)
         self.pre_traj_waypoint_i = 0
-        self.traj_waypoint_i = 0
-        self.goal_reached = False
 
     def predict(self, observation):
         self.step_count += 1
-        observation = observation['observation']
-        current_position, current_velocity = observation['position'], observation['velocity']
-        object_pose = move_cube.Pose(current_position, current_velocity)
+        obs = observation['observation']
+        current_position, current_velocity = obs['position'], obs['velocity']
+        object_pose = move_cube.Pose.from_dict(observation['achieved_goal'])
         if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
             # Get fingertip goals from finger_waypoints_list
             self.fingertip_goal_list = []
@@ -200,6 +197,8 @@ class ImpedanceControllerPolicy:
         else:
             if self.flipping and self.step_count > self.max_step_count:
                 self.done_with_primitive = True
+            else:
+                self.run_pre_traj_opt(current_position, object_pose)
 
         return torque
 
@@ -215,14 +214,13 @@ class HierarchicalControllerPolicy:
     default_robot_position = TriFingerPlatform.spaces.robot_position.default
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
-                 npz_file=None, load_dir='', load_itr='last',
-                 start_mode=PolicyMode.RL_PUSH, difficulty=1, deterministic=True,
-                 debug_waypoints=False):
+                 npz_file=None, load_dir='', start_mode=PolicyMode.RL_PUSH, 
+                 difficulty=1, deterministic=True, debug_waypoints=False):
         self.full_action_space = action_space
         action_space = action_space['torque']
         self.impedance_controller = ImpedanceControllerPolicy(
                 action_space, initial_pose, goal_pose, npz_file, debug_waypoints=debug_waypoints)
-        self.load_policy(load_dir, load_itr, deterministic)
+        self.load_policy(load_dir, deterministic)
         self.start_mode = start_mode
         self._platform = None
         self.steps_from_reset = 0
@@ -250,18 +248,18 @@ class HierarchicalControllerPolicy:
         self._platform = platform
         self.impedance_controller.platform = platform
 
-    def load_policy(self, load_dir, load_itr, deterministic=False):
+    def load_policy(self, load_dir, deterministic=False):
         self.observation_names = []
         if not load_dir:
             self.rl_frameskip = 1
             self.rl_observation_space = None
             self.rl_policy = lambda obs: self.impedance_controller.predict(obs)
         elif osp.exists(load_dir) and 'pyt_save' in os.listdir(load_dir):
-            self.load_spinup_policy(load_dir, load_itr, deterministic=deterministic)
+            self.load_spinup_policy(load_dir, deterministic=deterministic)
         else:
-            self.load_sb_policy(load_dir, load_itr)
+            self.load_sb_policy(load_dir)
 
-    def load_sb_policy(self, load_dir, load_itr):
+    def load_sb_policy(self, load_dir):
         # loads make_env, make_reorient_env, and make_model helpers
         assert 'HER-SAC' in load_dir, 'only configured HER-SAC policies so far'
         if '_push' in load_dir:
@@ -328,7 +326,8 @@ class HierarchicalControllerPolicy:
         elif self.mode == PolicyMode.TRAJ_OPT:
             return True
         else:
-            if self.impedance_controller.done_with_primitive:
+            if (self.impedance_controller.flipping and 
+                self.impedance_controller.done_with_primitive):
                 self.mode = PolicyMode.RESET
                 return False
             return True
@@ -378,6 +377,37 @@ class HierarchicalControllerPolicy:
             assert False, 'use a different start mode, started with: {}'.format(self.start_mode)
         self.step_count += 1
         return ac
+
+
+class ResidualControllerPolicy(HierarchicalControllerPolicy):
+    DIST_THRESH = 0.09
+    ORI_THRESH = np.pi / 6
+    default_robot_position = TriFingerPlatform.spaces.robot_position.default
+
+    def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
+                 npz_file=None, start_mode=PolicyMode.RL_PUSH, difficulty=1, 
+                 rl_torque=True, rl_tip_pos=False, rl_cp_params=False,
+                 debug_waypoints=False):
+        super(action_space, initial_pose, goal_pose, npz_file, load_dir='',
+              start_mode=PolicyMode.TRAJ_OPT, difficulty=difficulty, deterministic=True,
+              debug_waypoints=debug_waypoints)
+        self.rl_torque = rl_torque
+        self.rl_tip_pos = rl_tip_pos
+        self.rl_cp_params = rl_cp_params
+
+    def process_observation_rl(self, observation, torque):
+        if self.rl_torque:
+            observation = np.concatenate([observation, torque])
+        return observation
+
+    def predict(self, observation):
+        if not self.traj_initialized and self.initialize_traj_opt(observation['impedance']):
+            self.set_waypoints(observation['impedance'])
+        torque = self.impedance_controller.predict(observation['impedance'])
+        rl_obs = self.process_observation_rl(observation['rl'], torque)
+        if self.rl_torque:
+            torque += self.rl_policy(rl_obs)
+        return torque
 
 
 def get_pose_from_observation(observation, goal_pose=False):

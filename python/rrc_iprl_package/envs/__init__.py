@@ -1,12 +1,23 @@
+import gym
 from gym.envs.registration import register
 
-register(
-    id="real_robot_challenge_phase_2-v1",
-    entry_point="rrc_simulation.gym_wrapper.envs.cube_env:CubeEnv",
-)
+registered_envs = [spec.id for spec in gym.envs.registry.all()]
 
-register(
-    id="real_robot_challenge_phase_2-v2",
-    entry_point="rrc_simulation.gym_wrapper.envs.custom_env:PushCubeEnv",
-)
+if "real_robot_challenge_phase_2-v0" not in registered_envs:
+    register(
+        id="real_robot_challenge_phase_2-v0",
+        entry_point="rrc_iprl_package.envs.cube_env:RealRobotCubeEnv",
+    )
+
+if "real_robot_challenge_phase_2-v1" not in registered_envs:
+    register(
+        id="real_robot_challenge_phase_2-v1",
+        entry_point="rrc_iprl_package.envs.cube_env:CubeEnv",
+    )
+
+if "real_robot_challenge_phase_2-v2" not in registered_envs:
+    register(
+        id="real_robot_challenge_phase_2-v2",
+        entry_point="rrc_iprl_package.envs.custom_env:PushCubeEnv",
+    )
 

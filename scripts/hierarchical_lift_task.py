@@ -15,7 +15,7 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 
-FRAMESKIP = 4
+FRAMESKIP = 1
 MAX_STEPS = 60 * 1000 // FRAMESKIP
 
 class RandomPolicy:
@@ -54,7 +54,7 @@ def main():
                    initial_pose=initial_pose, goal_pose=goal_pose,
                    load_dir=rl_load_dir, difficulty=difficulty,
                    start_mode=start_mode)
-    env = custom_env.ResidualPolicyWrapper(env, policy)
+    env = custom_env.HierarchicalPolicyWrapper(env, policy)
     observation = env.reset()
 
     accumulated_reward = 0
