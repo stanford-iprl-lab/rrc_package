@@ -44,8 +44,7 @@ KV = [2, 2, 2,
 #      0.5, 0.5, 0.5]
 
 # Sine wave parameters
-SINE_WAVE_DIM = 2
-
+SINE_WAVE_DIM = 0
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False):
