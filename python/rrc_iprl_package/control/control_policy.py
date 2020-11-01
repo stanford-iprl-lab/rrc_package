@@ -205,7 +205,7 @@ class ImpedanceControllerPolicy:
                 x = A * np.sin(B * t) + D
                 dx = A * B * np.cos(B * t)
 
-                new_pos = self.ft_tracking_init_pos_list[f_i]
+                new_pos = self.ft_tracking_init_pos_list[f_i].copy()
                 new_pos[SINE_WAVE_DIM] = x
                 new_vel = np.array([0,0,0])
                 new_vel[SINE_WAVE_DIM] = dx
