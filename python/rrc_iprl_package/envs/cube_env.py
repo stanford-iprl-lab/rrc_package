@@ -266,6 +266,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             )
 
         self.platform = robot_fingers.TriFingerPlatformFrontend()
+        pbutils.reset_camera()
 
     def _reset_direct_simulation(self):
         """Reset direct simulation.
