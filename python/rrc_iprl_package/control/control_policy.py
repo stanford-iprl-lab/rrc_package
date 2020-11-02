@@ -35,12 +35,12 @@ except ImportError:
 KP = [200, 200, 200,
       200, 200, 200,
       200, 200, 200]
-KV = [0.25, 0.25, 0.25, 
-      0.25, 0.25, 0.25,
-      0.25, 0.25, 0.25]
+KV = [0.5, 0.5, 0.5, 
+      0.5, 0.5, 0.5,
+      0.5, 0.5, 0.5]
 
 # Sine wave parameters
-SINE_WAVE_DIM = 0
+SINE_WAVE_DIM = 1
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False):
@@ -190,7 +190,7 @@ class ImpedanceControllerPolicy:
                     A = 0.02
                     D = self.ft_tracking_init_pos_list[f_i][SINE_WAVE_DIM]
                 elif SINE_WAVE_DIM == 1:
-                    A = 0.01
+                    A = 0.02
                     D = self.ft_tracking_init_pos_list[f_i][SINE_WAVE_DIM]
                 else:
                     A = 0.05
