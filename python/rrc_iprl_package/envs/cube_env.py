@@ -3,13 +3,9 @@ import enum
 import gym
 import numpy as np
 
-try:
-    import robot_interfaces
-    import robot_fingers
-    from robot_interfaces.trifinger import Action
-except ImportError:
-    robot_interfaces = robot_fingers = None
-    from trifinger_simulation.action import Action
+import robot_interfaces
+import robot_fingers
+from robot_interfaces.trifinger import Action
 
 import trifinger_simulation
 import trifinger_simulation.visual_objects
