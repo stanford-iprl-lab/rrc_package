@@ -10,7 +10,7 @@ from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy
 try:
     import robot_interfaces
     import robot_fingers
-    from robot_interfaces.trifinger import Action
+    from robot_interfaces.py_trifinger_types import Action
 except ImportError:
     robot_interfaces = robot_fingers = None
     from trifinger_simulation.action import Action
