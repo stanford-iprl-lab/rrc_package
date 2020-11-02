@@ -47,7 +47,7 @@ def main():
     if not args.no_stdout:
         plot_range = [user_code_start_idx, user_code_start_idx + STEPS_TO_PLOT]
     else:
-        plot_range = [0, STEPS_TO_PLOT]
+        plot_range = [2000, 2000+STEPS_TO_PLOT]
 
     for index, row in data.iterrows():
         if index % POINT_SKIP != 0: continue
