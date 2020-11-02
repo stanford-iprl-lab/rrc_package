@@ -244,6 +244,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
+        import pdb; pdb.set_trace()
         if robot_fingers is not None:
             self._reset_platform_frontend()
         else:
