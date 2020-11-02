@@ -3,9 +3,13 @@ import enum
 import gym
 import numpy as np
 
-import robot_interfaces
-import robot_fingers
-from robot_interfaces.trifinger import Action
+try:
+    import robot_interfaces
+    import robot_fingers
+    from robot_interfaces.py_trifinger_types import Action 
+except ImportError:
+    robot_interfaces = robot_fingers = None
+    from trifinger_simulation.action import Action
 
 import trifinger_simulation
 import trifinger_simulation.visual_objects
@@ -240,7 +244,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
-        self._reset_platform_frontend()
+        if robot_fingers is not None:
+            self._reset_platform_frontend()
+        else:
+            self._reset_direct_simulation()
 
         self.step_count = 0
 
