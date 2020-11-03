@@ -1,12 +1,19 @@
 """Gym environment for the Real Robot Challenge Phase 1 (Simulation)."""
 import enum
-
 import gym
+import numpy as np
 
-import robot_interfaces
-import robot_fingers
+try:
+    import robot_interfaces
+    import robot_fingers
+    from robot_interfaces.py_trifinger_types import Action 
+except ImportError:
+    robot_interfaces = robot_fingers = None
+    from trifinger_simulation.action import Action
+
 import trifinger_simulation
 import trifinger_simulation.visual_objects
+import rrc_iprl_package.pybullet_utils as pbutils
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
 
@@ -39,7 +46,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
         cube_initial_pose: dict,
         goal_difficulty: int,
         action_type: ActionType = ActionType.POSITION,
+        visualization: bool = True,
         frameskip: int = 1,
+        num_steps: int = None,
     ):
         """Initialize.
 
@@ -69,9 +78,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if frameskip < 1:
             raise ValueError("frameskip cannot be less than 1.")
         self.frameskip = frameskip
+        self.episode_length = num_steps * frameskip if num_steps else move_cube.episode_length
 
         # will be initialized in reset()
         self.platform = None
+        self.visualization = visualization
 
         # Create the action and observation spaces
         # ========================================
@@ -201,8 +212,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         # ensure episode length is not exceeded due to frameskip
         step_count_after = self.step_count + num_steps
-        if step_count_after > move_cube.episode_length:
-            excess = step_count_after - move_cube.episode_length
+        if step_count_after > self.episode_length:
+            excess = step_count_after - self.episode_length
             num_steps = max(1, num_steps - excess)
 
         reward = 0.0
@@ -221,10 +232,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
             self.step_count = t
             # make sure to not exceed the episode length
-            if self.step_count >= move_cube.episode_length - 1:
+            if self.step_count >= self.episode_length - 1:
                 break
 
-        is_done = self.step_count == move_cube.episode_length
+        is_done = self.step_count == self.episode_length
 
         return observation, reward, is_done, self.info
 
@@ -233,8 +244,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
-        self._reset_platform_frontend()
-        #self._reset_direct_simulation()
+        if robot_fingers is not None:
+            self._reset_platform_frontend()
+        else:
+            self._reset_direct_simulation()
 
         self.step_count = 0
 
@@ -253,32 +266,31 @@ class RealRobotCubeEnv(gym.GoalEnv):
             )
 
         self.platform = robot_fingers.TriFingerPlatformFrontend()
+        pbutils.reset_camera()
 
     def _reset_direct_simulation(self):
         """Reset direct simulation.
 
         With this the env can be used without backend.
         """
-        # set this to false to disable pyBullet's simulation
-        visualization = False
-
         # reset simulation
         del self.platform
 
         # initialize simulation
         self.platform = trifinger_simulation.TriFingerPlatform(
-            visualization=visualization,
+            visualization=self.visualization,
             initial_object_pose=self.initial_pose,
         )
 
         # visualize the goal
-        if visualization:
+        if self.visualization:
             self.goal_marker = trifinger_simulation.visual_objects.CubeMarker(
                 width=0.065,
                 position=self.goal["position"],
                 orientation=self.goal["orientation"],
                 physicsClientId=self.platform.simfinger._pybullet_client_id,
             )
+            pbutils.reset_camera()
 
     def seed(self, seed=None):
         """Sets the seed for this env’s random number generator.
@@ -320,16 +332,50 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def _gym_action_to_robot_action(self, gym_action):
         # construct robot action depending on action type
         if self.action_type == ActionType.TORQUE:
-            robot_action = robot_interfaces.trifinger.Action(torque=gym_action)
+            robot_action = Action(torque=gym_action, position=np.repeat(np.nan, 9))
         elif self.action_type == ActionType.POSITION:
-            robot_action = robot_interfaces.trifinger.Action(
-                position=gym_action
-            )
+            robot_action = Action(position=gym_action, torque=np.zeros(9))
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
-            robot_action = robot_interfaces.trifinger.Action(
+            robot_action = Action(
                 torque=gym_action["torque"], position=gym_action["position"]
             )
         else:
             raise ValueError("Invalid action_type")
 
         return robot_action
+
+
+class CubeEnv(RealRobotCubeEnv):
+    def __init__(
+        self,
+        initializer ,
+        goal_difficulty: int,
+        action_type: ActionType = ActionType.POSITION,
+        visualization: bool = True,
+        frameskip: int = 1,
+        num_steps: int = None,
+    ):
+        """Initialize.
+
+        Args:
+            cube_goal_pose (dict): Goal pose for the cube.  Dictionary with
+                keys "position" and "orientation".
+            goal_difficulty (int): Difficulty level of the goal (needed for
+                reward computation).
+            action_type (ActionType): Specify which type of actions to use.
+                See :class:`ActionType` for details.
+            frameskip (int):  Number of actual control steps to be performed in
+                one call of step().
+        """
+        self.initializer = initializer
+        initial_pose = self.initializer.get_initial_state().to_dict()
+        goal_pose = self.initializer.get_goal().to_dict()
+        super().__init__(goal_pose, initial_pose,goal_difficulty,
+        action_type, visualization, frameskip, num_steps)
+
+    def reset(self): 
+        self.initial_pose = self.initializer.get_initial_state()
+        self.goal = self.initializer.get_goal()
+        return super(CubeEnv, self).reset()
+
+

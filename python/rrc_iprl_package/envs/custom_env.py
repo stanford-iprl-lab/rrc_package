@@ -5,15 +5,22 @@ import pybullet
 
 from gym import wrappers
 from gym import ObservationWrapper
+from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy
 
-import robot_interfaces
-import robot_fingers
+try:
+    import robot_interfaces
+    import robot_fingers
+    from robot_interfaces.py_trifinger_types import Action
+except ImportError:
+    robot_interfaces = robot_fingers = None
+    from trifinger_simulation.action import Action
+
 import trifinger_simulation
 import trifinger_simulation.visual_objects
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
 
-from rrc_iprl_package import pybullet_utils as putils
+import rrc_iprl_package.pybullet_utils as pbutils
 from rrc_iprl_package.envs import cube_env
 from rrc_iprl_package.envs.cube_env import ActionType
 from rrc_iprl_package.control.controller_utils import PolicyMode
@@ -31,10 +38,12 @@ class PushCubeEnv(gym.Env):
 
     def __init__(
         self,
+        initializer=None,
         cube_goal_pose=None,
         goal_difficulty=1,
         action_type=ActionType.POSITION,
         frameskip=1,
+        num_steps=None,
         visualization=False,
         ):
         """Initialize.
@@ -52,13 +61,19 @@ class PushCubeEnv(gym.Env):
         """
         # Basic initialization
         # ====================
-        self.goal = cube_goal_pose
+
+        self.initializer = initializer
+        if initializer:
+            self.goal = initializer.get_goal()
+        else:
+            self.goal = cube_goal_pose
         self.info = {'difficulty': goal_difficulty}
         self.visualization = visualization
 
         if frameskip < 1:
             raise ValueError("frameskip cannot be less than 1.")
         self.frameskip = frameskip
+        self.episode_length = num_steps * frameskip if num_steps else move_cube.episode_length
 
         # will be initialized in reset()
         self.platform = None
@@ -120,6 +135,9 @@ class PushCubeEnv(gym.Env):
                 "robot_position": robot_position_space,
                 "robot_velocity": robot_velocity_space,
                 "robot_torque": robot_torque_space,
+                "robot_tip_positions": np.concatenate(
+                    [object_state_space.spaces['position'] for _ in range(3)]),
+                "robot_tip_forces": gym.spaces.Box(low=np.zeros(3), high=np.ones(3)),
                 "action": self.action_space,
                 "goal_position": object_state_space.spaces['position'],
                 "goal_orientation": object_state_space.spaces['orientation'],
@@ -137,11 +155,11 @@ class PushCubeEnv(gym.Env):
     def _gym_action_to_robot_action(self, gym_action):
         # construct robot action depending on action type
         if self.action_type == ActionType.TORQUE:
-            robot_action = robot_interfaces.trifinger.Action(torque=gym_action)
+            robot_action = Action(torque=gym_action)
         elif self.action_type == ActionType.POSITION:
-            robot_action = robot_interfaces.trifinger.Action(position=gym_action)
+            robot_action = Action(position=gym_action)
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
-            robot_action = robot_interfaces.trifinger.Action(
+            robot_action = Action(
                 torque=gym_action["torque"], position=gym_action["position"]
             )
         else:
@@ -177,10 +195,19 @@ class PushCubeEnv(gym.Env):
             initial_object_pose=initial_object_pose,
         )
 
+        # visualize the goal
+        if self.visualization:
+            self.goal_marker = trifinger_simulation.visual_objects.CubeMarker(
+                width=0.065,
+                position=self.goal["position"],
+                orientation=self.goal["orientation"],
+                physicsClientId=self.platform.simfinger._pybullet_client_id,
+            )
+            pbutils.reset_camera()
+
     def reset(self):
         # reset simulation
-        del self.platform
-        if self._sim_backend:
+        if robot_fingers:
             self._reset_platform_frontend()
         else: 
             self._reset_direct_simulation()
@@ -198,11 +225,12 @@ class PushCubeEnv(gym.Env):
         )
         robot_tip_positions = np.array(robot_tip_positions)
 
-        observation = {
+        self._obs_dict = observation = {
             "robot_position": robot_observation.position,
             "robot_velocity": robot_observation.velocity,
             "robot_torque": robot_observation.torque,
             "robot_tip_positions": robot_tip_positions,
+            "robot_tip_forces": robot_observation.tip_force,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
             "goal_object_position": self.goal["position"],
@@ -292,7 +320,7 @@ class PushCubeEnv(gym.Env):
         return observation, reward, is_done, self.info
 
 
-class ResidualPolicyWrapper(ObservationWrapper):
+class HierarchicalPolicyWrapper(ObservationWrapper):
     def __init__(self, env, policy):
         assert isinstance(env.unwrapped, cube_env.RealRobotCubeEnv), 'env expects type CubeEnv'
         self.env = env
@@ -332,7 +360,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
     def frameskip(self):
         if self.mode == PolicyMode.RL_PUSH:
             return self.policy.rl_frameskip
-        return 1
+        return 4
 
     def set_policy(self, policy):
         self.policy = policy
@@ -351,9 +379,6 @@ class ResidualPolicyWrapper(ObservationWrapper):
             observation_rl = self.process_observation_rl(observation)
             obs_dict['rl'] = observation_rl
         return obs_dict
-
-    def process_observation_residual(self, observation):
-        return observation
 
     def process_observation_rl(self, observation):
         t = self.step_count
@@ -380,7 +405,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         return observation
 
     def reset(self):
-        obs = super(ResidualPolicyWrapper, self).reset()
+        obs = super(HierarchicalPolicyWrapper, self).reset()
         # TODO remove hardcoded visualization object pose
         initial_object_pose = move_cube.sample_goal(difficulty=-1)
 
@@ -430,15 +455,15 @@ class ResidualPolicyWrapper(ObservationWrapper):
                 self.unwrapped.info,
             )
 
-        is_done = self.step_count == move_cube.episode_length
+        is_done = self.step_count == self.episode_length
 
         return observation, reward, is_done, self.env.info
 
     def _gym_action_to_robot_action(self, gym_action):
         if self.action_type == ActionType.TORQUE:
-            robot_action = robot_interfaces.trifinger.Action(torque=gym_action)
+            robot_action = Action(torque=gym_action, position=np.repeat(np.nan, 9))
         elif self.action_type == ActionType.POSITION:
-            robot_action = robot_interfaces.trifinger.Action(position=gym_action)
+            robot_action = Action(position=gym_action, torque=np.zeros(9))
         else:
             raise ValueError("Invalid action_type")
 
@@ -447,12 +472,143 @@ class ResidualPolicyWrapper(ObservationWrapper):
     def step(self, action):
         # RealRobotCubeEnv handles gym_action_to_robot_action
         #print(self.mode)
-        if self.mode == PolicyMode.RL_PUSH:
-            self.unwrapped.frameskip = self.policy.rl_frameskip
-        else:
-            self.unwrapped.frameskip = 1
+        self.unwrapped.frameskip = self.frameskip
 
         obs, r, d, i = self._step(action)
         obs = self.observation(obs)
         return obs, r, d, i
+
+
+class ResidualPolicyWrapper(ObservationWrapper):
+    def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False, 
+                 rl_cp_params=False, 
+                 observation_names=PushCubeEnv.observation_names):
+        super(ResidualPolicyWrapper, self).__init__(env)
+        self.rl_torque = rl_torque
+        self.rl_tip_pos = rl_tip_pos
+        self.rl_cp_params = rl_cp_params
+        self.goal_env = goal_env
+        self.impedance_controller = None
+        self.observation_names = PushCubeEnv.observation_names
+        self.make_obs_space()
+
+    def make_obs_space(self):
+        robot_torque_space = gym.spaces.Box(
+            low=trifingerpro_limits.robot_torque.low,
+            high=trifingerpro_limits.robot_torque.high,
+        )
+        robot_position_space = gym.spaces.Box(
+            low=trifingerpro_limits.robot_position.low,
+            high=trifingerpro_limits.robot_position.high,
+        )
+        robot_velocity_space = gym.spaces.Box(
+            low=trifingerpro_limits.robot_velocity.low,
+            high=trifingerpro_limits.robot_velocity.high,
+        )
+
+        object_state_space = gym.spaces.Dict(
+            {
+                "position": gym.spaces.Box(
+                    low=trifingerpro_limits.object_position.low,
+                    high=trifingerpro_limits.object_position.high,
+                ),
+                "orientation": gym.spaces.Box(
+                    low=trifingerpro_limits.object_orientation.low,
+                    high=trifingerpro_limits.object_orientation.high,
+                ),
+            }
+        )
+
+        imp_obs_space = self.env.observation_space
+        rl_obs_spaces = {
+                "robot_position": robot_position_space,
+                "robot_velocity": robot_velocity_space,
+                "robot_torque": robot_torque_space,
+                "robot_tip_positions": np.concatenate(
+                    [object_state_space.spaces['position'] for _ in range(3)]),
+                "robot_tip_forces": gym.spaces.Box(low=np.zeros(3), high=np.ones(3)),
+                "action": self.action_space,
+                "goal_position": object_state_space.spaces['position'],
+                "goal_orientation": object_state_space.spaces['orientation'],
+                "object_position": object_state_space.spaces['position'],
+                "object_orientation": object_state_space.spaces['orientation'],
+            }
+
+        rl_obs_space = {k:obs_spaces[k] for k in self.observation_names}
+        self.observation_space = gym.spaces.Dict(
+                {'impedance': imp_obs_space, 'rl': rl_obs_space})
+
+    def reset(self):
+        obs = super(ResidualPolicyWrapper, self).reset()
+        obs = self.init_impedance_controller(obs)
+        return obs
+
+    def process_observation_residual(self, observation):
+        return observation
+
+    def make_impedance_controller(self, obs):
+        init_pose, goal_pose = self.process_obs_init_goal(obs)
+        self.impedance_controller = ImpedanceControlerPolicy(
+                self.action_space, init_pose, goal_pose)
+        self.impedance_controller.set_waypoints(obs['impedance'])
+        tip_force = obs['rl']['robot_tip_forces']
+        while np.isclose(tip_force).all():
+            torque = self.impedance_controller.predict(obs['impedance'])
+            obs, _, _, _ = self.step(torque)
+            tip_force = obs['rl']['robot_tip_forces']
+
+        if not self.pre_traj_done():
+            print("Ending pre-trajectory step early after {} steps".format(
+                    self.step_count))
+        return obs
+
+    def observation(self, observation):
+        observation_imp = self.process_observation_impedance(observation)
+        obs_dict = {'impedance': observation_imp}
+        observation_rl = self.process_observation_rl(observation)
+        obs_dict['rl'] = observation_rl
+        self._obs_dict = obs_dict
+        return obs_dict
+
+    def process_observation_rl(self, observation):
+        t = self.step_count
+        robot_observation = self.platform.get_robot_observation(t)
+        object_observation = self.platform.get_object_pose(t)
+        robot_tip_positions = self.platform.forward_kinematics(
+            robot_observation.position)
+        robot_tip_positions = np.array(robot_tip_positions)
+        observation = {
+            "robot_position": robot_observation.position,
+            "robot_velocity": robot_observation.velocity,
+            "robot_tip_positions": robot_tip_positions,
+            "robot_tip_forces": robot_observation.tip_force,
+            "object_position": object_observation.position,
+            "object_orientation": object_observation.orientation,
+            "goal_object_position": self.goal["position"],
+            "goal_object_orientation": self.goal["orientation"],
+        }
+        observation = np.concatenate([observation[k].flatten() for k in self.observation_names])
+        return observation
+
+    def pre_traj_done(self):
+        if self.impedance_controller.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]): 
+            self.impedance_controller.pre_traj_waypoint_i = len(self.finger_waypoints_list[0])
+            return False
+        return True
+
+    def process_obs_init_goal(self, observation):
+        if self.goal_env:
+            init_pose, goal_pose = observation['achieved_goal'], observation['desired_goal']
+        else:
+            init_pose = {'position': self._obs_dict['rl']['object_position'],
+                         'orientation': self._obs_dict['rl']['object_orientation']}
+            goal_pose = {'position': self._obs_dict['rl']['goal_position'],
+                         'orientation': self._obs_dict['rl']['goal_orientation']}
+        init_pose = move_cube.Pose.from_dict(init_pose) 
+        goal_pose = move_cube.Pose.from_dict(goal_pose)
+        return init_pose, goal_pose
+
+    def action(self, res_torque):
+        torque = self.impedance_controller.predict(self._obs_dict['impedance'])
+        return res_torque + torque
 
