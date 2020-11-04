@@ -122,6 +122,8 @@ class ImpedanceControllerPolicy:
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
 
+        print(x0)
+        print(x_goal)
         # Get initial fingertip positions in world frame
         current_position, _ = get_robot_position_velocity(observation)
         
@@ -143,7 +145,7 @@ class ImpedanceControllerPolicy:
             ft_vel[t_i, :] = np.tile(self.dx_soln[t_i, 0:3],3)
 
         # Number of interpolation points
-        interp_n = 64
+        interp_n = 32
 
         # Linearly interpolate between each waypoint (row)
         # Initial row indices
