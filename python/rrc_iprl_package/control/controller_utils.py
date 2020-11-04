@@ -436,21 +436,20 @@ def get_lifting_cp_params(obj_pose):
 """
 Set up traj opt for fingers and static object
 """
-def define_static_object_opt(obj_pose, nGrid, dt):
+def define_static_object_opt(nGrid, dt):
     cube_shape = (move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH)
     problem = StaticObjectOpt(
                  nGrid     = nGrid,
                  dt        = dt,
                  obj_shape = cube_shape,
-                 obj_pose  = obj_pose
                  )
     return problem
 
 """
 Solve traj opt to get finger waypoints
 """
-def get_finger_waypoints(nlp, ft_goal, cube_pos, cube_quat, q_cur):
-    nlp.solve_nlp(ft_goal, q_cur)
+def get_finger_waypoints(nlp, ft_goal, q_cur, obj_pose):
+    nlp.solve_nlp(ft_goal, q_cur, obj_pose = obj_pose)
     ft_pos = nlp.ft_pos_soln
     ft_vel = nlp.ft_vel_soln
     return ft_pos, ft_vel

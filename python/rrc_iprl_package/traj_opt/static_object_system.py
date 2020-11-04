@@ -16,7 +16,6 @@ class StaticObjectSystem:
                nGrid     = 100,
                dt        = 0.1,
                obj_shape = None,
-               obj_pose  = move_cube.Pose(),
                log_file  = None,
               ):
     print("Initialize static object system")
@@ -42,9 +41,8 @@ class StaticObjectSystem:
     self.log_file = log_file
     self.theta_base_deg_list = [0, -120, -240] # List of angles of finger bases around arena (degrees)
 
-    # Object pose and shape
+    # Object shape
     self.obj_shape = obj_shape
-    self.obj_pose  = obj_pose
 
     # Define fingers
     self.fingers = []
@@ -54,6 +52,10 @@ class StaticObjectSystem:
 
     # fingertip goal parameters
     self.ft_goal_param = SX.sym("ft", 3*self.fnum)
+
+    # object pose parameter
+    # [x, y, z, qx, qy, qz, qw]
+    self.obj_pose_param = SX.sym("o", 7)
 
     # maximum fingertip radius
     self.MAX_FT_R = 0.195
@@ -307,8 +309,8 @@ class StaticObjectSystem:
   """
   def get_H_w_2_o(self):
     H = SX.zeros((4,4))
-    quat = self.obj_pose.orientation
-    p = self.obj_pose.position
+    quat = self.obj_pose_param[-4:]
+    p = self.obj_pose_param[:3]
     p_inv, quat_inv = utils.invert_transform(p, quat)
     R = utils.get_matrix_from_quaternion(quat_inv)
     H[3,3] = 1

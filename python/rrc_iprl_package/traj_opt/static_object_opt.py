@@ -12,7 +12,6 @@ class StaticObjectOpt:
                nGrid     = 100,
                dt        = 0.1,
                obj_shape = None,
-               obj_pose  = move_cube.Pose(),
                ):
 
     self.nGrid = nGrid
@@ -22,7 +21,6 @@ class StaticObjectOpt:
                                      nGrid     = nGrid,
                                      dt        = dt,
                                      obj_shape = obj_shape,
-                                     obj_pose  = obj_pose,
                                     )
     
     qnum = self.system.qnum
@@ -45,8 +43,11 @@ class StaticObjectOpt:
     # Get cost function
     self.cost = self.cost_func(self.t,self.s_flat,self.a)
 
+    # Concatenate ft_goal and obj_pose params
+    self.p =  vertcat(self.system.ft_goal_param, self.system.obj_pose_param)
+
     # Formulate nlp
-    problem = {"x":self.z, "f":self.cost, "g":self.g, "p":self.system.ft_goal_param}
+    problem = {"x":self.z, "f":self.cost, "g":self.g, "p":self.p}
     options = {"ipopt.print_level":5,
                "ipopt.max_iter":10000,
                 "ipopt.tol": 1e-4,
@@ -58,9 +59,12 @@ class StaticObjectOpt:
 
   def solve_nlp(self,
                ft_goal, 
-               q0):
+               q0,
+               obj_pose  = move_cube.Pose(),
+               ):
                 
     qnum = self.system.qnum
+
     # Get initial guess
     self.z0 = self.system.get_initial_guess(self.z, q0)
     t0, s0, a0 = self.system.decvar_unpack(self.z0)
@@ -69,8 +73,12 @@ class StaticObjectOpt:
     # Path constraints
     self.z_lb, self.z_ub = self.system.path_constraints(self.z, q0, dq0=np.zeros((1,9)), dq_end=np.zeros((1,9)))
 
+    # Set ft_goal and obj_pose param values
+    obj_pose_val = np.concatenate((obj_pose.position, obj_pose.orientation))
+    p_val = np.concatenate((ft_goal, obj_pose_val))
+    
     # Set upper and lower bounds for decision variables
-    r = self.solver(x0=self.z0,lbg=self.lbg,ubg=self.ubg,lbx=self.z_lb,ubx=self.z_ub,p=ft_goal)
+    r = self.solver(x0=self.z0,lbg=self.lbg,ubg=self.ubg,lbx=self.z_lb,ubx=self.z_ub,p=p_val)
     z_soln = r["x"]
 
     # Final solution and cost
@@ -210,10 +218,9 @@ def main():
                nGrid     = nGrid,
                dt        = dt,
                obj_shape = cube_shape,
-               obj_pose  = move_cube.Pose(position=np.array([0, 0, 0])),
                )
 
-  opt_problem.solve_nlp(ft_goal, q0)
+  opt_problem.solve_nlp(ft_goal, q0, obj_pose  = move_cube.Pose(position=np.array([0, 0, 0])))
 
   # Files to save solutions
   today_date = date.today().strftime("%m-%d-%y")

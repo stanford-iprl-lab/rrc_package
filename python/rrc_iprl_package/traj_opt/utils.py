@@ -67,7 +67,7 @@ def invert_transform(p, quat):
   R_inv = get_matrix_from_quaternion(quat_inv)
   
   # Invert translation
-  p_inv = -R_inv @ np.array(p)
+  p_inv = -R_inv @ p
 
   return p_inv, quat_inv
   

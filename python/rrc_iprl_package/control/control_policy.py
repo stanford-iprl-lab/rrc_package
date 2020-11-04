@@ -77,6 +77,12 @@ class ImpedanceControllerPolicy:
             csv_row += "desired_ft_vel_{},".format(i)
         print(csv_row)
 
+        # Define nlp for finger traj opt
+        nGrid = 50
+        dt = 0.04
+        self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
+
+
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.done_with_primitive = False
         self.goal_pose = goal_pose
@@ -173,6 +179,8 @@ class ImpedanceControllerPolicy:
     ft_goal: (9,) array of fingertip x,y,z goal positions in world frame
     """
     def run_finger_traj_opt(self, observation, ft_goal):
+        nGrid = self.finger_nlp.nGrid
+        dt = self.finger_nlp.nGrid
         self.traj_waypoint_counter = 0
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
@@ -186,12 +194,7 @@ class ImpedanceControllerPolicy:
         #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
         #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
-        # Define nlp
-        nGrid = 50
-        dt = 0.04
-        nlp = c_utils.define_static_object_opt(obj_pose, nGrid, dt)
-
-        ft_pos, ft_vel = c_utils.get_finger_waypoints(nlp, ft_goal, obj_pose.position, obj_pose.orientation, current_position)
+        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose)
 
         print("FT_GOAL: {}".format(ft_goal))
         print(ft_pos[-1,:])
