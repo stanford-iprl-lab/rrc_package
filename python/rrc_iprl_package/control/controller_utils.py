@@ -6,13 +6,14 @@ from scipy.spatial.distance import pdist, squareform
 from rrc_iprl_package.control.contact_point import ContactPoint
 from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.traj_opt.fixed_contact_point_opt import FixedContactPointOpt
+from rrc_iprl_package.traj_opt.static_object_opt import StaticObjectOpt
 
 # Here, hard code the base position of the fingers (as angle on the arena)
 r = 0.15
 theta_0 = np.pi/2 # 90 degrees
 theta_1 = -np.pi/3 # 330 degrees
 theta_2 = 3.66519 # 210 degrees
-CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2 + 0.008
+CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2 + 0.005
 
 FINGER_BASE_POSITIONS = [
                        np.array([[np.cos(theta_0)*r, np.sin(theta_0)*r, 0]]),
@@ -291,29 +292,23 @@ x_goal: object goal position for traj opt
 nGrid: number of grid points
 dt: delta t
 """
-def run_traj_opt(obj_pose, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, save_dir=None):
-    init_fingertip_pos_list = [[],[],[]] # Containts 3 lists, one for each finger
-    for finger_id in range(3):
-        tip_current = custom_pinocchio_utils.forward_kinematics(current_position)[finger_id]
-        init_fingertip_pos_list[finger_id].append(tip_current)
-
-    # Get initial contact points and waypoints to them
-    cp_params = get_lifting_cp_params(obj_pose, init_fingertip_pos_list)
+def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, save_dir=None):
 
     cube_shape = (move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH)
     cube_mass = 0.02 # TODO Hardcoded
 
     # Formulate and solve optimization problem
     opt_problem = FixedContactPointOpt(
-                                                                        nGrid           = nGrid, # Number of timesteps
-                                                                        dt              = dt,       # Length of each timestep (seconds)
-                                                                        cp_params = cp_params,
-                                                                        x0              = x0,
-                                                                        x_goal      = x_goal,
-                                                                        obj_shape = cube_shape,
-                                                                        obj_mass    = cube_mass,
-                                                                        )
-    x_soln       = np.array(opt_problem.x_soln)
+                                       nGrid     = nGrid,    # Number of timesteps
+                                       dt        = dt,       # Length of each timestep (seconds)
+                                       cp_params = cp_params,
+                                       x0        = x0,
+                                       x_goal    = x_goal,
+                                       obj_shape = cube_shape,
+                                       obj_mass  = cube_mass,
+                                       )
+    
+    x_soln     = np.array(opt_problem.x_soln)
     l_wf_soln  = np.array(opt_problem.l_wf_soln)
     cp_params  = np.array(cp_params)
 
@@ -345,15 +340,15 @@ Get initial contact points on cube
 Assign closest cube face to each finger
 Since we are lifting object, don't worry about wf z-axis, just care about wf xy-plane
 """
-def get_lifting_cp_params(obj_pose, fingertip_pos_list):
+def get_lifting_cp_params(obj_pose):
     # face that is touching the ground
     ground_face = get_closest_ground_face(obj_pose)
 
     # Transform finger base positions to object frame
-    fingertip_pos_list_of = []
+    base_pos_list_of = []
     for f_wf in FINGER_BASE_POSITIONS:
         f_of = get_of_from_wf(f_wf, obj_pose)
-        fingertip_pos_list_of.append(f_of)
+        base_pos_list_of.append(f_of)
 
     # Find distance from x axis and y axis, and store in xy_distances
     # Need some additional logic to prevent multiple fingers from being assigned to same face
@@ -364,7 +359,7 @@ def get_lifting_cp_params(obj_pose, fingertip_pos_list):
     x_ind, y_ind = __get_parallel_ground_plane_xy(ground_face)
         
     xy_distances = np.zeros((3, 2)) # Row corresponds to a finger, columns are x and y axis distances
-    for f_i, f_of in enumerate(fingertip_pos_list_of):
+    for f_i, f_of in enumerate(base_pos_list_of):
         point_in_plane = np.array([f_of[0,x_ind], f_of[0,y_ind]]) # Ignore dimension of point that's not in the plane
         x_dist = __get_distance_from_pt_2_line(x_axis, np.array([0,0]), point_in_plane)
         y_dist = __get_distance_from_pt_2_line(y_axis, np.array([0,0]), point_in_plane)
@@ -382,17 +377,16 @@ def get_lifting_cp_params(obj_pose, fingertip_pos_list):
         furthest_axis = max_ind[1]
 
         #print("current finger {}".format(curr_finger_id))
-        #print(fingertip_pos_list_of[curr_finger_id])
         # Do the assignment
         x_dist = xy_distances[curr_finger_id, 0]
         y_dist = xy_distances[curr_finger_id, 1]
         if furthest_axis == 0: # distance to x axis is greater than to y axis
-            if fingertip_pos_list_of[curr_finger_id][0, y_ind] > 0:
+            if base_pos_list_of[curr_finger_id][0, y_ind] > 0:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
             else:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
         else:
-            if fingertip_pos_list_of[curr_finger_id][0, x_ind] > 0:
+            if base_pos_list_of[curr_finger_id][0, x_ind] > 0:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
             else:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
@@ -402,12 +396,12 @@ def get_lifting_cp_params(obj_pose, fingertip_pos_list):
         if face not in free_faces:
             alternate_axis = abs(furthest_axis - 1)
             if alternate_axis == 0:
-                if fingertip_pos_list_of[curr_finger_id][0, y_ind] > 0:
+                if base_pos_list_of[curr_finger_id][0, y_ind] > 0:
                     face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
                 else:
                     face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
             else:
-                if fingertip_pos_list_of[curr_finger_id][0, x_ind] > 0:
+                if base_pos_list_of[curr_finger_id][0, x_ind] > 0:
                     face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
                 else:
                     face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
@@ -436,6 +430,28 @@ def get_lifting_cp_params(obj_pose, fingertip_pos_list):
     #print("assigning cp params for lifting")
     #print(cp_params)
     return cp_params
+
+"""
+Set up traj opt for fingers and static object
+"""
+def define_static_object_opt(obj_pose, nGrid, dt):
+    cube_shape = (move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH)
+    problem = StaticObjectOpt(
+                 nGrid     = nGrid,
+                 dt        = dt,
+                 obj_shape = cube_shape,
+                 obj_pose  = obj_pose
+                 )
+    return problem
+
+"""
+Solve traj opt to get finger waypoints
+"""
+def get_finger_waypoints(nlp, ft_goal, cube_pos, cube_quat, q_cur):
+    nlp.solve_nlp(ft_goal, q_cur)
+    ft_pos = nlp.ft_pos_soln
+    ft_vel = nlp.ft_vel_soln
+    return ft_pos, ft_vel
 
 """
 Get waypoints to initial contact point on object

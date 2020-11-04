@@ -9,6 +9,7 @@ import numpy as np
 import joblib
 import copy
 import time
+from scipy.interpolate import interp1d
 
 from datetime import date
 from trifinger_simulation import TriFingerPlatform
@@ -50,21 +51,28 @@ class ImpedanceControllerPolicy:
         self.debug_fingertip_tracking = True
         self.set_init_goal(initial_pose, goal_pose)
         self.setup_logging()
-        self.finger_waypoints = None
+        self.finger_waypoints = None # visual object (for debugging)
         self.done_with_primitive = True
         self.init_face = None
         self.goal_face = None
         self.platform = None
-        self.step_count = 0 # To keep track of time spent reaching 1 waypoint
-        self.max_step_count = 200
         print("KP: {}".format(KP))
         print("KV: {}".format(KV))
         self.start_time = time.time()
+
+        # Counters
+        self.step_count = 0 # Number of times predict() is called
+        self.traj_waypoint_counter = 0
 
     def reset_policy(self, platform=None):
         self.step_count = 0
         if platform:
             self.platform = platform
+
+        self.custom_pinocchio_utils = CustomPinocchioUtils(
+                self.platform.simfinger.finger_urdf_path,
+                self.platform.simfinger.tip_link_names)
+
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.done_with_primitive = False
@@ -104,34 +112,40 @@ class ImpedanceControllerPolicy:
         self.l_wf_soln = npzfile["l_wf"]
         self.dt        = npzfile["dt"]
         self.cp_params = npzfile["cp_params"]
+    
 
-    def set_waypoints(self, observation):
-        self.step_count = 0
-        self.custom_pinocchio_utils = CustomPinocchioUtils(
-                self.platform.simfinger.finger_urdf_path,
-                self.platform.simfinger.tip_link_names)
-
-      # Get object pose
+    """
+    Get contact point parameters for either lifting of flipping
+    """
+    def set_cp_params(self, observation):
+        # Get object pose
         obj_pose = get_pose_from_observation(observation)
-
-        # Get initial fingertip positions in world frame
-        current_position, _ = get_robot_position_velocity(observation)
 
         if self.flipping:
             self.cp_params, self.init_face, self.goal_face = c_utils.get_flipping_cp_params(
                 obj_pose, self.goal_pose)
-            self.flipping_wp = None
         else:
-            self.x_soln, self.l_wf_soln, self.cp_params = c_utils.run_traj_opt(
-                    obj_pose, current_position, self.custom_pinocchio_utils,
-                    self.x0, self.x_goal, self.nGrid, self.dt, self.save_dir)
+            self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
 
-        #print(self.flipping)
-        #print(self.cp_params)
-        self.goal_reached = False
+    """
+    Run trajectory optimization for fixed contact points on object
+    """
+    def set_waypoints(self, observation):
+        self.traj_waypoint_counter = 0
+        # First, set cp_params
+        self.set_cp_params(observation)
 
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
+        # Get initial fingertip positions in world frame
+        current_position, _ = get_robot_position_velocity(observation)
+
+        if self.flipping:
+            self.flipping_wp = None
+        else:
+            self.x_soln, self.l_wf_soln, self.cp_params = c_utils.run_fixed_cp_traj_opt(
+                    obj_pose, self.cp_params, current_position, self.custom_pinocchio_utils,
+                    self.x0, self.x_goal, self.nGrid, self.dt, self.save_dir)
 
         if self.debug_waypoints and self.finger_waypoints is None:
             # Visual markers
@@ -142,27 +156,50 @@ class ImpedanceControllerPolicy:
             # target_cps_wf = control_trifinger_platform.get_cp_wf_list_from_cp_params(self.cp_params, self.x0_pos, self.x0_quat)
             # init_cps.set_state(target_cps_wf)
 
-        self.run_pre_traj_opt(current_position, obj_pose)
-        self.traj_waypoint_i = 0
-        self.goal_reached = False
+        # Get list of desired fingertip positions
+        cp_wf_list = c_utils.get_cp_wf_list_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation)
+        ft_goal = np.asarray(cp_wf_list).flatten()
+        self.run_finger_traj_opt(observation, ft_goal)
 
-    def run_pre_traj_opt(self, current_position, obj_pose):
-        # Get initial contact points and waypoints to them
-        self.finger_waypoints_list = []
-        self.fingertips_init = self.custom_pinocchio_utils.forward_kinematics(current_position)
-        for f_i in range(3):
-            tip_current = self.fingertips_init[f_i]
-            waypoints = c_utils.get_waypoints_to_cp_param(obj_pose, tip_current, self.cp_params[f_i])
-            self.finger_waypoints_list.append(waypoints)
-        self.pre_traj_waypoint_i = 0
+    """
+    Run trajectory optimization for fingers, given fingertip goal positions
+    ft_goal: (9,) array of fingertip x,y,z goal positions in world frame
+    """
+    def run_finger_traj_opt(self, observation, ft_goal):
+        self.traj_waypoint_counter = 0
+        # Get object pose
+        obj_pose = get_pose_from_observation(observation)
+        # Get initial fingertip positions in world frame
+        current_position, _ = get_robot_position_velocity(observation)
 
-        # Get ft position tracking trajectory
-        fingertips_init = copy.deepcopy(self.fingertips_init)
+        # Define nlp
+        nGrid = 50
+        dt = 0.04
+        nlp = c_utils.define_static_object_opt(obj_pose, nGrid, dt)
 
-        self.ft_tracking_init_pos_list = []
-        self.ft_tracking_init_pos_list.append(np.array([0.08, 0.07, 0.07]))
-        self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
-        self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
+        ft_pos, ft_vel = c_utils.get_finger_waypoints(nlp, ft_goal, obj_pose.position, obj_pose.orientation, current_position)
+
+        print("FT_GOAL: {}".format(ft_goal))
+        print(ft_pos[-1,:])
+    
+        # Number of interpolation points
+        interp_n = 32
+
+        # Linearly interpolate between each waypoint (row)
+        # Initial row indices
+        row_ind_in = np.arange(nGrid)
+        # Output row coordinates
+        row_coord_out = np.linspace(0, nGrid - 1, interp_n * (nGrid-1) + nGrid)
+        # scipy.interpolate.interp1d instance
+        itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
+        itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
+        self.ft_pos = itp_pos(row_coord_out)
+        self.ft_vel = itp_vel(row_coord_out)
+
+        #self.ft_tracking_init_pos_list = []
+        #self.ft_tracking_init_pos_list.append(np.array([0.08, 0.07, 0.07]))
+        #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
+        #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
         csv_row = "step,timestamp,"
         # Formulate row to print csv_row = "{},".format(self.step_count)
@@ -176,116 +213,56 @@ class ImpedanceControllerPolicy:
         self.step_count += 1
         observation = observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
-  
-        # IF TESTING FINGERTIP TRACKING
-        if self.debug_fingertip_tracking:
-            cur_ft_pos = self.custom_pinocchio_utils.forward_kinematics(current_position)
-            t = time.time() - self.start_time
-            fingertip_pos_goal_list = []
-            fingertip_vel_goal_list = []
-            for f_i in range(3):
-                if SINE_WAVE_DIM == 0:
-                    A = 0.02
-                    D = self.ft_tracking_init_pos_list[f_i][SINE_WAVE_DIM]
-                elif SINE_WAVE_DIM == 1:
-                    A = 0.02
-                    D = self.ft_tracking_init_pos_list[f_i][SINE_WAVE_DIM]
-                else:
-                    A = 0.05
-                    D = self.ft_tracking_init_pos_list[f_i][SINE_WAVE_DIM]
-                B = np.pi/2
 
-                x = A * np.sin(B * t) + D
-                dx = A * B * np.cos(B * t)
+        t = time.time() - self.start_time
+        fingertip_pos_goal_list = []
+        fingertip_vel_goal_list = []
 
-                new_pos = self.ft_tracking_init_pos_list[f_i].copy()
-                new_pos[SINE_WAVE_DIM] = x
-                new_vel = np.array([0,0,0])
-                new_vel[SINE_WAVE_DIM] = dx
-
-                fingertip_pos_goal_list.append(new_pos)
-                fingertip_vel_goal_list.append(new_vel)
-
-            csv_row = "{},{},".format(self.step_count,time.time())
-            # Formulate row to print csv_row = "{},".format(self.step_count)
-            for f_i in range(3):
-                for d in range(3):
-                    csv_row += "{},".format(fingertip_pos_goal_list[f_i][d])
-            for f_i in range(3):
-                for d in range(3):
-                    csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
-            print(csv_row)
-
-            self.tip_forces_wf = None
-            #print("ft goal: {}".format(self.fingertip_goal_list))
-            # Compute torque with impedance controller, and clip
-            torque = c_utils.impedance_controller(fingertip_pos_goal_list, fingertip_vel_goal_list, current_position, current_velocity,\
-                self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf, Kp = KP, Kv = KV)
-
-            #torque = np.clip(torque, -0.2, 0.2)
-            torque = np.clip(torque, self.action_space.low, self.action_space.high)
-            #print("goal reached: {}".format(self.goal_reached))
-
+        if self.traj_waypoint_counter >= self.ft_pos.shape[0]:
+            traj_waypoint_i = self.ft_pos.shape[0] - 1
         else:
-            # ELSE, DO NORMAL PHASE 1 THINGS
-            #print("pre traj waypoint: {}, traj waypoint: {}".format(self.pre_traj_waypoint_i, self.traj_waypoint_i))
-            object_pose = move_cube.Pose(current_position, current_velocity)
-            if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
-                # Get fingertip goals from finger_waypoints_list
-                self.fingertip_goal_list = []
-                for f_i in range(3):
-                    self.fingertip_goal_list.append(self.finger_waypoints_list[f_i][self.pre_traj_waypoint_i])
-                self.tol = 0.009
-                self.tip_forces_wf = None
-            elif self.flipping:
-                self.fingertip_goal_list = self.flipping_wp
-                self.tip_forces_wf = None
-            # Follow trajectory to lift object
-            elif self.traj_waypoint_i < self.nGrid:
-                self.fingertip_goal_list = []
-                next_cube_pos_wf = self.x_soln[self.traj_waypoint_i, 0:3]
-                next_cube_quat_wf = self.x_soln[self.traj_waypoint_i, 3:]
+            traj_waypoint_i = self.traj_waypoint_counter
 
-                self.fingertip_goal_list = c_utils.get_cp_wf_list_from_cp_params(
-                        self.cp_params, next_cube_pos_wf, next_cube_quat_wf)
-                # Get target contact forces in world frame 
-                self.tip_forces_wf = self.l_wf_soln[self.traj_waypoint_i, :]
-                self.tol = 0.007
-            if self.debug_waypoints:
-                self.finger_waypoints.set_state(self.fingertip_goal_list)
-            # currently, torques are not limited to same range as what is used by simulator
-            # torque commands are breaking limits for initial and final goal poses that require 
-            # huge distances are covered in a few waypoints? Assign # waypoints wrt distance between
-            # start and goal
-            torque = c_utils.impedance_controller(
-                self.fingertip_goal_list, current_position, current_velocity,
-                self.custom_pinocchio_utils, tip_forces_wf=self.tip_forces_wf)
-            torque = np.clip(torque, self.action_space.low, self.action_space.high)
+        for f_i in range(3):
+            new_pos = self.ft_pos[traj_waypoint_i, f_i*3:f_i*3+3]
+            new_vel = self.ft_vel[traj_waypoint_i, f_i*3:f_i*3+3]
+            fingertip_pos_goal_list.append(new_pos)
+            fingertip_vel_goal_list.append(new_vel)
 
-            if self.goal_reached:
-                self.step_count = 0 # Reset step count
-                if self.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]):
-                    self.pre_traj_waypoint_i += 1
-                    self.goal_reached = False
-                else:
-                  if self.flipping:
-                      fingertips_current = self.custom_pinocchio_utils.forward_kinematics(
-                              current_position)
-                      self.flipping_wp, self.done_with_primitive = c_utils.get_flipping_waypoint(
-                              object_pose, self.init_face, self.goal_face,
-                              fingertips_current, self.fingertips_init, self.cp_params)
-                      self.goal_reached = False
-                  elif self.traj_waypoint_i < self.nGrid:
-                      # print("trajectory waypoint: {}".format(self.traj_waypoint_i))
-                      self.traj_waypoint_i += 1
-                      self.goal_reached = False
-            else:
-                if self.flipping and self.step_count > self.max_step_count:
-                    self.done_with_primitive = True
+        # Print to stdout for logging
+        csv_row = "{},{},".format(self.step_count,time.time())
+        # Formulate row to print csv_row = "{},".format(self.step_count)
+        for f_i in range(3):
+            for d in range(3):
+                csv_row += "{},".format(fingertip_pos_goal_list[f_i][d])
+        for f_i in range(3):
+            for d in range(3):
+                csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
+        print(csv_row)
+
+        self.tip_forces_wf = None
+        #print("ft goal: {}".format(self.fingertip_goal_list))
+        # Compute torque with impedance controller, and clip
+        torque = c_utils.impedance_controller(fingertip_pos_goal_list,
+                                              fingertip_vel_goal_list,
+                                              current_position, current_velocity,
+                                              self.custom_pinocchio_utils,
+                                              tip_forces_wf=self.tip_forces_wf,
+                                              Kp = KP, Kv = KV)
+
+        torque = np.clip(torque, self.action_space.low, self.action_space.high)
+
         #print("Torque from policy: {}".format(torque))
+        self.traj_waypoint_counter += 1
 
         return torque
 
+    """
+    Get fingertip positions in world frame given current joint q
+    """
+    def get_fingertip_pos_wf(self, current_q):
+        fingertip_pos_wf = self.custom_pinocchio_utils.forward_kinematics(current_q)
+        return fingertip_pos_wf
 
 class HierarchicalControllerPolicy:
     DIST_THRESH = 0.09
@@ -461,7 +438,7 @@ class HierarchicalControllerPolicy:
             assert False, 'use a different start mode, started with: {}'.format(self.start_mode)
         self.step_count += 1
         return ac
-
+    
 
 class ResidualControllerPolicy(HierarchicalControllerPolicy):
     DIST_THRESH = 0.09
@@ -497,7 +474,6 @@ class ResidualControllerPolicy(HierarchicalControllerPolicy):
 def get_pose_from_observation(observation, goal_pose=False):
     key = 'achieved_goal' if not goal_pose else 'desired_goal'
     return move_cube.Pose.from_dict(observation[key])
-
 
 def flip_needed(init_pose, goal_pose):
     return (c_utils.get_closest_ground_face(init_pose) !=
