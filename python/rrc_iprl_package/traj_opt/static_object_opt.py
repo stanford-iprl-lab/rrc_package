@@ -113,7 +113,7 @@ class StaticObjectOpt:
   def cost_func(self,t,s_flat,a):
     cost = 0
     R = np.eye(self.system.fnum * self.system.qnum) * 0.01
-    Q = np.eye(self.system.qnum) * 5
+    Q = np.eye(self.system.qnum) * 6 # Increase to encourage moving to ft_goal
 
     q,dq = self.system.s_unpack(s_flat)
 
@@ -121,7 +121,7 @@ class StaticObjectOpt:
 
     # Slack variable penalties
     for i in range(a.shape[0]):
-      cost += a[i] * 100
+      cost += a[i] * 150
 
     # Add the current distance to fingertip goal
     for i in range(t.shape[0]):
@@ -137,7 +137,9 @@ class StaticObjectOpt:
       cost += 0.5 * dq_cur @ R @ dq_cur.T
 
     # Collision cost
-    collision_weight = 0.005
+    collision_weight = 0.03 # Increase to encourage collision avoidance
+    pnorm_min = 2
+    alpha = 8
     for t_i in range(t.shape[0]):
       q_cur = q[t_i, :]
       for f_i in range(self.system.fnum): # Each finger
@@ -148,8 +150,12 @@ class StaticObjectOpt:
           for i in range(centers[l_i].shape[0]): # For each sphere center on link
             c = centers[l_i][i,:]
             pnorm = self.system.get_pnorm_of_pos_wf(c)
-
-            cost -= pnorm * collision_weight
+            #penalty = fmax(collision_weight * (pnorm_min - pnorm), 0) 
+            # smooth max
+            penalty = ((pnorm_min - pnorm) * np.e**(alpha*(pnorm_min - pnorm)))/(1 + np.e**(alpha*(pnorm_min - pnorm)))
+            #penalty = 0
+            #cost -= pnorm * collision_weight
+            cost += penalty * collision_weight
 
     return cost
 

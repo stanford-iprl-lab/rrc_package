@@ -60,6 +60,7 @@ class StaticObjectSystem:
     # maximum fingertip radius
     self.MAX_FT_R = 0.195
 
+
 ################################################################################
 # Decision variable management helper functions
 ################################################################################
@@ -194,7 +195,7 @@ class StaticObjectSystem:
       q_cur = q[t_i, :]
       for f_i in range(self.fnum): # Each finger
         centers = self.fingers[f_i].get_sphere_centers_wf(q_cur[self.qnum*f_i:self.qnum*f_i+self.qnum])
-        for l_i in [2]:  # Each link
+        for l_i in [2,3]:  # Each link
           # radius of spheres on link
           r = self.fingers[f_i].r_list[l_i]
           for i in range(centers[l_i].shape[0]): # For each sphere center on link
