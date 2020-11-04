@@ -41,16 +41,10 @@ class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False):
         self.action_space = action_space
-        if npz_file is not None:
-            self.load_npz(npz_file)
-        else:
-            self.nGrid = 50
-            self.dt = 0.01
         self.flipping = False
         self.debug_waypoints = debug_waypoints
         self.debug_fingertip_tracking = True
         self.set_init_goal(initial_pose, goal_pose)
-        self.setup_logging()
         self.finger_waypoints = None # visual object (for debugging)
         self.done_with_primitive = True
         self.init_face = None
@@ -64,6 +58,8 @@ class ImpedanceControllerPolicy:
         self.step_count = 0 # Number of times predict() is called
         self.traj_waypoint_counter = 0
 
+        self.grasped = False
+
     def reset_policy(self, platform=None):
         self.step_count = 0
         if platform:
@@ -73,46 +69,26 @@ class ImpedanceControllerPolicy:
                 self.platform.simfinger.finger_urdf_path,
                 self.platform.simfinger.tip_link_names)
 
+        csv_row = "step,timestamp,"
+        # Formulate row to print csv_row = "{},".format(self.step_count)
+        for i in range(9):
+            csv_row += "desired_ft_pos_{},".format(i)
+        for i in range(9):
+            csv_row += "desired_ft_vel_{},".format(i)
+        print(csv_row)
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.done_with_primitive = False
         self.goal_pose = goal_pose
         self.x0 = np.concatenate([initial_pose.position, initial_pose.orientation])[None]
         if not flip:
-            self.x_goal = self.x0.copy()
-            self.x_goal[0, :3] = goal_pose.position
             self.flipping = False
         else:
-            self.x_goal = np.concatenate([goal_pose.position, goal_pose.orientation])[None]
             self.flipping = True
-        self.x0_pos = self.x0[0,0:3]
-        self.x0_quat = self.x0[0,3:]
         init_goal_dist = np.linalg.norm(goal_pose.position - initial_pose.position)
         #print(f'init position: {initial_pose.position}, goal position: {goal_pose.position}, '
         #      f'dist: {init_goal_dist}')
         #print(f'init orientation: {initial_pose.orientation}, goal orientation: {goal_pose.orientation}')
-
-    def setup_logging(self):
-        x_goal_str = "-".join(map(str, self.x_goal[0,:].tolist()))
-        x0_str = "-".join(map(str, self.x0[0,:].tolist()))
-        today_date = date.today().strftime("%m-%d-%y")
-        self.save_dir = "./logs/{}/x0_{}_xgoal_{}_nGrid_{}_dt_{}".format(
-                today_date ,x0_str, x_goal_str, self.nGrid, self.dt)
-        # Create directory if it does not exist
-        if not os.path.exists(self.save_dir):
-            os.makedirs(self.save_dir)
-
-    def load_npz(self, npz_file):
-        # Open .npz file and parse
-        npzfile   = np.load(npz_file)
-        self.nGrid     = npzfile["t"].shape[0]
-        self.x_goal    = npzfile["x_goal"]
-        self.x0        = npzfile["x0"]
-        self.x_soln    = npzfile["x"]
-        self.l_wf_soln = npzfile["l_wf"]
-        self.dt        = npzfile["dt"]
-        self.cp_params = npzfile["cp_params"]
-    
 
     """
     Get contact point parameters for either lifting of flipping
@@ -128,36 +104,67 @@ class ImpedanceControllerPolicy:
             self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
 
     """
-    Run trajectory optimization for fixed contact points on object
+    Run trajectory optimization to move object given fixed contact points
     """
-    def set_waypoints(self, observation):
+    def set_traj_lift_object(self, observation, nGrid = 50, dt = 0.01):
         self.traj_waypoint_counter = 0
-        # First, set cp_params
+
+        # Get object pose
+        obj_pose = get_pose_from_observation(observation)
+            
+        x0 = np.concatenate([obj_pose.position, obj_pose.orientation])[None]
+        x_goal = x0.copy()
+        x_goal[0, :3] = self.goal_pose.position
+
+        # Get initial fingertip positions in world frame
+        current_position, _ = get_robot_position_velocity(observation)
+        
+        self.x_soln, self.dx_soln, l_wf = c_utils.run_fixed_cp_traj_opt(
+                obj_pose, self.cp_params, current_position, self.custom_pinocchio_utils,
+                x0, x_goal, nGrid, dt)
+
+        ft_pos = np.zeros((nGrid, 9))
+        ft_vel = np.zeros((nGrid, 9))
+        for t_i in range(nGrid):
+            # Set fingertip goal positions and velocities from x_soln, dx_soln
+            next_cube_pos_wf = self.x_soln[t_i, 0:3]
+            next_cube_quat_wf = self.x_soln[t_i, 3:]
+
+            ft_pos_list = c_utils.get_cp_pos_wf_from_cp_params(
+                    self.cp_params, next_cube_pos_wf, next_cube_quat_wf)
+
+            ft_pos[t_i, :] = np.asarray(ft_pos_list).flatten()
+            ft_vel[t_i, :] = np.tile(self.dx_soln[t_i, 0:3],3)
+
+        # Number of interpolation points
+        interp_n = 64
+
+        # Linearly interpolate between each waypoint (row)
+        # Initial row indices
+        row_ind_in = np.arange(nGrid)
+        # Output row coordinates
+        row_coord_out = np.linspace(0, nGrid - 1, interp_n * (nGrid-1) + nGrid)
+        # scipy.interpolate.interp1d instance
+        itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
+        itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
+        itp_lwf = interp1d(row_ind_in, l_wf, axis=0)
+        self.ft_pos_traj = itp_pos(row_coord_out)
+        self.ft_vel_traj = itp_vel(row_coord_out)
+        self.l_wf_traj = itp_lwf(row_coord_out)
+
+    """
+    Run trajectory optimization to move fingers to contact points on object
+    """
+    def set_traj_to_object(self, observation):
+        self.traj_waypoint_counter = 0
+        # First, set cp_params based on mode
         self.set_cp_params(observation)
 
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
-        # Get initial fingertip positions in world frame
-        current_position, _ = get_robot_position_velocity(observation)
-
-        if self.flipping:
-            self.flipping_wp = None
-        else:
-            self.x_soln, self.l_wf_soln, self.cp_params = c_utils.run_fixed_cp_traj_opt(
-                    obj_pose, self.cp_params, current_position, self.custom_pinocchio_utils,
-                    self.x0, self.x_goal, self.nGrid, self.dt, self.save_dir)
-
-        if self.debug_waypoints and self.finger_waypoints is None:
-            # Visual markers
-            init_cps = visual_objects.Marker(number_of_goals=3, goal_size=0.008)
-            self.finger_waypoints = visual_objects.Marker(number_of_goals=3, goal_size=0.008)
-
-            # Draw target contact points
-            # target_cps_wf = control_trifinger_platform.get_cp_wf_list_from_cp_params(self.cp_params, self.x0_pos, self.x0_quat)
-            # init_cps.set_state(target_cps_wf)
 
         # Get list of desired fingertip positions
-        cp_wf_list = c_utils.get_cp_wf_list_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation)
+        cp_wf_list = c_utils.get_cp_pos_wf_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation)
         ft_goal = np.asarray(cp_wf_list).flatten()
         self.run_finger_traj_opt(observation, ft_goal)
 
@@ -193,43 +200,46 @@ class ImpedanceControllerPolicy:
         # scipy.interpolate.interp1d instance
         itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
         itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
-        self.ft_pos = itp_pos(row_coord_out)
-        self.ft_vel = itp_vel(row_coord_out)
-
+        self.ft_pos_traj = itp_pos(row_coord_out)
+        self.ft_vel_traj = itp_vel(row_coord_out)
+        self.l_wf_traj = None
         #self.ft_tracking_init_pos_list = []
         #self.ft_tracking_init_pos_list.append(np.array([0.08, 0.07, 0.07]))
         #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
         #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
-        csv_row = "step,timestamp,"
-        # Formulate row to print csv_row = "{},".format(self.step_count)
-        for i in range(9):
-            csv_row += "desired_ft_pos_{},".format(i)
-        for i in range(9):
-            csv_row += "desired_ft_vel_{},".format(i)
-        print(csv_row)
-
-    def predict(self, observation):
+    def predict(self, full_observation):
         self.step_count += 1
-        observation = observation['observation']
+        observation = full_observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
 
         t = time.time() - self.start_time
-        fingertip_pos_goal_list = []
-        fingertip_vel_goal_list = []
 
-        if self.traj_waypoint_counter >= self.ft_pos.shape[0]:
-            traj_waypoint_i = self.ft_pos.shape[0] - 1
+        # HANDLE ANY TRAJECTORY RECOMPUTATION HERE
+        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0] and not self.grasped:
+            # If at end of trajectory, do fixed cp traj opt
+            self.set_traj_lift_object(full_observation, nGrid = 50, dt = 0.08)
+            self.grasped = True
+
+        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
+            traj_waypoint_i = self.ft_pos_traj.shape[0] - 1
         else:
             traj_waypoint_i = self.traj_waypoint_counter
 
+        fingertip_pos_goal_list = []
+        fingertip_vel_goal_list = []
         for f_i in range(3):
-            new_pos = self.ft_pos[traj_waypoint_i, f_i*3:f_i*3+3]
-            new_vel = self.ft_vel[traj_waypoint_i, f_i*3:f_i*3+3]
+            new_pos = self.ft_pos_traj[traj_waypoint_i, f_i*3:f_i*3+3]
+            new_vel = self.ft_vel_traj[traj_waypoint_i, f_i*3:f_i*3+3]
             fingertip_pos_goal_list.append(new_pos)
             fingertip_vel_goal_list.append(new_vel)
 
-        # Print to stdout for logging
+        if self.l_wf_traj is None:
+            self.tip_forces_wf = None
+        else:
+            self.tip_forces_wf = self.l_wf_traj[traj_waypoint_i, :]
+
+        # Print fingertip goal position and velocities to stdout for logging
         csv_row = "{},{},".format(self.step_count,time.time())
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for f_i in range(3):
@@ -240,8 +250,6 @@ class ImpedanceControllerPolicy:
                 csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
         print(csv_row)
 
-        self.tip_forces_wf = None
-        #print("ft goal: {}".format(self.fingertip_goal_list))
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(fingertip_pos_goal_list,
                                               fingertip_vel_goal_list,
@@ -252,7 +260,6 @@ class ImpedanceControllerPolicy:
 
         torque = np.clip(torque, self.action_space.low, self.action_space.high)
 
-        #print("Torque from policy: {}".format(torque))
         self.traj_waypoint_counter += 1
 
         return torque
@@ -402,7 +409,8 @@ class HierarchicalControllerPolicy:
                         init_pose, goal_pose, flip=flip_needed(init_pose, goal_pose))
             else:
                 self.impedance_controller.set_init_goal(init_pose, goal_pose)
-            self.impedance_controller.set_waypoints(observation)
+
+            self.impedance_controller.set_traj_to_object(observation)
             self.traj_initialized = True  # pre_traj_wp are initialized
             self.mode = PolicyMode.IMPEDANCE
 

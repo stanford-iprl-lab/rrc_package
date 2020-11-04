@@ -177,7 +177,7 @@ Inputs:
 cp_param: Contact point param [px, py, pz]
 cube: Block object, which contains object shape info
 """
-def get_cp_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf, cube_half_size=CUBE_HALF_SIZE):
+def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf, cube_half_size=CUBE_HALF_SIZE):
     cp = get_cp_of_from_cp_param(cp_param, cube_half_size)
 
     rotation = Rotation.from_quat(cube_quat_wf)
@@ -188,11 +188,12 @@ def get_cp_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf, cube_half_size=
 """
 Get contact point positions in world frame from cp_params
 """
-def get_cp_wf_list_from_cp_params(cp_params, cube_pos, cube_quat, cube_half_size=CUBE_HALF_SIZE):
+def get_cp_pos_wf_from_cp_params(cp_params, cube_pos, cube_quat, cube_half_size=CUBE_HALF_SIZE):
     # Get contact points in wf
     fingertip_goal_list = []
-    for i in range(cp_params.shape[0]):
-        fingertip_goal_list.append(get_cp_wf_from_cp_param(cp_params[i], cube_pos, cube_quat, cube_half_size))
+    for i in range(len(cp_params)):
+    #for i in range(cp_params.shape[0]):
+        fingertip_goal_list.append(get_cp_pos_wf_from_cp_param(cp_params[i], cube_pos, cube_quat, cube_half_size))
     return fingertip_goal_list
 
 """
@@ -309,6 +310,7 @@ def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchi
                                        )
     
     x_soln     = np.array(opt_problem.x_soln)
+    dx_soln    = np.array(opt_problem.dx_soln)
     l_wf_soln  = np.array(opt_problem.l_wf_soln)
     cp_params  = np.array(cp_params)
 
@@ -332,7 +334,7 @@ def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchi
                          x_dim          = opt_problem.system.x_dim, 
                          dx_dim         = opt_problem.system.dx_dim, 
                         )
-    return x_soln, l_wf_soln, cp_params
+    return x_soln, dx_soln, l_wf_soln
     
 
 """

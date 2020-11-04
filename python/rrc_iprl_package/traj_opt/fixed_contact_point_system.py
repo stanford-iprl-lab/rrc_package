@@ -629,18 +629,12 @@ class FixedContactPointSystem:
     
     # Object velocity constraints
     dx_range = np.array([
-                       [-np.inf, np.inf], # qw range
-                       [-np.inf, np.inf], # qw range
-                       [-np.inf, np.inf], # qw range
-                       [-np.inf, np.inf], # qx range
-                       [-np.inf, np.inf], # qx range
-                       [-np.inf, np.inf], # qx range
-                       #[-10,10], # x vel range
-                       #[-10,10], # y vel range
-                       #[-10,10], # z vel range
-                       #[-2*np.pi, 2*np.pi], # angular velocity range
-                       #[-2*np.pi, 2*np.pi], # angular velocity range
-                       #[-2*np.pi, 2*np.pi], # angular velocity range
+                       [-0.05,0.05], # x vel range
+                       [-0.05,0.05], # y vel range
+                       [-0.05,0.05], # z vel range
+                       [-np.pi/2, np.pi/2], # angular velocity range
+                       [-np.pi/2, np.pi/2], # angular velocity range
+                       [-np.pi/2, np.pi/2], # angular velocity range
                        ])
     dx_lb = np.ones(dx.shape) * dx_range[:,0]
     dx_ub = np.ones(dx.shape) * dx_range[:,1]
