@@ -10,15 +10,16 @@ from rrc_iprl_package.traj_opt.static_object_opt import StaticObjectOpt
 
 # Here, hard code the base position of the fingers (as angle on the arena)
 r = 0.15
-theta_0 = np.pi/2 # 90 degrees
-theta_1 = -np.pi/3 # 330 degrees
-theta_2 = 3.66519 # 210 degrees
-CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2 + 0.005
+theta_0 = 90
+theta_1 = -330
+theta_2 = 200
+#theta_2 = 3.66519 # 210 degrees
+CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2 + 0.001
 
 FINGER_BASE_POSITIONS = [
-                       np.array([[np.cos(theta_0)*r, np.sin(theta_0)*r, 0]]),
-                       np.array([[np.cos(theta_1)*r, np.sin(theta_1)*r, 0]]),
-                       np.array([[np.cos(theta_2)*r, np.sin(theta_2)*r, 0]]),
+                       np.array([[np.cos(theta_0*(np.pi/180))*r, np.sin(theta_0*(np.pi/180))*r, 0]]),
+                       np.array([[np.cos(theta_1*(np.pi/180))*r, np.sin(theta_1*(np.pi/180))*r, 0]]),
+                       np.array([[np.cos(theta_2*(np.pi/180))*r, np.sin(theta_2*(np.pi/180))*r, 0]]),
                        ]
 
 
