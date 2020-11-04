@@ -11,7 +11,7 @@ from rrc_iprl_package.traj_opt.static_object_opt import StaticObjectOpt
 # Here, hard code the base position of the fingers (as angle on the arena)
 r = 0.15
 theta_0 = 90
-theta_1 = -330
+theta_1 = 310
 theta_2 = 200
 #theta_2 = 3.66519 # 210 degrees
 CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2 + 0.001
