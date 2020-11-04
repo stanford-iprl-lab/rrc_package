@@ -179,6 +179,13 @@ class ImpedanceControllerPolicy:
         # Get initial fingertip positions in world frame
         current_position, _ = get_robot_position_velocity(observation)
 
+        # Where the fingers start on the real robot (once they retract)
+        current_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
+        #self.ft_tracking_init_pos_list = []
+        #self.ft_tracking_init_pos_list.append(np.array([0.08, 0.07, 0.07]))
+        #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
+        #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
+
         # Define nlp
         nGrid = 50
         dt = 0.04
@@ -203,10 +210,6 @@ class ImpedanceControllerPolicy:
         self.ft_pos_traj = itp_pos(row_coord_out)
         self.ft_vel_traj = itp_vel(row_coord_out)
         self.l_wf_traj = None
-        #self.ft_tracking_init_pos_list = []
-        #self.ft_tracking_init_pos_list.append(np.array([0.08, 0.07, 0.07]))
-        #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
-        #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
     def predict(self, full_observation):
         self.step_count += 1
