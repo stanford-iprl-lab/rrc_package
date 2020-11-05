@@ -224,7 +224,7 @@ class ImpedanceControllerPolicy:
 
         t = time.time() - self.start_time
 
-        if not self.traj_to_object_computed:
+        if not self.traj_to_object_computed and t > 3:
             self.set_traj_to_object(full_observation)
             self.traj_to_object_computed = True
 
