@@ -52,7 +52,7 @@ class ImpedanceControllerPolicy:
         self.platform = None
         print("KP: {}".format(KP))
         print("KV: {}".format(KV))
-        self.start_time = time.time()
+        self.start_time = None
 
         # Counters
         self.step_count = 0 # Number of times predict() is called
@@ -60,6 +60,7 @@ class ImpedanceControllerPolicy:
 
         self.grasped = False
         self.traj_to_object_computed = False
+
 
     def reset_policy(self, platform=None):
         self.step_count = 0
@@ -69,6 +70,14 @@ class ImpedanceControllerPolicy:
         self.custom_pinocchio_utils = CustomPinocchioUtils(
                 self.platform.simfinger.finger_urdf_path,
                 self.platform.simfinger.tip_link_names)
+
+        init_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
+        self.init_ft_pos = self.get_fingertip_pos_wf(init_position)
+        self.init_ft_pos = np.asarray(self.init_ft_pos).flatten()
+
+        self.ft_pos_traj = np.tile(self.init_ft_pos, (10000,1))
+        self.ft_vel_traj = np.zeros((10000,9))
+        self.l_wf_traj = None
 
         csv_row = "step,timestamp,"
         # Formulate row to print csv_row = "{},".format(self.step_count)
@@ -191,7 +200,9 @@ class ImpedanceControllerPolicy:
         current_position, _ = get_robot_position_velocity(observation)
 
         # Where the fingers start on the real robot (once they retract)
-        current_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
+        #current_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
+        #self.init_ft_pos = self.get_fingertip_pos_wf(current_position)
+        #self.init_ft_pos = np.asarray(current_ft_pos).flatten()
         #self.ft_tracking_init_pos_list = []
         #self.ft_tracking_init_pos_list.append(np.array([0.08, 0.07, 0.07]))
         #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
@@ -222,7 +233,11 @@ class ImpedanceControllerPolicy:
         observation = full_observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
 
-        t = time.time() - self.start_time
+        if self.start_time is None:
+            self.start_time = time.time()
+            t = 0
+        else:
+            t = time.time() - self.start_time
 
         if not self.traj_to_object_computed and t > 3:
             self.set_traj_to_object(full_observation)
