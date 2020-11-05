@@ -59,6 +59,7 @@ class ImpedanceControllerPolicy:
         self.traj_waypoint_counter = 0
 
         self.grasped = False
+        self.traj_to_object_computed = False
 
     def reset_policy(self, platform=None):
         self.step_count = 0
@@ -222,6 +223,10 @@ class ImpedanceControllerPolicy:
         current_position, current_velocity = observation['position'], observation['velocity']
 
         t = time.time() - self.start_time
+
+        if not self.traj_to_object_computed:
+            self.set_traj_to_object(full_observation)
+            self.traj_to_object_computed = True
 
         # HANDLE ANY TRAJECTORY RECOMPUTATION HERE
         if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0] and not self.grasped:
@@ -418,7 +423,7 @@ class HierarchicalControllerPolicy:
             else:
                 self.impedance_controller.set_init_goal(init_pose, goal_pose)
 
-            self.impedance_controller.set_traj_to_object(observation)
+            #self.impedance_controller.set_traj_to_object(observation)
             self.traj_initialized = True  # pre_traj_wp are initialized
             self.mode = PolicyMode.IMPEDANCE
 
