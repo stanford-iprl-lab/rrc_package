@@ -14,9 +14,9 @@ from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
-
 FRAMESKIP = 1
-MAX_STEPS = 15 * 1000 // FRAMESKIP
+#MAX_STEPS = 3 * 1000 // FRAMESKIP
+MAX_STEPS = None
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -60,16 +60,20 @@ def main():
     accumulated_reward = 0
     is_done = False
     old_mode = policy.mode
+    steps_so_far = 0
     while not is_done:
+        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
         action = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
         if old_mode != policy.mode:
-            print('mode changed: {} to {}'.format(old_mode, policy.mode))
+            #print('mode changed: {} to {}'.format(old_mode, policy.mode))
             old_mode = policy.mode
+        #print("reward:", reward)
         accumulated_reward += reward
+        steps_so_far += 1
 
-    print("------")
-    print("Accumulated Reward: {:.3f}".format(accumulated_reward))
+    #print("------")
+    #print("Accumulated Reward: {:.3f}".format(accumulated_reward))
 
 
 if __name__ == "__main__":
