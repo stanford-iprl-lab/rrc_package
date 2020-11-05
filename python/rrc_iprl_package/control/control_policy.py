@@ -145,7 +145,7 @@ class ImpedanceControllerPolicy:
             ft_vel[t_i, :] = np.tile(self.dx_soln[t_i, 0:3],3)
 
         # Number of interpolation points
-        interp_n = 32
+        interp_n = 64
 
         # Linearly interpolate between each waypoint (row)
         # Initial row indices
