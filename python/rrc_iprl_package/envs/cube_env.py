@@ -66,6 +66,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # ====================
 
         self.goal = cube_goal_pose
+        if not isinstance(cube_goal_pose, dict):
+            self.goal = cube_goal_pose.as_dict()
         self.info = {"difficulty": goal_difficulty}
         self.initial_pose = cube_initial_pose if cube_initial_pose else move_cube.sample_goal(-1)
 
@@ -266,7 +268,6 @@ class RealRobotCubeEnv(gym.GoalEnv):
             )
 
         self.platform = robot_fingers.TriFingerPlatformFrontend()
-        pbutils.reset_camera()
 
     def _reset_direct_simulation(self):
         """Reset direct simulation.

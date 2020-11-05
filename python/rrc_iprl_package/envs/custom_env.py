@@ -24,7 +24,7 @@ import rrc_iprl_package.pybullet_utils as pbutils
 from rrc_iprl_package.envs import cube_env
 from rrc_iprl_package.envs.cube_env import ActionType
 from rrc_iprl_package.control.controller_utils import PolicyMode
-from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
+from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy, ImpedanceControllerPolicy
 
 
 class PushCubeEnv(gym.Env):
@@ -78,6 +78,7 @@ class PushCubeEnv(gym.Env):
         # will be initialized in reset()
         self.platform = None
         self._prev_action = None
+        self.action_type = action_type
 
         # Create the action and observation spaces
         # ========================================
@@ -109,7 +110,10 @@ class PushCubeEnv(gym.Env):
         )
 
         # verify that the given goal pose is contained in the cube state space
-        if not object_state_space.contains(self.goal):
+        goal_pose = self.goal
+        if not isinstance(goal_pose, dict):
+            goal_pose = goal_pose.to_dict()
+        if not object_state_space.contains(goal_pose):
             raise ValueError("Invalid goal pose.")
 
         if self.action_type == ActionType.TORQUE:
@@ -219,7 +223,8 @@ class PushCubeEnv(gym.Env):
 
     def _create_observation(self, t, action):
         robot_observation = self.platform.get_robot_observation(t)
-        object_observation = self.platform.get_object_pose(t)
+        camera_observation = self.platform.get_camera_observation(t)
+        object_observation = camera_observation.object_pose
         robot_tip_positions = self.platform.forward_kinematics(
             robot_observation.position
         )
@@ -233,7 +238,7 @@ class PushCubeEnv(gym.Env):
             "robot_tip_forces": robot_observation.tip_force,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
-            "goal_object_position": self.goal["position"],
+            "goal_object_position": np.asarray(self.goal["position"]),
             "action": action
         }
         return {k: observation[k] for k in self.observation_names}
@@ -373,8 +378,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             self.observation_space = gym.spaces.Dict(obs_dict)
 
     def observation(self, observation):
-        observation_imp = self.process_observation_impedance(observation)
-        obs_dict = {'impedance': observation_imp}
+        obs_dict = {'impedance': observation}
         if 'rl' in self.observation_space.spaces:
             observation_rl = self.process_observation_rl(observation)
             obs_dict['rl'] = observation_rl
@@ -383,7 +387,8 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
     def process_observation_rl(self, observation):
         t = self.step_count
         robot_observation = self.platform.get_robot_observation(t)
-        object_observation = self.platform.get_object_pose(t)
+        camera_observation = self.platform.get_camera_observation(t)
+        object_observation = camera_observation.object_pose
         robot_tip_positions = self.platform.forward_kinematics(
             robot_observation.position
         )
@@ -395,13 +400,10 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             "robot_tip_positions": robot_tip_positions,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
-            "goal_object_position": self.goal["position"],
-            "goal_object_orientation": self.goal["orientation"],
+            "goal_object_position": np.asarray(self.goal["position"]),
+            "goal_object_orientation": np.asarray(self.goal["orientation"]),
         }
         observation = np.concatenate([observation[k].flatten() for k in self.rl_observation_names])
-        return observation
-
-    def process_observation_impedance(self, observation):
         return observation
 
     def reset(self):
@@ -491,6 +493,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller = None
         self.observation_names = PushCubeEnv.observation_names
         self.make_obs_space()
+        self.action_space = env.action_space.spaces['torque']
+        self._prev_action = np.zeros(9)
 
     def make_obs_space(self):
         robot_torque_space = gym.spaces.Box(
@@ -511,30 +515,32 @@ class ResidualPolicyWrapper(ObservationWrapper):
                 "position": gym.spaces.Box(
                     low=trifingerpro_limits.object_position.low,
                     high=trifingerpro_limits.object_position.high,
-                ),
-                "orientation": gym.spaces.Box(
+                ), "orientation": gym.spaces.Box(
                     low=trifingerpro_limits.object_orientation.low,
                     high=trifingerpro_limits.object_orientation.high,
                 ),
             }
         )
+        p_low = np.concatenate([object_state_space.spaces['position'].low for _ in range(3)])
+        p_high = np.concatenate([object_state_space.spaces['position'].high for _ in range(3)])
+
 
         imp_obs_space = self.env.observation_space
         rl_obs_spaces = {
                 "robot_position": robot_position_space,
                 "robot_velocity": robot_velocity_space,
                 "robot_torque": robot_torque_space,
-                "robot_tip_positions": np.concatenate(
-                    [object_state_space.spaces['position'] for _ in range(3)]),
+                "robot_tip_positions": gym.spaces.Box(low=p_low, high=p_high),
                 "robot_tip_forces": gym.spaces.Box(low=np.zeros(3), high=np.ones(3)),
                 "action": self.action_space,
-                "goal_position": object_state_space.spaces['position'],
-                "goal_orientation": object_state_space.spaces['orientation'],
+                "goal_object_position": object_state_space.spaces['position'],
+                "goal_object_orientation": object_state_space.spaces['orientation'],
                 "object_position": object_state_space.spaces['position'],
                 "object_orientation": object_state_space.spaces['orientation'],
             }
 
-        rl_obs_space = {k:obs_spaces[k] for k in self.observation_names}
+        rl_obs_space = gym.spaces.Dict(
+                {k: rl_obs_spaces[k] for k in self.observation_names})
         self.observation_space = gym.spaces.Dict(
                 {'impedance': imp_obs_space, 'rl': rl_obs_space})
 
@@ -543,19 +549,31 @@ class ResidualPolicyWrapper(ObservationWrapper):
         obs = self.init_impedance_controller(obs)
         return obs
 
+    def step(self, action):
+        if self.step_count > 0:
+            action = self.action(action)
+        else:
+            if isinstance(action, dict):
+                self._prev_action = action['torque']
+            else:
+                self._prev_action = action
+        return super(ResidualPolicyWrapper, self).step(action)
+
     def process_observation_residual(self, observation):
         return observation
 
-    def make_impedance_controller(self, obs):
-        init_pose, goal_pose = self.process_obs_init_goal(obs)
-        self.impedance_controller = ImpedanceControlerPolicy(
+    def init_impedance_controller(self, obs):
+        init_pose, goal_pose = self.process_obs_init_goal(obs['impedance'])
+        self.impedance_controller = ImpedanceControllerPolicy(
                 self.action_space, init_pose, goal_pose)
+        self.impedance_controller.reset_policy(self.platform)
         self.impedance_controller.set_waypoints(obs['impedance'])
-        tip_force = obs['rl']['robot_tip_forces']
-        while np.isclose(tip_force).all():
+        tip_force = self._obs_dict['rl']['robot_tip_forces']
+        zeros = np.zeros_like(tip_force)
+        while np.isclose(tip_force, zeros).all():
             torque = self.impedance_controller.predict(obs['impedance'])
-            obs, _, _, _ = self.step(torque)
-            tip_force = obs['rl']['robot_tip_forces']
+            obs, _, _, _ = self.step(torque) 
+            tip_force = self._obs_dict['rl']['robot_tip_forces']
 
         if not self.pre_traj_done():
             print("Ending pre-trajectory step early after {} steps".format(
@@ -563,17 +581,16 @@ class ResidualPolicyWrapper(ObservationWrapper):
         return obs
 
     def observation(self, observation):
-        observation_imp = self.process_observation_impedance(observation)
-        obs_dict = {'impedance': observation_imp}
-        observation_rl = self.process_observation_rl(observation)
-        obs_dict['rl'] = observation_rl
-        self._obs_dict = obs_dict
+        obs_dict = {'impedance': observation}
+        self._obs_dict = obs_dict.copy() 
+        obs_dict['rl'] = self.process_observation_rl(observation)
         return obs_dict
 
     def process_observation_rl(self, observation):
         t = self.step_count
         robot_observation = self.platform.get_robot_observation(t)
-        object_observation = self.platform.get_object_pose(t)
+        camera_observation = self.platform.get_camera_observation(t)
+        object_observation = camera_observation.object_pose
         robot_tip_positions = self.platform.forward_kinematics(
             robot_observation.position)
         robot_tip_positions = np.array(robot_tip_positions)
@@ -582,17 +599,19 @@ class ResidualPolicyWrapper(ObservationWrapper):
             "robot_velocity": robot_observation.velocity,
             "robot_tip_positions": robot_tip_positions,
             "robot_tip_forces": robot_observation.tip_force,
+            "action": self._prev_action,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
-            "goal_object_position": self.goal["position"],
-            "goal_object_orientation": self.goal["orientation"],
+            "goal_object_position": np.asarray(self.goal["position"]),
+            "goal_object_orientation": np.asarray(self.goal["orientation"]),
         }
+        self._obs_dict['rl'] = observation
         observation = np.concatenate([observation[k].flatten() for k in self.observation_names])
         return observation
 
     def pre_traj_done(self):
-        if self.impedance_controller.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]): 
-            self.impedance_controller.pre_traj_waypoint_i = len(self.finger_waypoints_list[0])
+        if self.impedance_controller.pre_traj_waypoint_i < len(self.impedance_controller.finger_waypoints_list[0]): 
+            self.impedance_controller.pre_traj_waypoint_i = len(self.impedance_controller.finger_waypoints_list[0])
             return False
         return True
 
@@ -610,5 +629,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
 
     def action(self, res_torque):
         torque = self.impedance_controller.predict(self._obs_dict['impedance'])
+        self._prev_action = res_torque + torque
+        if self.env.action_type == ActionType.TORQUE_AND_POSITION:
+            return {'torque': res_torque + torque, 'position': np.zeros(9)} 
         return res_torque + torque
 

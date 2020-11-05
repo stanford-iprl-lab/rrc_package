@@ -240,7 +240,7 @@ class RandomGoalOrientationInitializer:
 
     def get_goal(self):
         goal =  move_cube.sample_goal(-1)
-        goal.position = np.zero(3)
+        goal.position = np.zeros(3)
         return goal
 
 
