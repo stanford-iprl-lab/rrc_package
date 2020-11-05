@@ -1,5 +1,5 @@
 {
-    "difficulty": 1,
+    "difficulty": 2,
     "_goal": {
         "position": [0.0, 0.0, 0.0825],
         "orientation": [0, 0, 0, 1]
