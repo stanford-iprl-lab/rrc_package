@@ -53,12 +53,13 @@ class ImpedanceControllerPolicy:
         print("KP: {}".format(KP))
         print("KV: {}".format(KV))
         self.start_time = None
+        self.flip_start_time = None
 
         # Counters
         self.step_count = 0 # Number of times predict() is called
         self.traj_waypoint_counter = 0
 
-        self.grasped = False
+        self.primitive_traj_computed = False
         self.traj_to_object_computed = False
 
 
@@ -72,8 +73,8 @@ class ImpedanceControllerPolicy:
                 self.platform.simfinger.tip_link_names)
 
         init_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
-        self.init_ft_pos = self.get_fingertip_pos_wf(init_position)
-        self.init_ft_pos = np.asarray(self.init_ft_pos).flatten()
+        self.init_ft_pos_list = self.get_fingertip_pos_wf(init_position)
+        self.init_ft_pos = np.asarray(self.init_ft_pos_list).flatten()
 
         self.ft_pos_traj = np.tile(self.init_ft_pos, (10000,1))
         self.ft_vel_traj = np.zeros((10000,9))
@@ -118,6 +119,8 @@ class ImpedanceControllerPolicy:
                 obj_pose, self.goal_pose)
         else:
             self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
+
+        print("Target cp_params: {}".format(self.cp_params))
 
     """
     Run trajectory optimization to move object given fixed contact points
@@ -181,8 +184,21 @@ class ImpedanceControllerPolicy:
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
 
+        # Get joint positions
+        current_position, _ = get_robot_position_velocity(observation)
+
+        # Get current fingertip positions
+        current_ft_pos = self.get_fingertip_pos_wf(current_position)
+
         # Get list of desired fingertip positions
         cp_wf_list = c_utils.get_cp_pos_wf_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation)
+
+        # Deal with None fingertip_goal here
+        # If cp_wf is None, set ft_goal to be  current ft position
+        for i in range(len(cp_wf_list)):
+            if cp_wf_list[i] is None:
+                cp_wf_list[i] = current_ft_pos[i]
+
         ft_goal = np.asarray(cp_wf_list).flatten()
         self.run_finger_traj_opt(observation, ft_goal)
 
@@ -231,7 +247,10 @@ class ImpedanceControllerPolicy:
     def predict(self, full_observation):
         self.step_count += 1
         observation = full_observation['observation']
+        obj_pose = get_pose_from_observation(full_observation)
         current_position, current_velocity = observation['position'], observation['velocity']
+        # Get current fingertip positions
+        current_ft_pos = self.get_fingertip_pos_wf(current_position)
 
         if self.start_time is None:
             self.start_time = time.time()
@@ -243,11 +262,51 @@ class ImpedanceControllerPolicy:
             self.set_traj_to_object(full_observation)
             self.traj_to_object_computed = True
 
+        flip_vel = 1e-4
+        if self.primitive_traj_computed:
+            # If at end of trajectory, lift or flip object
+            if self.flipping:
+                # Get next flipping waypoint
+                flipping_ft_pos_list, flip_done = c_utils.get_flipping_waypoint(
+                                                                           self.flip_start_pose,
+                                                                           self.init_face,
+                                                                           self.goal_face,
+                                                                           current_ft_pos,
+                                                                           self.init_ft_pos_list,
+                                                                           self.cp_params,
+                                                                           self.flip_start_time
+                                                                           )
+                flipping_ft_pos = np.asarray(flipping_ft_pos_list).flatten()
+                self.ft_pos_traj = np.tile(flipping_ft_pos, (3, 1))
+                self.ft_vel_traj = np.ones((3,9)) * flip_vel
+                self.l_wf_traj = None
+                self.traj_waypoint_counter = 0
+        
+
         # HANDLE ANY TRAJECTORY RECOMPUTATION HERE
-        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0] and not self.grasped:
-            # If at end of trajectory, do fixed cp traj opt
-            self.set_traj_lift_object(full_observation, nGrid = 50, dt = 0.08)
-            self.grasped = True
+        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0] and not self.primitive_traj_computed:
+            # If at end of trajectory, lift or flip object
+            if self.flipping:
+                self.flip_start_time = time.time()
+                self.flip_start_pose = obj_pose
+                # Get next flipping waypoint
+                flipping_ft_pos_list, flip_done = c_utils.get_flipping_waypoint(obj_pose,
+                                                                           self.init_face,
+                                                                           self.goal_face,
+                                                                           current_ft_pos,
+                                                                           self.init_ft_pos_list,
+                                                                           self.cp_params,
+                                                                           self.flip_start_time
+                                                                           )
+                flipping_ft_pos = np.asarray(flipping_ft_pos_list).flatten()
+                self.ft_pos_traj = np.tile(flipping_ft_pos, (3, 1))
+                self.ft_vel_traj = np.ones((3,9)) * flip_vel
+                self.l_wf_traj = None
+                self.traj_waypoint_counter = 0
+            else:
+                # Do fixed cp traj opt
+                self.set_traj_lift_object(full_observation, nGrid = 50, dt = 0.08)
+            self.primitive_traj_computed = True
 
         if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
             traj_waypoint_i = self.ft_pos_traj.shape[0] - 1

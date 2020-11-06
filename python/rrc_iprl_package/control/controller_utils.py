@@ -1,5 +1,6 @@
 import numpy as np
 import enum
+import time
 from scipy.spatial.transform import Rotation
 from scipy.spatial.distance import pdist, squareform
 
@@ -14,6 +15,7 @@ theta_0 = 90
 theta_1 = 310
 theta_2 = 200
 #theta_2 = 3.66519 # 210 degrees
+ACTUAL_CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2
 CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2 + 0.001
 
 FINGER_BASE_POSITIONS = [
@@ -187,14 +189,17 @@ def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf, cube_half_s
     return rotation.apply(cp.pos_of) + translation
 
 """
-Get contact point positions in world frame from cp_params
+Get list of contact point positions in world frame from cp_params
+If finger cp_param is None, cp_wf will also be None in list
 """
 def get_cp_pos_wf_from_cp_params(cp_params, cube_pos, cube_quat, cube_half_size=CUBE_HALF_SIZE):
     # Get contact points in wf
     fingertip_goal_list = []
     for i in range(len(cp_params)):
-    #for i in range(cp_params.shape[0]):
-        fingertip_goal_list.append(get_cp_pos_wf_from_cp_param(cp_params[i], cube_pos, cube_quat, cube_half_size))
+        if cp_params[i] is None:
+            fingertip_goal_list.append(None)
+        else:
+            fingertip_goal_list.append(get_cp_pos_wf_from_cp_param(cp_params[i], cube_pos, cube_quat, cube_half_size))
     return fingertip_goal_list
 
 """
@@ -637,17 +642,60 @@ def get_flipping_cp_params(
 Get next waypoint for flipping
 """
 def get_flipping_waypoint(
-                                                    obj_pose,
-                                                    init_face,
-                                                    goal_face,
-                                                    fingertips_current_wf,
-                                                    fingertips_init_wf,
-                                                    cp_params,
-                                                 ):
+                          obj_pose,
+                          init_face,
+                          goal_face,
+                          fingertips_current_wf,
+                          fingertips_init_wf,
+                          cp_params,
+                          start_time,
+                         ):
+
+    print(obj_pose)
     # Get goal face
     #goal_face = get_closest_ground_face(goal_pose)
     #print("Goal face: {}".format(goal_face))
     #print("ground face: {}".format(get_closest_ground_face(obj_pose)))
+
+    t = time.time() - start_time
+    init_up_axis = OBJ_FACES_INFO[init_face]["up_axis"]
+    goal_up_axis = OBJ_FACES_INFO[goal_face]["up_axis"]
+    circle_y_dim = np.nonzero(init_up_axis)[0][0]
+    circle_x_dim = np.nonzero(goal_up_axis)[0][0]
+    circle_y_dir = np.sign(init_up_axis[circle_y_dim])
+    circle_x_dir = np.sign(goal_up_axis[circle_x_dim])
+    print(circle_y_dim, circle_y_dir)
+    print(circle_x_dim, circle_x_dir)
+
+    r = (0.65+1)*ACTUAL_CUBE_HALF_SIZE
+    print("R: {}".format(r))
+    #r = (0.65+1)*ACTUAL_CUBE_HALF_SIZE - ACTUAL_CUBE_HALF_SIZE
+    # Rotation circle radius
+    x = (r * np.cos(t/1000 + 0.4) - r/2) * circle_x_dir
+    y = (r * np.sin(t/1000 + 0.4) - r/2) * circle_y_dir
+
+    # Transform current fingertip positions to of
+    fingertips_new_wf = []
+    for f_i in range(3):
+        print(f_i)
+        f_wf = fingertips_current_wf[f_i]
+        if cp_params[f_i] is None:
+            f_new_wf = fingertips_init_wf[f_i]
+        else:
+            # Get face that finger is on
+            f_new_of = get_of_from_wf(f_wf, obj_pose)
+            print(f_new_of)
+            f_new_of[circle_x_dim] = x
+            f_new_of[circle_y_dim] = y
+            print(f_new_of)
+            # Convert back to wf
+            f_new_wf = get_wf_from_of(f_new_of, obj_pose)
+        
+        fingertips_new_wf.append(f_new_wf)
+    print("flip: {}".format(fingertips_new_wf))
+
+    return fingertips_new_wf, False
+    #r =  
 
     ground_face = get_closest_ground_face(obj_pose)
     #if (get_closest_ground_face(obj_pose) == goal_face):
@@ -657,19 +705,19 @@ def get_flipping_waypoint(
     # Transform current fingertip positions to of
     fingertips_new_wf = []
 
-    incr = 0.01
+    incr = 0.0001
     for f_i in range(3):
         f_wf = fingertips_current_wf[f_i]
         if cp_params[f_i] is None:
             f_new_wf = fingertips_init_wf[f_i]
         else:
-            # Get face that finger is one
+            # Get face that finger is on
             face = get_face_from_cp_param(cp_params[f_i])
             f_of = get_of_from_wf(f_wf, obj_pose)
 
             if ground_face == goal_face:
                 # Release object
-                f_new_of = f_of - 0.01 * OBJ_FACES_INFO[face]["up_axis"]
+                f_new_of = f_of - incr * OBJ_FACES_INFO[face]["up_axis"]
                 if obj_pose.position[2] <= 0.034: # TODO: HARDCODED
                     flip_done = True
                     #print("FLIP SUCCESSFUL!")
@@ -677,7 +725,7 @@ def get_flipping_waypoint(
                     flip_done = False
             elif ground_face != init_face:
                 # Ground face does not match goal force or init face, give up
-                f_new_of = f_of - 0.01 * OBJ_FACES_INFO[face]["up_axis"]
+                f_new_of = f_of - incr * OBJ_FACES_INFO[face]["up_axis"]
                 if obj_pose.position[2] <= 0.034: # TODO: HARDCODED
                     flip_done = True
                 else:
@@ -689,13 +737,16 @@ def get_flipping_waypoint(
 
             # Convert back to wf
             f_new_wf = get_wf_from_of(f_new_of, obj_pose)
-
+    
         fingertips_new_wf.append(f_new_wf)
 
     #print(fingertips_current_wf)
     #print(fingertips_new_wf)
     #fingertips_new_wf[2] = fingertips_init_wf[2]
      
+    # TODO
+    # Need some velocity here? Just hard code for now?
+    # What to do when flip is done? Move fingers back to init position?
     return fingertips_new_wf, flip_done
 
 ##############################################################################
