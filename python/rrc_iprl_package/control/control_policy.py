@@ -88,7 +88,7 @@ class ImpedanceControllerPolicy:
         print(csv_row)
 
         # Define nlp for finger traj opt
-        nGrid = 30
+        nGrid = 50
         dt = 0.04
         self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
 
