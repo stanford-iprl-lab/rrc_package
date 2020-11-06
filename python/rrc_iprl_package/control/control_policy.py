@@ -88,7 +88,7 @@ class ImpedanceControllerPolicy:
         print(csv_row)
 
         # Define nlp for finger traj opt
-        nGrid = 50
+        nGrid = 30
         dt = 0.04
         self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
 
@@ -192,7 +192,6 @@ class ImpedanceControllerPolicy:
     """
     def run_finger_traj_opt(self, observation, ft_goal):
         nGrid = self.finger_nlp.nGrid
-        dt = self.finger_nlp.nGrid
         self.traj_waypoint_counter = 0
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
