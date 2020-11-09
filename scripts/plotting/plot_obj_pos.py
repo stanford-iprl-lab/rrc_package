@@ -1,3 +1,5 @@
+import argparse
+import os.path as osp
 import numpy as np
 import matplotlib.pyplot as plt
 import json
@@ -12,7 +14,11 @@ singularity run ~/realrobotchallenge.sif python3 ~/rrc_package/scripts/plotting/
 """
 
 if __name__ == "__main__":
-    log_reader = tricamera.LogReader("camera_data.dat")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("logdir", type=str)
+    args = parser.parse_args()
+
+    log_reader = tricamera.LogReader(osp.join(args.logdir, "camera_data.dat"))
     goal_pose_json = "goal.json"
     with open(goal_pose_json) as f:
         goal = json.load(f)['goal']
@@ -35,4 +41,5 @@ if __name__ == "__main__":
 
     plt.legend()
     plt.title("Observed object position")
-    plt.savefig("obj_pos.png")
+    # plt.savefig("obj_pos.png")
+    plt.show()

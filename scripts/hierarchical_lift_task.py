@@ -35,7 +35,7 @@ def main():
     goal_pose_json = sys.argv[2]
     if os.path.exists(goal_pose_json):
         with open(goal_pose_json) as f:
-            goal = json.load(f)['_goal']
+            goal = json.load(f)['goal']
     else:
         goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)

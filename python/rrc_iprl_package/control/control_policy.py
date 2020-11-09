@@ -61,7 +61,6 @@ class ImpedanceControllerPolicy:
         self.grasped = False
         self.traj_to_object_computed = False
 
-
     def reset_policy(self, platform=None):
         self.step_count = 0
         if platform:
@@ -91,7 +90,6 @@ class ImpedanceControllerPolicy:
         nGrid = 50
         dt = 0.04
         self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
-
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.done_with_primitive = False
@@ -298,6 +296,7 @@ class ImpedanceControllerPolicy:
     def get_fingertip_pos_wf(self, current_q):
         fingertip_pos_wf = self.custom_pinocchio_utils.forward_kinematics(current_q)
         return fingertip_pos_wf
+
 
 class HierarchicalControllerPolicy:
     DIST_THRESH = 0.09
