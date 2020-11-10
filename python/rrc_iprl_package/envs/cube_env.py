@@ -251,7 +251,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
-        # sys.stdout.write("IN RESET \n")
+        print("Resetting")
         if robot_fingers is not None:
             self._reset_platform_frontend()
         else:
@@ -288,6 +288,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def _reset_platform_frontend(self):
         """Reset the platform frontend."""
         # reset is not really possible
+        print("Hardware Restting")
         if self.platform is None:
             self.platform = robot_fingers.TriFingerPlatformFrontend()
             self.num_reset = 0  
@@ -299,6 +300,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         With this the env can be used without backend.
         """
+        print("Simulation Restting")
         # initialize number of resets here too so overall reset() function works
         self.num_reset = 0
         
