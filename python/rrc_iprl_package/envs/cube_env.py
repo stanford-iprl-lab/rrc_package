@@ -278,6 +278,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self.reset_count = self.step_count
             # virtual reset is done only when all joints velocity are zero
             if any(vel != 0 for vel in observation["observation"]["velocity"]) is True:
+                print("Further resetting fingers")
                 observation, _, _, _ = self.step(self._initial_action)
             self.reset_time = time.time() - self.init_time
             self.step_count = 0         
@@ -290,9 +291,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # reset is not really possible
         print("Hardware Restting")
         if self.platform is None:
+            print("Hardware Restting Init")
             self.platform = robot_fingers.TriFingerPlatformFrontend()
             self.num_reset = 0  
         else:
+            print("Hardware Restting Further")
             self.num_reset += 1        
 
     def _reset_direct_simulation(self):
