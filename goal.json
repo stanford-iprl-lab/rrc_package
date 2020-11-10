@@ -1,6 +1,6 @@
 {
     "difficulty": 3,
-    "goal": {
+    "_goal": {
         "position": [-0.0088, -0.0769, 0.0538],
         "orientation": [0, 0, 0, 1]
     }
