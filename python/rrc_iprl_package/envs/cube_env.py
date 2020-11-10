@@ -263,9 +263,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.reset_count = 0    # the step count when reset starts
         self.reset_time = 0.0   # the time when reset finishes
 
-        with open('/home/junwuzhang/rrc_package/output/rl.csv', 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(["# of Resets", "Steps"])
+        # with open('/home/junwuzhang/rrc_package/output/rl.csv', 'w', newline='') as file:
+        #     writer = csv.writer(file)
+        #     writer.writerow(["# of Resets", "Steps"])
 
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
@@ -281,7 +281,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 observation, _, _, _ = self.step(self._initial_action)
             self.reset_time = time.time() - self.init_time
             self.step_count = 0         
-            writer.writerow([self.num_reset, self.step_count])
+            # writer.writerow([self.num_reset, self.step_count])
 
         return observation
 
