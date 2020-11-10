@@ -1,7 +1,9 @@
 """Gym environment for the Real Robot Challenge Phase 1 (Simulation)."""
+import csv
 import enum
 import gym
 import numpy as np
+import sys
 import time
 
 try:
@@ -203,6 +205,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
             - info (dict): info dictionary containing the difficulty level of
               the goal.
         """
+        # print("IN STEP!!!")
+        
         if self.platform is None:
             raise RuntimeError("Call `reset()` before starting to step.")
 
@@ -247,6 +251,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
+        # sys.stdout.write("IN RESET \n")
         if robot_fingers is not None:
             self._reset_platform_frontend()
         else:
@@ -258,18 +263,25 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.reset_count = 0    # the step count when reset starts
         self.reset_time = 0.0   # the time when reset finishes
 
+        with open('/home/junwuzhang/rrc_package/output/rl.csv', 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["# of Resets", "Steps"])
+
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
         if self.num_reset == 0:
             observation, _, _, _ = self.step(self._initial_action)
             self.init_time = time.time()
         else:
+            # sys.stdout.write("Further resetting \n")
+            print("Further resetting")
             self.reset_count = self.step_count
             # virtual reset is done only when all joints velocity are zero
             if any(vel != 0 for vel in observation["observation"]["velocity"]) is True:
                 observation, _, _, _ = self.step(self._initial_action)
             self.reset_time = time.time() - self.init_time
-            self.step_count = 0
+            self.step_count = 0         
+            writer.writerow([self.num_reset, self.step_count])
 
         return observation
 
