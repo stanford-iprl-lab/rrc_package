@@ -84,7 +84,7 @@ class ImpedanceControllerPolicy:
             csv_row += "desired_ft_pos_{},".format(i)
         for i in range(9):
             csv_row += "desired_ft_vel_{},".format(i)
-        print(csv_row)
+        # print(csv_row)
 
         # Define nlp for finger traj opt
         nGrid = 50
@@ -274,7 +274,7 @@ class ImpedanceControllerPolicy:
         for f_i in range(3):
             for d in range(3):
                 csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
-        print(csv_row)
+        # print(csv_row)
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(fingertip_pos_goal_list,

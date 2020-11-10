@@ -2,6 +2,7 @@
 import enum
 import gym
 import numpy as np
+import time
 
 try:
     import robot_interfaces
@@ -253,27 +254,42 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         self.step_count = 0
 
+        self.init_time = 0.0    # the time when episodes started to run
+        self.reset_count = 0    # the step count when reset starts
+        self.reset_time = 0.0   # the time when reset finishes
+
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
-        observation, _, _, _ = self.step(self._initial_action)
+        if self.num_reset == 0:
+            observation, _, _, _ = self.step(self._initial_action)
+            self.init_time = time.time()
+        else:
+            self.reset_count = self.step_count
+            # virtual reset is done only when all joints velocity are zero
+            if any(vel != 0 for vel in observation["observation"]["velocity"]) is True:
+                observation, _, _, _ = self.step(self._initial_action)
+            self.reset_time = time.time() - self.init_time
+            self.step_count = 0
 
         return observation
 
     def _reset_platform_frontend(self):
         """Reset the platform frontend."""
         # reset is not really possible
-        if self.platform is not None:
-            raise RuntimeError(
-                "Once started, this environment cannot be reset."
-            )
-
-        self.platform = robot_fingers.TriFingerPlatformFrontend()
+        if self.platform is None:
+            self.platform = robot_fingers.TriFingerPlatformFrontend()
+            self.num_reset = 0  
+        else:
+            self.num_reset += 1        
 
     def _reset_direct_simulation(self):
         """Reset direct simulation.
 
         With this the env can be used without backend.
         """
+        # initialize number of resets here too so overall reset() function works
+        self.num_reset = 0
+        
         # reset simulation
         del self.platform
 
