@@ -282,7 +282,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             print("Velocity 0: ", observation["observation"]["velocity"])
             # self.step_count_at_reset = self.step_count
             # virtual reset is done only when all joints velocity are zero
-            while any(vel == 0 for vel in observation["observation"]["velocity"]) is False:
+            while any(vel < 0.01 for vel in observation["observation"]["velocity"]) is False:
                 print("Keep resetting, velocity: ", observation["observation"]["velocity"])
                 observation, _, _, _ = self.step(self._initial_action)
             self.reset_time = time.time() - self.init_time
