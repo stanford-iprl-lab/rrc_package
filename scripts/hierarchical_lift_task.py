@@ -67,9 +67,13 @@ def main():
     old_mode = policy.mode
     steps_so_far = 0
 
+    with open(csv_filepath, mode="a") as file:
+        writer  = csv.writer(file, delimiter=",")
+        csv_header = ["Steps"]
+        writer.writerow(csv_header)
+
     while not is_done or steps_so_far != REAL_EPISODE_LENGTH:
         # if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
-        csv_header = ["Steps"]
         if not is_done:   
             action = policy.predict(observation)
             observation, reward, is_done, info = env.step(action)
@@ -84,12 +88,13 @@ def main():
         elif is_done is True and steps_so_far != REAL_EPISODE_LENGTH:
             observation = env.reset()
             is_done = False
+            csv_row = "{}".format("RESET")
             continue
         elif steps_so_far == REAL_EPISODE_LENGTH:
             break
         with open(csv_filepath, mode="a") as file:
             writer  = csv.writer(file, delimiter=",")
-            writer.writerow(csv_header)
+            csv_header = ["Steps"]
             writer.writerow(csv_row)
         # print("steps so far: ", steps_so_far)
 
