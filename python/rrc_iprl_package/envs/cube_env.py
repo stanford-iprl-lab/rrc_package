@@ -251,6 +251,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         is_done = self.step_count == self.episode_length
 
         self._last_obs = observation
+        self._last_reward = reward
 
         return observation, reward, is_done, self.info
 
@@ -273,23 +274,25 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
         if self.num_reset == 0:     # if this is the first (real) reset
-            observation, _, _, _ = self.step(self._initial_action)
+            observation, reward, _, _ = self.step(self._initial_action)
             self._last_obs = observation
+            self._last_reward = reward
             self.init_time = time.time()
-            csv_row = "{}, {}".format(self.init_time, self._last_obs[1])
+            csv_row = "{}, {}".format(self.init_time, self._last_reward)
         elif self.num_reset == self.max_resets:     # if all virtual resets are completed
             return self._last_obs
         else:
             print("Further resetting")
-            observation, _, _, _ = self.step(self._initial_action)  # try resetting fingers so we can check velocity
+            observation, reward, _, _ = self.step(self._initial_action)  # try resetting fingers so we can check velocity
             print("Velocity 0: ", observation["observation"]["velocity"])
             # virtual reset is done only when all joints velocity are zero
             while any(vel < 0.01 for vel in observation["observation"]["velocity"]) is False:
                 print("Keep resetting, velocity: ", observation["observation"]["velocity"])
-                observation, _, _, _ = self.step(self._initial_action)
+                observation, reward, _, _ = self.step(self._initial_action)
             self.reset_time = time.time() - self.init_time
             self._last_obs = observation   
-            csv_row = "{}, {}".format(self.reset_time, self._last_obs[1])
+            self._last_reward = reward
+            csv_row = "{}, {}".format(self.reset_time, self._last_reward)
 
         with open(self.csv_filepath, mode="a") as file:
             writer  = csv.writer(file, delimiter=",")
