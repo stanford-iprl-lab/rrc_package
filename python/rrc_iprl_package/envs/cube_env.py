@@ -76,6 +76,13 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         self.action_type = action_type
 
+        # CSV logging file path
+        self.csv_filepath = "/output/virtual_reset.csv"
+
+        with open(self.csv_filepath, mode="a") as file:
+            writer  = csv.writer(file, delimiter=",")
+            writer.writerow(["timestamp", "reward"])
+
         # TODO: The name "frameskip" makes sense for an atari environment but
         # not really for our scenario.  The name is also misleading as
         # "frameskip = 1" suggests that one frame is skipped while it actually
@@ -269,6 +276,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             observation, _, _, _ = self.step(self._initial_action)
             self._last_obs = observation
             self.init_time = time.time()
+            csv_row = "{}, {}".format(self.init_time, self._last_obs[1])
         elif self.num_reset == self.max_resets:     # if all virtual resets are completed
             return self._last_obs
         else:
@@ -280,7 +288,12 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 print("Keep resetting, velocity: ", observation["observation"]["velocity"])
                 observation, _, _, _ = self.step(self._initial_action)
             self.reset_time = time.time() - self.init_time
-            self._last_obs = observation         
+            self._last_obs = observation   
+            csv_row = "{}, {}".format(self.reset_time, self._last_obs[1])
+
+        with open(self.csv_filepath, mode="a") as file:
+            writer  = csv.writer(file, delimiter=",")
+            writer.writerow(csv_row)      
 
         return observation
 

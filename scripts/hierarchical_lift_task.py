@@ -25,6 +25,9 @@ class RandomPolicy:
     def __init__(self, action_space):
         self.action_space = action_space
 
+        # CSV logging file path
+        self.csv_filepath = "/output/hierarchical_lift_output.csv"
+
     def predict(self, observation):
         return self.action_space.sample()
 
@@ -65,6 +68,7 @@ def main():
 
     while not is_done or steps_so_far != REAL_EPISODE_LENGTH:
         # if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+        csv_header = ["Steps"]
         if not is_done:   
             action = policy.predict(observation)
             observation, reward, is_done, info = env.step(action)
@@ -75,12 +79,17 @@ def main():
             accumulated_reward += reward
             steps_so_far += 1
             print("steps so far: ", steps_so_far)
+            csv_row = "{}".format(steps_so_far)
         elif is_done is True and steps_so_far != REAL_EPISODE_LENGTH:
             observation = env.reset()
             is_done = False
             continue
         elif steps_so_far == REAL_EPISODE_LENGTH:
             break
+        with open(self.csv_filepath, mode="a") as file:
+            writer  = csv.writer(file, delimiter=",")
+            writer.writerow(csv_header)
+            writer.writerow(csv_row)
         # print("steps so far: ", steps_so_far)
 
     #print("------")
