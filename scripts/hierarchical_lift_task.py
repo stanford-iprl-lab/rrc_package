@@ -4,6 +4,7 @@
 This demo creates a RealRobotCubeEnv environment and runs one episode using a
 dummy policy which uses random actions.
 """
+import csv
 import json
 import sys
 import os
