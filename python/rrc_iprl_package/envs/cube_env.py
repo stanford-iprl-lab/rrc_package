@@ -258,8 +258,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         else:
             self._reset_direct_simulation()
 
+        self.step_count = 0
+
         self.init_time = 0.0            # the time when episodes started to run
-        self.step_count_at_reset = 0    # the step count when reset starts
+        # self.step_count_at_reset = 0    # the step count when reset starts
         self.reset_time = 0.0           # the time when reset finishes
 
         # with open('/home/junwuzhang/rrc_package/output/rl.csv', 'w', newline='') as file:
@@ -276,13 +278,13 @@ class RealRobotCubeEnv(gym.GoalEnv):
             return self._last_obs
         else:
             print("Further resetting")
-            self.step_count_at_reset = self.step_count
+            # self.step_count_at_reset = self.step_count
             # virtual reset is done only when all joints velocity are zero
             if any(vel == 0 for vel in observation["observation"]["velocity"]) is True:
                 print("Further resetting fingers")
                 observation, _, _, _ = self.step(self._initial_action)  # resetting finger locations
             self.reset_time = time.time() - self.init_time
-            self.step_count = 0
+            # self.step_count = 0
             self._last_obs = observation         
             # writer.writerow([self.num_reset, self.step_count])
 
