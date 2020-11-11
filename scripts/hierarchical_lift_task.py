@@ -15,7 +15,7 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 FRAMESKIP = 1
-REAL_EPISODE_LENGTH = 120 * 1000 // FRAMESKIP
+REAL_EPISODE_LENGTH = 60 * 1000 // FRAMESKIP
 MAX_STEPS = 15 * 1000 // FRAMESKIP
 # MAX_STEPS = None
 
@@ -71,9 +71,10 @@ def main():
             if old_mode != policy.mode:
                 #print('mode changed: {} to {}'.format(old_mode, policy.mode))
                 old_mode = policy.mode
-            print("reward:", reward)
+            # print("reward:", reward)
             accumulated_reward += reward
             steps_so_far += 1
+            print("steps so far: ", steps_so_far)
         elif is_done is True and steps_so_far != REAL_EPISODE_LENGTH:
             observation = env.reset()
             is_done = False
