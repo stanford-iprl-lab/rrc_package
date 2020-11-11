@@ -33,6 +33,9 @@ if __name__ == "__main__":
     plt.plot(np.ones(positions[:, 1].shape) * goal_y, "--", c="g", label="y position - actual")
     plt.plot(np.ones(positions[:, 1].shape) * goal_z, "--", c="b", label="z position - actual")
 
+    plt.xlabel("Time (0.1 sec)")
+    plt.ylabel("Position (m)")
+
     plt.legend()
     plt.title("Observed object position")
     plt.savefig("obj_pos.png")
