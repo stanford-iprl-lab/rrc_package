@@ -25,9 +25,6 @@ class RandomPolicy:
     def __init__(self, action_space):
         self.action_space = action_space
 
-        # CSV logging file path
-        self.csv_filepath = "/output/hierarchical_lift_output.csv"
-
     def predict(self, observation):
         return self.action_space.sample()
 
@@ -44,6 +41,9 @@ def main():
         goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)
     initial_pose.position = np.array([0,0,.0325])
+
+    # CSV logging file path
+    csv_filepath = "/output/hierarchical_lift_output.csv"
 
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose, difficulty,
@@ -86,7 +86,7 @@ def main():
             continue
         elif steps_so_far == REAL_EPISODE_LENGTH:
             break
-        with open(self.csv_filepath, mode="a") as file:
+        with open(csv_filepath, mode="a") as file:
             writer  = csv.writer(file, delimiter=",")
             writer.writerow(csv_header)
             writer.writerow(csv_row)
