@@ -54,7 +54,6 @@ class FixedContactPointOpt:
     options = {"ipopt.print_level":0,
                "ipopt.max_iter":10000,
                 "ipopt.tol": 1e-4,
-                "ipopt.print_level":0,
                 "print_time": 0
               }
     #options["print_time"] = 0;

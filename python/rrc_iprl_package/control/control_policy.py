@@ -50,8 +50,8 @@ class ImpedanceControllerPolicy:
         self.init_face = None
         self.goal_face = None
         self.platform = None
-        print("KP: {}".format(KP))
-        print("KV: {}".format(KV))
+        # print("KP: {}".format(KP))
+        # print("KV: {}".format(KV))
         self.start_time = None
 
         # Counters
@@ -84,7 +84,7 @@ class ImpedanceControllerPolicy:
             csv_row += "desired_ft_pos_{},".format(i)
         for i in range(9):
             csv_row += "desired_ft_vel_{},".format(i)
-        print(csv_row)
+        # print(csv_row)
 
         # Define nlp for finger traj opt
         nGrid = 50
@@ -130,8 +130,8 @@ class ImpedanceControllerPolicy:
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
 
-        print(x0)
-        print(x_goal)
+        # print(x0)
+        # print(x_goal)
         # Get initial fingertip positions in world frame
         current_position, _ = get_robot_position_velocity(observation)
         
@@ -208,8 +208,8 @@ class ImpedanceControllerPolicy:
 
         ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose)
 
-        print("FT_GOAL: {}".format(ft_goal))
-        print(ft_pos[-1,:])
+        # print("FT_GOAL: {}".format(ft_goal))
+        # print(ft_pos[-1,:])
     
         # Number of interpolation points
         interp_n = 32
@@ -274,7 +274,7 @@ class ImpedanceControllerPolicy:
         for f_i in range(3):
             for d in range(3):
                 csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
-        print(csv_row)
+        # print(csv_row)
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(fingertip_pos_goal_list,
@@ -565,7 +565,7 @@ def load_pytorch_policy(fpath, itr, deterministic=False):
     """ Load a pytorch policy saved with Spinning Up Logger."""
 
     fname = osp.join(fpath, 'pyt_save', 'model'+itr+'.pt')
-    print('\n\nLoading from %s.\n\n'%fname)
+    # print('\n\nLoading from %s.\n\n'%fname)
 
     model = torch.load(fname)
 

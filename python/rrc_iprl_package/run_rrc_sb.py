@@ -5,38 +5,68 @@ import os
 import os.path as osp
 import time
 import numpy as np
+import functools
 
-from rrc_iprl_package.envs import custom_env
+from rrc_iprl_package.envs import cube_env, custom_env, env_wrappers
 from spinup.utils import rrc_utils
 from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import HER, SAC
 from stable_baselines.common.atari_wrappers import FrameStack
 
 
-def make_reorient_env():
+def make_l2_goal_env():
     info_keys = ['is_success', 'is_success_ori_dist', 'dist', 'final_dist', 'final_score',
                  'final_ori_dist']
 
     wrappers = [gym.wrappers.ClipAction,
-                {'cls': custom_env.LogInfoWrapper,
-                 'kwargs': dict(info_keys=info_keys)},
-                {'cls': custom_env.CubeRewardWrapper,
-                 'kwargs': dict(pos_coef=1., ori_coef=1.,
+                functools.partial(env_wrappers.LogInfoWrapper,info_keys=info_keys),
+                functools.partial(env_wrappers.CubeRewardWrapper, pos_coef=1.,
+                                ori_coef=1.,
                                 ac_norm_pen=0.2, rew_fn='exp',
-                                goal_env=True)},
-                {'cls': custom_env.ReorientWrapper,
-                 'kwargs': dict(goal_env=True, dist_thresh=0.06)},
-                {'cls': gym.wrappers.TimeLimit,
-                 'kwargs': dict(max_episode_steps=rrc_utils.EPLEN)},
-                custom_env.FlattenGoalWrapper]
-    initializer = custom_env.ReorientInitializer(1, 0.1)
-    env_fn = rrc_utils.make_env_fn('real_robot_challenge_phase_1-v1', wrapper_params=wrappers,
-                                   action_type=rrc_utils.action_type,
+                                goal_env=True),
+                functools.partial(env_wrappers.ReorientWrapper, goal_env=True,
+                                dist_thresh=0.06),
+                functools.partial(custom_env.ResidualPolicyWrapper, goal_env=True),
+                functools.partial(gym.wrappers.TimeLimit, max_episode_steps=rrc_utils.EPLEN),
+                env_wrappers.FlattenGoalWrapper]
+    initializer = env_wrappers.ReorientInitializer(2, 0.1)
+    env_fn = rrc_utils.make_env_fn('real_robot_challenge_phase_2-v1', wrapper_params=wrappers,
+                                   action_type=cube_env.ActionType.TORQUE,
+                                   goal_difficulty=2,
                                    initializer=initializer,
                                    frameskip=rrc_utils.FRAMESKIP,
-                                   visualization=False)
+                                   )
     env = env_fn()
     return env
+
+
+info_keys = ['is_success', 'is_success_ori_dist', 'dist', 'final_dist', 'final_score',
+             'final_ori_dist']
+
+wrappers = [gym.wrappers.ClipAction,
+            functools.partial(env_wrappers.LogInfoWrapper,info_keys=info_keys),
+            functools.partial(env_wrappers.CubeRewardWrapper, pos_coef=1.,
+                            ori_coef=1.,
+                            ac_norm_pen=0.2, rew_fn='exp',
+                            goal_env=True),
+            functools.partial(env_wrappers.ReorientWrapper, goal_env=True,
+                              dist_thresh=0.06),
+            functools.partial(custom_env.ResidualPolicyWrapper, goal_env=False),
+            functools.partial(gym.wrappers.TimeLimit, max_episode_steps=rrc_utils.EPLEN),
+            ]
+initializer = env_wrappers.ReorientInitializer(3, 0.1)
+l3_env_fn = rrc_utils.make_env_fn('real_robot_challenge_phase_2-v1', wrapper_params=wrappers,
+                               action_type=cube_env.ActionType.TORQUE,
+                               goal_difficulty=3,
+                               initializer=initializer,
+                               frameskip=rrc_utils.FRAMESKIP,
+                               )
+ 
+
+def make_l3_env(**kwargs):
+    return l3_env_fn(**kwargs)
+
+
 
 
 def make_env():
@@ -44,21 +74,18 @@ def make_env():
                  'final_ori_dist', 'init_sample_radius']
 
     wrappers = [gym.wrappers.ClipAction,
-                {'cls': custom_env.LogInfoWrapper,
-                 'kwargs': dict(info_keys=info_keys)},
-                {'cls': gym.wrappers.TimeLimit,
-                 'kwargs': dict(max_episode_steps=rrc_utils.EPLEN)},
-                custom_env.FlattenGoalWrapper]
-    cube_wrapper = {'cls': custom_env.CubeRewardWrapper,
-                    'kwargs': dict(pos_coef=1., ori_coef=1.,
+                functools.partial(env_wrappers.LogInfoWrapper, info_keys=info_keys),
+                functools.partial(gym.wrappers.TimeLimit, max_episode_steps=rrc_utils.EPLEN),
+                env_wrappers.FlattenGoalWrapper]
+    cube_wrapper = functools.partial(env_wrappers.CubeRewardWrapper, pos_coef=1., ori_coef=1.,
                                 ac_norm_pen=0.2, rew_fn='exp',
-                                goal_env=True)}
-    initializer = custom_env.ReorientInitializer(1, 0.1)
-    env_fn = rrc_utils.make_env_fn('real_robot_challenge_phase_1-v4', wrapper_params=wrappers,
-                                   action_type=rrc_utils.action_type,
+                                goal_env=True)
+    initializer = env_wrappers.ReorientInitializer(1, 0.1)
+    env_fn = rrc_utils.make_env_fn('real_robot_challenge_phase_2-v2', wrapper_params=wrappers,
+                                   action_type=cube_env.ActionType.TORQUE,
                                    initializer=initializer,
                                    frameskip=rrc_utils.FRAMESKIP,
-                                   visualization=False)
+                                   )
     env = env_fn()
     return env
 

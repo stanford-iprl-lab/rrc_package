@@ -32,24 +32,18 @@ def main():
     # the difficulty level and the goal pose (as JSON string) are passed as
     # arguments
     difficulty = int(sys.argv[1])
-    goal_pose_json = sys.argv[2]
-    if os.path.exists(goal_pose_json):
-        with open(goal_pose_json) as f:
-            goal = json.load(f)['goal']
-    else:
-        goal = json.loads(goal_pose_json)
+    
     initial_pose = move_cube.sample_goal(-1)
-    initial_pose.position = np.array([0,0,.0325])
+    goal_pose = move_cube.sample_goal(difficulty)
+
+    # initial_pose.position = np.array([0,0,.0325])
 
     env = cube_env.RealRobotCubeEnv(
-        goal, initial_pose, difficulty,
+        goal_pose.to_dict(), initial_pose.to_dict(), difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
         num_steps=MAX_STEPS
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
-    initial_pose = move_cube.sample_goal(difficulty=-1)
-    initial_pose.position = np.array([0,0,.0325])
-    goal_pose = move_cube.Pose.from_dict(goal)
     policy = HierarchicalControllerPolicy(action_space=env.action_space,
                    initial_pose=initial_pose, goal_pose=goal_pose,
                    load_dir=rl_load_dir, difficulty=difficulty,

@@ -69,7 +69,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if not isinstance(cube_goal_pose, dict):
             self.goal = cube_goal_pose.as_dict()
         self.info = {"difficulty": goal_difficulty}
-        self.initial_pose = cube_initial_pose if cube_initial_pose else move_cube.sample_goal(-1)
+        self.initial_pose = move_cube.Pose.from_dict(cube_initial_pose) if cube_initial_pose else move_cube.sample_goal(-1)
 
         self.action_type = action_type
 
@@ -349,10 +349,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
 class CubeEnv(RealRobotCubeEnv):
     def __init__(
         self,
-        initializer ,
+        initializer,
         goal_difficulty: int,
         action_type: ActionType = ActionType.POSITION,
-        visualization: bool = True,
+        visualization: bool = False,
         frameskip: int = 1,
         num_steps: int = None,
     ):
@@ -371,12 +371,12 @@ class CubeEnv(RealRobotCubeEnv):
         self.initializer = initializer
         initial_pose = self.initializer.get_initial_state().to_dict()
         goal_pose = self.initializer.get_goal().to_dict()
-        super().__init__(goal_pose, initial_pose,goal_difficulty,
+        super().__init__(goal_pose, initial_pose, goal_difficulty,
         action_type, visualization, frameskip, num_steps)
 
     def reset(self): 
         self.initial_pose = self.initializer.get_initial_state()
-        self.goal = self.initializer.get_goal()
+        self.goal = self.initializer.get_goal().to_dict()
         return super(CubeEnv, self).reset()
 
 

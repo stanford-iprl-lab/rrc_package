@@ -22,6 +22,7 @@ from trifinger_simulation import TriFingerPlatform
 from trifinger_simulation import visual_objects
 from trifinger_simulation.tasks import move_cube
 from scipy.spatial.transform import Rotation
+from collections import deque
 
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
@@ -205,12 +206,13 @@ class CurriculumInitializer:
 @configurable(pickleable=True)
 class ReorientInitializer:
     """Initializer that samples random initial states and goals."""
-    goal_pose = move_cube.Pose(np.array([0,0,move_cube._CUBE_WIDTH/2]), np.array([0,0,0,1]))
+    def_goal_pose = move_cube.Pose(np.array([0,0,move_cube._CUBE_WIDTH/2]), np.array([0,0,0,1]))
 
     def __init__(self, difficulty=1, initial_dist=move_cube._CUBE_WIDTH):
         self.difficulty = difficulty
         self.initial_dist = initial_dist
         self.random = np.random.RandomState()
+        self.goal_pose = self.def_goal_pose
 
     def get_initial_state(self):
         """Get a random initial object pose (always on the ground)."""
@@ -224,6 +226,8 @@ class ReorientInitializer:
 
     def get_goal(self):
         """Get a random goal depending on the difficulty."""
+        if self.difficulty > 2:
+            self.goal_pose = move_cube.sample_goal(self.difficulty)
         return self.goal_pose
 
 
@@ -258,7 +262,7 @@ class RandomOrientationInitializer:
 
 
 @configurable(pickleable=True)
-class PushCubeEnv(gym.Env):
+class PushCubeEnv2(gym.Env):
     observation_names = [
             "robot_position",
             "robot_velocity",
@@ -509,7 +513,7 @@ class PushCubeEnv(gym.Env):
 
 
 @configurable(pickleable=True)
-class PushReorientCubeEnv(PushCubeEnv):
+class PushReorientCubeEnv(PushCubeEnv2):
     observation_names = [
             "robot_position",
             "robot_velocity",
@@ -817,25 +821,9 @@ class FlattenGoalWrapper(gym.ObservationWrapper):
     def _sample_goal(self):
         return np.concatenate(list(self.initializer.get_goal().to_dict().values()))
 
-    def reset(self, *args, reset_goal=True):
-        self.env._elapsed_steps = 0
-        obs = super(FlattenGoalWrapper, self).reset(*args)
-        if reset_goal and self._sample_goal_fun is not None:
-            self.goal = self.sample_goal_fun(obs_dict=obs)
-        goal_object_pose = move_cube.Pose.from_dict(self.unwrapped.goal)
-        if self.unwrapped.visualization:
-            self.unwrapped.goal_marker = visual_objects.CubeMarker(
-                width=0.065,
-                position=goal_object_pose.position,
-                orientation=goal_object_pose.orientation,
-                physicsClientId=self.platform.simfinger._pybullet_client_id,
-            )
-        obs = self.unwrapped._create_observation(0)
-        return self.observation(obs)
-
     def observation(self, observation):
         observation = {k: gym.spaces.flatten(self.env.observation_space[k], v)
-                for k, v in observation.items()}
+                       for k, v in observation.items()}
         return observation
 
 
@@ -937,6 +925,9 @@ class CubeRewardWrapper(gym.Wrapper):
         self._prev_obs = None
         self._augment_reward = augment_reward
         self.rew_fn = rew_fn
+        self.obj_pos = deque(maxlen=20)
+        self.obj_ori = deque(maxlen=20)
+
 
     @property
     def target_dist(self):
@@ -1013,6 +1004,9 @@ class CubeRewardWrapper(gym.Wrapper):
         else:
             obj_pos, obj_ori = achieved_goal[:3], achieved_goal[3:]
             goal_pos, goal_ori = desired_goal[:3], desired_goal[3:]
+        self.obj_pos.append(obj_pos)
+        self.obj_ori.append(obj_ori)
+        obj_pos, obj_ori = np.mean(self.obj_pos, axis=0), np.mean(self.obj_ori, axis=0)
         goal_pose = move_cube.Pose(position=goal_pos, orientation=goal_ori)
         object_pose = move_cube.Pose(position=obj_pos, orientation=obj_ori)
         return self._compute_reward(goal_pose, object_pose, info=info)

@@ -48,10 +48,10 @@ class StaticObjectOpt:
 
     # Formulate nlp
     problem = {"x":self.z, "f":self.cost, "g":self.g, "p":self.p}
-    options = {"ipopt.print_level":5,
+    options = {"ipopt.print_level":0,
                "ipopt.max_iter":10000,
                 "ipopt.tol": 1e-4,
-                "print_time": 1
+                "print_time": 0
               }
     #options["monitor"] = ["nlp_g"]
     #options = {"monitor":["nlp_f","nlp_g"]}
@@ -101,7 +101,7 @@ class StaticObjectOpt:
       for f_i in range(self.system.fnum):
         self.ft_pos_soln[t_i, f_i * qnum: f_i * qnum + qnum] = ft_pos_list[f_i].T
 
-    print("SLACK VARS: {}".format(self.a_soln))
+    # print("SLACK VARS: {}".format(self.a_soln))
 
     # Save solver time
     #statistics = self.solver.stats()

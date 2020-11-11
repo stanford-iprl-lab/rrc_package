@@ -5,6 +5,7 @@ import pybullet
 
 from gym import wrappers
 from gym import ObservationWrapper
+from gym.spaces import Dict
 from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy
 
 try:
@@ -493,7 +494,10 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller = None
         self.observation_names = PushCubeEnv.observation_names
         self.make_obs_space()
-        self.action_space = env.action_space.spaces['torque']
+        assert env.action_type in [ActionType.TORQUE,
+                                   ActionType.TORQUE_AND_POSITION]
+        if isinstance(env.action_space, gym.spaces.Dict):
+            self.action_space = env.action_space.spaces['torque']
         self._prev_action = np.zeros(9)
 
     def make_obs_space(self):
@@ -541,46 +545,52 @@ class ResidualPolicyWrapper(ObservationWrapper):
 
         rl_obs_space = gym.spaces.Dict(
                 {k: rl_obs_spaces[k] for k in self.observation_names})
-        self.observation_space = gym.spaces.Dict(
+        self.full_observation_space = gym.spaces.Dict(
                 {'impedance': imp_obs_space, 'rl': rl_obs_space})
+
+        if self.goal_env:
+            imp_obs_spaces = imp_obs_space.spaces
+            obs_space = Dict(action=imp_obs_spaces['action'],
+                             **imp_obs_spaces['observation'].spaces)
+            self.observation_space = Dict(observation=obs_space,
+                                          desired_goal=imp_obs_spaces['desired_goal'],
+                                          achieved_goal=imp_obs_spaces['achieved_goal'])
+        else:
+            self.observation_space = rl_obs_space
 
     def reset(self):
         obs = super(ResidualPolicyWrapper, self).reset()
-        self.init_impedance_controller(obs)
+        self.init_impedance_controller()
         obs = self.grasp_object(obs)
         return obs
 
     def step(self, action):
-        if self.step_count > 0:
-            action = self.action(action)
-        else:
-            if isinstance(action, dict):
-                self._prev_action = action['torque']
-            else:
-                self._prev_action = action
+        action = self.action(action)
         return super(ResidualPolicyWrapper, self).step(action)
 
     def process_observation_residual(self, observation):
         return observation
 
-    def init_impedance_controller(self, obs):
-        init_pose, goal_pose = self.process_obs_init_goal(obs['impedance'])
+    def init_impedance_controller(self):
+        init_pose, goal_pose = self.process_obs_init_goal(self._obs_dict['impedance'])
         self.impedance_controller = ImpedanceControllerPolicy(
                 self.action_space, init_pose, goal_pose)
         self.impedance_controller.reset_policy(self.platform)
 
     def grasp_object(self, obs):
         while not self.impedance_controller.grasped:
-            torque = self.impedance_controller.predict(obs['impedance'])
-            obs, _, _, _ = self.step(self.action(des_torque=torque))
-
+            obs, _, _, _ = self.step(np.zeros(9))
         return obs
 
     def observation(self, observation):
         obs_dict = {'impedance': observation}
         self._obs_dict = obs_dict.copy() 
-        obs_dict['rl'] = self.process_observation_rl(observation)
-        return obs_dict
+        obs_dict['rl'] = rl_obs = self.process_observation_rl(observation)
+        if self.goal_env:
+            observation['observation']['action'] = observation.pop('action')
+            return observation
+        else:
+            return rl_obs
 
     def process_observation_rl(self, observation):
         t = self.step_count
@@ -602,7 +612,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
             "goal_object_orientation": np.asarray(self.goal["orientation"]),
         }
         self._obs_dict['rl'] = observation
-        observation = np.concatenate([observation[k].flatten() for k in self.observation_names])
+        # observation = np.concatenate([observation[k].flatten() for k in self.observation_names])
         return observation
 
     def process_obs_init_goal(self, observation):
@@ -617,9 +627,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
         goal_pose = move_cube.Pose.from_dict(goal_pose)
         return init_pose, goal_pose
 
-    def action(self, res_torque=0, des_torque=None):
-        if des_torque is None:
-            des_torque = self.impedance_controller.predict(self._obs_dict['impedance'])
+    def action(self, res_torque=None):
+        des_torque = self.impedance_controller.predict(self._obs_dict['impedance'])
         self._prev_action = action = res_torque + des_torque
         if self.env.action_type == ActionType.TORQUE_AND_POSITION:
             return {'torque': action, 'position': np.zeros(9)} 
