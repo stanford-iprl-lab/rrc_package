@@ -83,9 +83,10 @@ def main():
             # print("reward:", reward)
             accumulated_reward += reward
             steps_so_far += 1
-            print("steps so far: ", steps_so_far)
+            print("in normal step, steps so far: ", steps_so_far)
             csv_row = "{}".format(steps_so_far)
         elif is_done is True and steps_so_far != REAL_EPISODE_LENGTH:
+            print("RESET in hierarchical_lift: ", steps_so_far)
             observation = env.reset()
             is_done = False
             csv_row = "{}".format("RESET")
