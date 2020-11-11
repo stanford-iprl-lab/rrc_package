@@ -71,7 +71,7 @@ def main():
             if old_mode != policy.mode:
                 #print('mode changed: {} to {}'.format(old_mode, policy.mode))
                 old_mode = policy.mode
-            #print("reward:", reward)
+            print("reward:", reward)
             accumulated_reward += reward
             steps_so_far += 1
         elif is_done is True and steps_so_far != REAL_EPISODE_LENGTH:
