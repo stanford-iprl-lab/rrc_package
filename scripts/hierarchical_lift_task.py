@@ -15,6 +15,7 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 FRAMESKIP = 1
+REAL_EPISODE_LENGTH = 120 * 1000 // FRAMESKIP
 MAX_STEPS = 15 * 1000 // FRAMESKIP
 # MAX_STEPS = None
 
@@ -61,16 +62,33 @@ def main():
     is_done = False
     old_mode = policy.mode
     steps_so_far = 0
-    while not is_done:
-        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
-        action = policy.predict(observation)
-        observation, reward, is_done, info = env.step(action)
-        if old_mode != policy.mode:
-            #print('mode changed: {} to {}'.format(old_mode, policy.mode))
-            old_mode = policy.mode
-        #print("reward:", reward)
-        accumulated_reward += reward
-        steps_so_far += 1
+
+    while not is_done or steps_so_far != REAL_EPISODE_LENGTH:
+        # if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+        if not is_done:   
+            action = policy.predict(observation)
+            observation, reward, is_done, info = env.step(action)
+            if old_mode != policy.mode:
+                #print('mode changed: {} to {}'.format(old_mode, policy.mode))
+                old_mode = policy.mode
+            #print("reward:", reward)
+            accumulated_reward += reward
+            steps_so_far += 1
+        elif is_done is True and steps_so_far != REAL_EPISODE_LENGTH:
+            observation = env.reset()
+            is_done = False
+
+            action = policy.predict(observation)
+            observation, reward, is_done, info = env.step(action)
+            if old_mode != policy.mode:
+                #print('mode changed: {} to {}'.format(old_mode, policy.mode))
+                old_mode = policy.mode
+            #print("reward:", reward)
+            accumulated_reward += reward
+            steps_so_far += 1
+        elif steps_so_far == REAL_EPISODE_LENGTH:
+            break
+        # print("steps so far: ", steps_so_far)
 
     #print("------")
     #print("Accumulated Reward: {:.3f}".format(accumulated_reward))

@@ -84,6 +84,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             raise ValueError("frameskip cannot be less than 1.")
         self.frameskip = frameskip
         self.episode_length = num_steps * frameskip if num_steps else move_cube.episode_length
+        self.max_resets = 120 * 1000 // self.episode_length     # number of virtual resets
 
         # will be initialized in reset()
         self.platform = None
@@ -204,9 +205,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
               step() calls will return undefined results.
             - info (dict): info dictionary containing the difficulty level of
               the goal.
-        """
-        # print("IN STEP!!!")
-        
+        """    
         if self.platform is None:
             raise RuntimeError("Call `reset()` before starting to step.")
 
@@ -244,6 +243,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         is_done = self.step_count == self.episode_length
 
+        self._last_obs = observation
+
         return observation, reward, is_done, self.info
 
     def reset(self):
@@ -257,11 +258,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
         else:
             self._reset_direct_simulation()
 
-        self.step_count = 0
-
-        self.init_time = 0.0    # the time when episodes started to run
-        self.reset_count = 0    # the step count when reset starts
-        self.reset_time = 0.0   # the time when reset finishes
+        self.init_time = 0.0            # the time when episodes started to run
+        self.step_count_at_reset = 0    # the step count when reset starts
+        self.reset_time = 0.0           # the time when reset finishes
 
         # with open('/home/junwuzhang/rrc_package/output/rl.csv', 'w', newline='') as file:
         #     writer = csv.writer(file)
@@ -269,19 +268,22 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
-        if self.num_reset == 0:
+        if self.num_reset == 0:     # if this is the first (real) reset
             observation, _, _, _ = self.step(self._initial_action)
+            self._last_obs = observation
             self.init_time = time.time()
+        elif self.num_reset == self.max_resets:     # if all virtual resets are completed
+            return self._last_obs
         else:
-            # sys.stdout.write("Further resetting \n")
             print("Further resetting")
-            self.reset_count = self.step_count
+            self.step_count_at_reset = self.step_count
             # virtual reset is done only when all joints velocity are zero
-            if any(vel != 0 for vel in observation["observation"]["velocity"]) is True:
+            if any(vel == 0 for vel in observation["observation"]["velocity"]) is True:
                 print("Further resetting fingers")
-                observation, _, _, _ = self.step(self._initial_action)
+                observation, _, _, _ = self.step(self._initial_action)  # resetting finger locations
             self.reset_time = time.time() - self.init_time
-            self.step_count = 0         
+            self.step_count = 0
+            self._last_obs = observation         
             # writer.writerow([self.num_reset, self.step_count])
 
         return observation
