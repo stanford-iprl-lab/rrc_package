@@ -77,15 +77,7 @@ def main():
         elif is_done is True and steps_so_far != REAL_EPISODE_LENGTH:
             observation = env.reset()
             is_done = False
-
-            action = policy.predict(observation)
-            observation, reward, is_done, info = env.step(action)
-            if old_mode != policy.mode:
-                #print('mode changed: {} to {}'.format(old_mode, policy.mode))
-                old_mode = policy.mode
-            #print("reward:", reward)
-            accumulated_reward += reward
-            steps_so_far += 1
+            continue
         elif steps_so_far == REAL_EPISODE_LENGTH:
             break
         # print("steps so far: ", steps_so_far)
