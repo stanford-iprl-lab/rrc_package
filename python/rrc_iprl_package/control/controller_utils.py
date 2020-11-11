@@ -302,7 +302,7 @@ dt: delta t
 def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, save_dir=None):
 
     cube_shape = (move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH)
-    cube_mass = 0.02 # TODO Hardcoded
+    cube_mass = 0.094 # TODO Hardcoded
 
     # Formulate and solve optimization problem
     opt_problem = FixedContactPointOpt(

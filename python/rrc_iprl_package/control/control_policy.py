@@ -10,6 +10,7 @@ import joblib
 import copy
 import time
 from scipy.interpolate import interp1d
+import csv
 
 from datetime import date
 from trifinger_simulation import TriFingerPlatform
@@ -62,6 +63,9 @@ class ImpedanceControllerPolicy:
         self.primitive_traj_computed = False
         self.traj_to_object_computed = False
 
+        # CSV logging file path
+        self.csv_filepath = "/output/control_policy_data.csv"
+
 
     def reset_policy(self, platform=None):
         self.step_count = 0
@@ -81,12 +85,19 @@ class ImpedanceControllerPolicy:
         self.l_wf_traj = None
 
         csv_row = "step,timestamp,"
+        csv_header = ["step", "timestamp"]
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for i in range(9):
             csv_row += "desired_ft_pos_{},".format(i)
+            csv_header.append("desired_ft_pos_{}".format(i))
         for i in range(9):
             csv_row += "desired_ft_vel_{},".format(i)
+            csv_header.append("desired_ft_vel_{}".format(i))
         print(csv_row)
+
+        with open(self.csv_filepath, mode="a") as fid:
+            writer  = csv.writer(fid, delimiter=",")
+            writer.writerow(csv_header)
 
         # Define nlp for finger traj opt
         nGrid = 50
@@ -208,7 +219,6 @@ class ImpedanceControllerPolicy:
     """
     def run_finger_traj_opt(self, observation, ft_goal):
         nGrid = self.finger_nlp.nGrid
-        dt = self.finger_nlp.nGrid
         self.traj_waypoint_counter = 0
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
@@ -328,14 +338,21 @@ class ImpedanceControllerPolicy:
 
         # Print fingertip goal position and velocities to stdout for logging
         csv_row = "{},{},".format(self.step_count,time.time())
+        row = [self.step_count, time.time()]
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for f_i in range(3):
             for d in range(3):
                 csv_row += "{},".format(fingertip_pos_goal_list[f_i][d])
+                row.append(fingertip_pos_goal_list[f_i][d])
         for f_i in range(3):
             for d in range(3):
                 csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
+                row.append(fingertip_vel_goal_list[f_i][d])
         print(csv_row)
+
+        with open(self.csv_filepath, mode="a") as fid:
+            writer  = csv.writer(fid, delimiter=",")
+            writer.writerow(row)
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(fingertip_pos_goal_list,
