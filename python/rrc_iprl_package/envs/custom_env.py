@@ -581,8 +581,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
                 self.action_space, init_pose, goal_pose)
         self.impedance_controller.set_init_goal(init_pose, goal_pose)
         mock_platform = trifinger_simulation.TriFingerPlatform(
-            visualization=visualization,
-            initial_object_pose=initial_object_pose,
+            visualization=False,
+            initial_object_pose=self.initial_pose,
         )
         self.impedance_controller.mock_pinocchio_utils(mock_platform)
         self.impedance_controller.reset_policy(self.platform)
