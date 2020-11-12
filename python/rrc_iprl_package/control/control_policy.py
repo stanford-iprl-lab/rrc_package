@@ -138,11 +138,14 @@ class ImpedanceControllerPolicy:
         obj_pose = get_pose_from_observation(observation)
             
         # Clip obj z coord to half width of cube
-        obj_pose.position[2] = max(obj_pose.position[2], move_cube._CUBE_WIDTH/2) 
-        x0 = np.concatenate([obj_pose.position, obj_pose.orientation])[None]
+        clipped_pos = obj_pose.position.copy()
+        clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBE_WIDTH/2) 
+        x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
 
+        print("Object pose position: {}".format(obj_pose.position))
+        print("Object pose orientation: {}".format(obj_pose.orientation))
         print("Traj lift x0: {}".format(repr(x0)))
         print("Traj lift x_goal: {}".format(repr(x_goal)))
         # Get initial fingertip positions in world frame
