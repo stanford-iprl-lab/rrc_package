@@ -63,8 +63,10 @@ class ImpedanceControllerPolicy:
         self.grasped = False
         self.traj_to_object_computed = False
 
-        # CSV logging file path
-        self.csv_filepath = "output/control_policy_data.csv"
+        # CSV logging file path # need leading / for singularity image
+        self.csv_filepath           = "/output/control_policy_data.csv"
+        self.grasp_trajopt_filepath = "/output/grasp_trajopt_data"
+        self.lift_trajopt_filepath  = "/output/lift_trajopt_data"
 
 
     def reset_policy(self, platform=None):
@@ -148,7 +150,7 @@ class ImpedanceControllerPolicy:
         
         self.x_soln, self.dx_soln, l_wf = c_utils.run_fixed_cp_traj_opt(
                 obj_pose, self.cp_params, current_position, self.custom_pinocchio_utils,
-                x0, x_goal, nGrid, dt)
+                x0, x_goal, nGrid, dt, npz_filepath = self.lift_trajopt_filepath)
 
         ft_pos = np.zeros((nGrid, 9))
         ft_vel = np.zeros((nGrid, 9))
@@ -219,7 +221,7 @@ class ImpedanceControllerPolicy:
         #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
         #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
-        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose)
+        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
 
         print("FT_GOAL: {}".format(ft_goal))
         print(ft_pos[-1,:])
