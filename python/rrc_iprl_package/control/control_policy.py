@@ -10,6 +10,7 @@ import joblib
 import copy
 import time
 from scipy.interpolate import interp1d
+import csv
 
 from datetime import date
 from trifinger_simulation import TriFingerPlatform
@@ -53,6 +54,7 @@ class ImpedanceControllerPolicy:
         # print("KP: {}".format(KP))
         # print("KV: {}".format(KV))
         self.start_time = None
+        self.WAIT_TIME = 2
 
         # Counters
         self.step_count = 0 # Number of times predict() is called
@@ -60,6 +62,10 @@ class ImpedanceControllerPolicy:
 
         self.grasped = False
         self.traj_to_object_computed = False
+
+        # CSV logging file path
+        self.csv_filepath = "/output/control_policy_data.csv"
+
 
     def reset_policy(self, platform=None):
         self.step_count = 0
@@ -78,16 +84,18 @@ class ImpedanceControllerPolicy:
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
 
-        csv_row = "step,timestamp,"
+        csv_header = ["step", "timestamp"]
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for i in range(9):
-            csv_row += "desired_ft_pos_{},".format(i)
+            csv_header.append("desired_ft_pos_{}".format(i))
         for i in range(9):
-            csv_row += "desired_ft_vel_{},".format(i)
-        # print(csv_row)
+            csv_header.append("desired_ft_vel_{}".format(i))
+        with open(self.csv_filepath, mode="a") as fid:
+            writer  = csv.writer(fid, delimiter=",")
+            writer.writerow(csv_header)
 
         # Define nlp for finger traj opt
-        nGrid = 50
+        nGrid = 40
         dt = 0.04
         self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
 
@@ -155,18 +163,21 @@ class ImpedanceControllerPolicy:
         # Number of interpolation points
         interp_n = 64
 
-        # Linearly interpolate between each waypoint (row)
+        # Linearly interpolate between each position waypoint (row) and force waypoint
         # Initial row indices
         row_ind_in = np.arange(nGrid)
         # Output row coordinates
         row_coord_out = np.linspace(0, nGrid - 1, interp_n * (nGrid-1) + nGrid)
         # scipy.interpolate.interp1d instance
         itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
-        itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
+        #itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
         itp_lwf = interp1d(row_ind_in, l_wf, axis=0)
         self.ft_pos_traj = itp_pos(row_coord_out)
-        self.ft_vel_traj = itp_vel(row_coord_out)
+        #self.ft_vel_traj = itp_vel(row_coord_out)
         self.l_wf_traj = itp_lwf(row_coord_out)
+
+        # Zero-order hold for velocity waypoints
+        self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
     """
     Run trajectory optimization to move fingers to contact points on object
@@ -190,7 +201,6 @@ class ImpedanceControllerPolicy:
     """
     def run_finger_traj_opt(self, observation, ft_goal):
         nGrid = self.finger_nlp.nGrid
-        dt = self.finger_nlp.nGrid
         self.traj_waypoint_counter = 0
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
@@ -212,7 +222,7 @@ class ImpedanceControllerPolicy:
         # print(ft_pos[-1,:])
     
         # Number of interpolation points
-        interp_n = 32
+        interp_n = 13
 
         # Linearly interpolate between each waypoint (row)
         # Initial row indices
@@ -221,10 +231,12 @@ class ImpedanceControllerPolicy:
         row_coord_out = np.linspace(0, nGrid - 1, interp_n * (nGrid-1) + nGrid)
         # scipy.interpolate.interp1d instance
         itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
-        itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
+        #itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
         self.ft_pos_traj = itp_pos(row_coord_out)
-        self.ft_vel_traj = itp_vel(row_coord_out)
+        #self.ft_vel_traj = itp_vel(row_coord_out)
         self.l_wf_traj = None
+        # Zero-order hold for velocity waypoints
+        self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
     def predict(self, full_observation):
         self.step_count += 1
@@ -237,7 +249,7 @@ class ImpedanceControllerPolicy:
         else:
             t = time.time() - self.start_time
 
-        if not self.traj_to_object_computed and t > 3:
+        if not self.traj_to_object_computed and t > self.WAIT_TIME:
             self.set_traj_to_object(full_observation)
             self.traj_to_object_computed = True
 
@@ -266,15 +278,17 @@ class ImpedanceControllerPolicy:
             self.tip_forces_wf = self.l_wf_traj[traj_waypoint_i, :]
 
         # Print fingertip goal position and velocities to stdout for logging
-        csv_row = "{},{},".format(self.step_count,time.time())
+        row = [self.step_count, time.time()]
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for f_i in range(3):
             for d in range(3):
-                csv_row += "{},".format(fingertip_pos_goal_list[f_i][d])
+                row.append(fingertip_pos_goal_list[f_i][d])
         for f_i in range(3):
             for d in range(3):
-                csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
-        # print(csv_row)
+                row.append(fingertip_vel_goal_list[f_i][d])
+        with open(self.csv_filepath, mode="a") as fid:
+            writer  = csv.writer(fid, delimiter=",")
+            writer.writerow(row)
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(fingertip_pos_goal_list,

@@ -36,16 +36,24 @@ def main():
     # the difficulty level and the goal pose (as JSON string) are passed as
     # arguments
     difficulty = int(sys.argv[1])
-    
     initial_pose = move_cube.sample_goal(-1)
-    goal_pose = move_cube.sample_goal(difficulty)
-
     # initial_pose.position = np.array([0,0,.0325])
+    goal_pose_json = sys.argv[2]
+    if os.path.exists(goal_pose_json):
+        with open(goal_pose_json) as f:
+            goal = json.load(f)['goal']
+    else:
+        goal = json.loads(goal_pose_json)
+    initial_pose = move_cube.sample_goal(-1)
+    initial_pose.position = np.array([-0.02,0.02,.0325])
+    #initial_pose.position = np.array([-0.08,-0.02,.0325])
+    theta = np.pi/6
+    initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
 
     env = cube_env.RealRobotCubeEnv(
-        goal_pose.to_dict(), initial_pose.to_dict(), difficulty,
+        goal, initial_pose.to_dict(), difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
-        num_steps=MAX_STEPS
+        num_steps=MAX_STEPS, visualization = True
     )
     rl_load_dir = './models/HER.zip'
     env = custom_env.ResidualPolicyWrapper(env, goal_env=True)

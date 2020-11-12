@@ -35,9 +35,12 @@ if __name__ == "__main__":
     goal_x = goal_pose.position[0]
     goal_y = goal_pose.position[1]
     goal_z = goal_pose.position[2]
-    plt.plot(np.ones(positions[:, 1].shape) * goal_x, "--", c="r", label="x position - actual")
-    plt.plot(np.ones(positions[:, 1].shape) * goal_y, "--", c="g", label="y position - actual")
-    plt.plot(np.ones(positions[:, 1].shape) * goal_z, "--", c="b", label="z position - actual")
+    plt.plot(np.ones(positions[:, 1].shape) * goal_x, "--", c="r", label="x position - desired")
+    plt.plot(np.ones(positions[:, 1].shape) * goal_y, "--", c="g", label="y position - desired")
+    plt.plot(np.ones(positions[:, 1].shape) * goal_z, "--", c="b", label="z position - desired")
+
+    plt.xlabel("Time (0.1 sec)")
+    plt.ylabel("Position (m)")
 
     plt.legend()
     plt.title("Observed object position")
