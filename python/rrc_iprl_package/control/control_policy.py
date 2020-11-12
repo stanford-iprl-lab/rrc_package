@@ -54,7 +54,7 @@ class ImpedanceControllerPolicy:
         print("KP: {}".format(KP))
         print("KV: {}".format(KV))
         self.start_time = None
-        self.WAIT_TIME = 2
+        self.WAIT_TIME = 1
 
         # Counters
         self.step_count = 0 # Number of times predict() is called
@@ -169,7 +169,7 @@ class ImpedanceControllerPolicy:
             ft_vel[t_i, :] = np.tile(self.dx_soln[t_i, 0:3],3)
 
         # Number of interpolation points
-        interp_n = 32
+        interp_n = 26
 
         # Linearly interpolate between each position waypoint (row) and force waypoint
         # Initial row indices
