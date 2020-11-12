@@ -83,17 +83,12 @@ class ImpedanceControllerPolicy:
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
 
-        csv_row = "step,timestamp,"
         csv_header = ["step", "timestamp"]
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for i in range(9):
-            csv_row += "desired_ft_pos_{},".format(i)
             csv_header.append("desired_ft_pos_{}".format(i))
         for i in range(9):
-            csv_row += "desired_ft_vel_{},".format(i)
             csv_header.append("desired_ft_vel_{}".format(i))
-        print(csv_row)
-
         with open(self.csv_filepath, mode="a") as fid:
             writer  = csv.writer(fid, delimiter=",")
             writer.writerow(csv_header)
@@ -278,19 +273,14 @@ class ImpedanceControllerPolicy:
             self.tip_forces_wf = self.l_wf_traj[traj_waypoint_i, :]
 
         # Print fingertip goal position and velocities to stdout for logging
-        csv_row = "{},{},".format(self.step_count,time.time())
         row = [self.step_count, time.time()]
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for f_i in range(3):
             for d in range(3):
-                csv_row += "{},".format(fingertip_pos_goal_list[f_i][d])
                 row.append(fingertip_pos_goal_list[f_i][d])
         for f_i in range(3):
             for d in range(3):
-                csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
                 row.append(fingertip_vel_goal_list[f_i][d])
-        print(csv_row)
-
         with open(self.csv_filepath, mode="a") as fid:
             writer  = csv.writer(fid, delimiter=",")
             writer.writerow(row)
