@@ -61,6 +61,7 @@ def main():
                    start_mode=start_mode)
     env = custom_env.HierarchicalPolicyWrapper(env, policy)
     observation = env.reset()
+    print("init current observation is: ", observation)
 
     accumulated_reward = 0
     is_done = False
@@ -73,9 +74,10 @@ def main():
         writer.writerow(csv_header)
 
     while not is_done or steps_so_far != REAL_EPISODE_LENGTH:
-        # if current episode is not done running, keep running it
-        if not is_done:   
+        # if current virtual episode is not done running, keep running it
+        if not is_done:
             action = policy.predict(observation)
+            print("in normal step, action is: ", action)
             observation, reward, is_done, info = env.step(action)
             if old_mode != policy.mode:
                 #print('mode changed: {} to {}'.format(old_mode, policy.mode))
@@ -85,22 +87,24 @@ def main():
             steps_so_far += 1
             print("in normal step, steps so far: ", steps_so_far)
             csv_row = "{}".format(steps_so_far)
+        # if current virtual episode is done, but hasn't reached the end of real episode,
+        # reset and run the next episode 
         elif is_done is True and steps_so_far != REAL_EPISODE_LENGTH:
             print("RESET in hierarchical_lift: ", steps_so_far)
             observation = env.reset()
             is_done = False
             csv_row = "{}".format("RESET")
-            # continue
+            continue
 
-            action = policy.predict(observation)
-            observation, reward, is_done, info = env.step(action)
-            if old_mode != policy.mode:
-                #print('mode changed: {} to {}'.format(old_mode, policy.mode))
-                old_mode = policy.mode
-            # print("reward:", reward)
-            accumulated_reward += reward
-            steps_so_far += 1
-            
+            # action = policy.predict(observation)
+            # observation, reward, is_done, info = env.step(action)
+            # if old_mode != policy.mode:
+            #     #print('mode changed: {} to {}'.format(old_mode, policy.mode))
+            #     old_mode = policy.mode
+            # # print("reward:", reward)
+            # accumulated_reward += reward
+            # steps_so_far += 1
+
         elif steps_so_far == REAL_EPISODE_LENGTH:
             break
         with open(csv_filepath, mode="a") as file:
