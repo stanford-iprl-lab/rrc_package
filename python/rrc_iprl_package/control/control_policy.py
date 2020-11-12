@@ -230,7 +230,7 @@ class ImpedanceControllerPolicy:
         print(ft_pos[-1,:])
     
         # Number of interpolation points
-        interp_n = 13
+        interp_n = 26
 
         # Linearly interpolate between each waypoint (row)
         # Initial row indices
