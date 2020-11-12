@@ -34,7 +34,7 @@ class PushCubeEnv(gym.Env):
             "robot_tip_positions",
             "object_position",
             "object_orientation",
-            "goal_object_position", 
+            "goal_object_position",
             "action"]
 
     def __init__(
@@ -144,8 +144,8 @@ class PushCubeEnv(gym.Env):
                     [object_state_space.spaces['position'] for _ in range(3)]),
                 "robot_tip_forces": gym.spaces.Box(low=np.zeros(3), high=np.ones(3)),
                 "action": self.action_space,
-                "goal_position": object_state_space.spaces['position'],
-                "goal_orientation": object_state_space.spaces['orientation'],
+                "goal_object_position": object_state_space.spaces['position'],
+                "goal_object_orientation": object_state_space.spaces['orientation'],
                 "object_position": object_state_space.spaces['position'],
                 "object_orientation": object_state_space.spaces['orientation'],
             }
@@ -621,8 +621,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
         else:
             init_pose = {'position': self._obs_dict['rl']['object_position'],
                          'orientation': self._obs_dict['rl']['object_orientation']}
-            goal_pose = {'position': self._obs_dict['rl']['goal_position'],
-                         'orientation': self._obs_dict['rl']['goal_orientation']}
+            goal_pose = {'position': self._obs_dict['rl']['goal_object_position'],
+                         'orientation': self._obs_dict['rl']['goal_object_orientation']}
         init_pose = move_cube.Pose.from_dict(init_pose) 
         goal_pose = move_cube.Pose.from_dict(goal_pose)
         return init_pose, goal_pose
