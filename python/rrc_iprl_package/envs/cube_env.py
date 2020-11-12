@@ -328,8 +328,6 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "orientation": camera_observation.object_pose.orientation,
             },
         }
-        observation['achieved_goal']['position'][2] = (
-                max(observation['achieved_goal']['position'][2], 0.0325))
         return observation
 
     def _gym_action_to_robot_action(self, gym_action):
