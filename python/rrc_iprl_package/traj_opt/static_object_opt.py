@@ -51,7 +51,7 @@ class StaticObjectOpt:
     options = {"ipopt.print_level":0,
                "ipopt.max_iter":10000,
                 "ipopt.tol": 1e-4,
-                "print_time": 0
+                "print_time": 1
               }
     #options["monitor"] = ["nlp_g"]
     #options = {"monitor":["nlp_f","nlp_g"]}
