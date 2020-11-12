@@ -115,7 +115,7 @@ class StaticObjectOpt:
                  nGrid  = self.system.nGrid,
                  q0     = q0,
                  ft_goal = ft_goal,
-                 obj_pose = obj_pose_val
+                 obj_pose = obj_pose_val,
                  t      = self.t_soln,
                  q      = self.q_soln,
                  dq     = self.dq_soln,
