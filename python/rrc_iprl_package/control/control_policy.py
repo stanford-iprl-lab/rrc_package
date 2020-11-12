@@ -63,8 +63,12 @@ class ImpedanceControllerPolicy:
         self.grasped = False
         self.traj_to_object_computed = False
 
-        # CSV logging file path
-        self.csv_filepath = "/output/control_policy_data.csv"
+        # CSV logging file path 
+        if osp.exists('/output'):
+            self.csv_filepath = "/output/control_policy_data.csv"
+        else:
+            self.csv_filepath = "./control_policy_data.csv"
+
 
 
     def reset_policy(self, platform=None):

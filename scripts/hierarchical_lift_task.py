@@ -55,7 +55,10 @@ def main():
         cube_env.ActionType.TORQUE, frameskip=FRAMESKIP,
         num_steps=MAX_STEPS, visualization = True
     )
-    rl_load_dir = './models/HER.zip'
+    if os.path.exists('/ws/src/usercode'):
+        rl_load_dir = '/ws/src/usercode/models/HER.zip'
+    else:
+        rl_load_dir = './models/HER.zip'
     env = custom_env.ResidualPolicyWrapper(env, goal_env=True)
     env = TimeLimit(env, max_episode_steps=EP_LEN)
     env = env_wrappers.FlattenGoalWrapper(env)
