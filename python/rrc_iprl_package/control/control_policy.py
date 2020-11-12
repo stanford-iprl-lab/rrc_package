@@ -64,7 +64,7 @@ class ImpedanceControllerPolicy:
         self.traj_to_object_computed = False
 
         # CSV logging file path
-        self.csv_filepath = "/output/control_policy_data.csv"
+        self.csv_filepath = "output/control_policy_data.csv"
 
 
     def reset_policy(self, platform=None):
@@ -135,12 +135,14 @@ class ImpedanceControllerPolicy:
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
             
+        # Clip obj z coord to half width of cube
+        obj_pose.position[2] = max(obj_pose.position[2], move_cube._CUBE_WIDTH/2) 
         x0 = np.concatenate([obj_pose.position, obj_pose.orientation])[None]
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
 
-        print(x0)
-        print(x_goal)
+        print("Traj lift x0: {}".format(repr(x0)))
+        print("Traj lift x_goal: {}".format(repr(x_goal)))
         # Get initial fingertip positions in world frame
         current_position, _ = get_robot_position_velocity(observation)
         
