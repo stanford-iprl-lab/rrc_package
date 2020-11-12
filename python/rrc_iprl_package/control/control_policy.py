@@ -63,7 +63,7 @@ class ImpedanceControllerPolicy:
         self.traj_to_object_computed = False
 
         # CSV logging file path
-        self.csv_filepath = "output/control_policy_data.csv"
+        self.csv_filepath = "/output/control_policy_data.csv"
 
 
     def reset_policy(self, platform=None):
