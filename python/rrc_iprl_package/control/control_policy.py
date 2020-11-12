@@ -62,9 +62,10 @@ class ImpedanceControllerPolicy:
 
         self.primitive_traj_computed = False
         self.traj_to_object_computed = False
+        self.release_traj_computed   = False
 
         # CSV logging file path
-        self.csv_filepath = "/output/control_policy_data.csv"
+        self.csv_filepath = "./output/control_policy_data.csv"
 
 
     def reset_policy(self, platform=None):
@@ -95,9 +96,13 @@ class ImpedanceControllerPolicy:
             writer.writerow(csv_header)
 
         # Define nlp for finger traj opt
-        nGrid = 50
+        nGrid = 25
         dt = 0.04
         self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
+
+        nGrid = 50
+        dt = 0.04
+        self.grasp_nlp = c_utils.define_static_object_opt(nGrid, dt)
 
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
@@ -206,14 +211,14 @@ class ImpedanceControllerPolicy:
                 cp_wf_list[i] = current_ft_pos[i]
 
         ft_goal = np.asarray(cp_wf_list).flatten()
-        self.run_finger_traj_opt(observation, ft_goal)
+        self.run_finger_traj_opt(self.grasp_nlp, observation, ft_goal)
 
     """
     Run trajectory optimization for fingers, given fingertip goal positions
     ft_goal: (9,) array of fingertip x,y,z goal positions in world frame
     """
-    def run_finger_traj_opt(self, observation, ft_goal):
-        nGrid = self.finger_nlp.nGrid
+    def run_finger_traj_opt(self, nlp, observation, ft_goal):
+        nGrid = nlp.nGrid
         self.traj_waypoint_counter = 0
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
@@ -229,7 +234,7 @@ class ImpedanceControllerPolicy:
         #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
         #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
-        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose)
+        ft_pos, ft_vel = c_utils.get_finger_waypoints(nlp, ft_goal, current_position, obj_pose)
 
         print("FT_GOAL: {}".format(ft_goal))
         print(ft_pos[-1,:])
@@ -267,27 +272,6 @@ class ImpedanceControllerPolicy:
             self.set_traj_to_object(full_observation)
             self.traj_to_object_computed = True
 
-        flip_vel = 1e-4
-        if self.primitive_traj_computed:
-            # If at end of trajectory, lift or flip object
-            if self.flipping:
-                # Get next flipping waypoint
-                flipping_ft_pos_list, flip_done = c_utils.get_flipping_waypoint(
-                                                                           self.flip_start_pose,
-                                                                           self.init_face,
-                                                                           self.goal_face,
-                                                                           current_ft_pos,
-                                                                           self.init_ft_pos_list,
-                                                                           self.cp_params,
-                                                                           self.flip_start_time
-                                                                           )
-                flipping_ft_pos = np.asarray(flipping_ft_pos_list).flatten()
-                self.ft_pos_traj = np.tile(flipping_ft_pos, (3, 1))
-                self.ft_vel_traj = np.ones((3,9)) * flip_vel
-                self.l_wf_traj = None
-                self.traj_waypoint_counter = 0
-        
-
         # HANDLE ANY TRAJECTORY RECOMPUTATION HERE
         if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0] and not self.primitive_traj_computed:
             # If at end of trajectory, lift or flip object
@@ -295,23 +279,32 @@ class ImpedanceControllerPolicy:
                 self.flip_start_time = time.time()
                 self.flip_start_pose = obj_pose
                 # Get next flipping waypoint
-                flipping_ft_pos_list, flip_done = c_utils.get_flipping_waypoint(obj_pose,
-                                                                           self.init_face,
-                                                                           self.goal_face,
-                                                                           current_ft_pos,
-                                                                           self.init_ft_pos_list,
-                                                                           self.cp_params,
-                                                                           self.flip_start_time
-                                                                           )
-                flipping_ft_pos = np.asarray(flipping_ft_pos_list).flatten()
-                self.ft_pos_traj = np.tile(flipping_ft_pos, (3, 1))
-                self.ft_vel_traj = np.ones((3,9)) * flip_vel
+                self.ft_pos_traj, self.ft_vel_traj = c_utils.get_flipping_waypoint(obj_pose,
+                                                              self.init_face,
+                                                              self.goal_face,
+                                                              current_ft_pos,
+                                                              self.init_ft_pos_list,
+                                                              self.cp_params,
+                                                              )
                 self.l_wf_traj = None
                 self.traj_waypoint_counter = 0
             else:
                 # Do fixed cp traj opt
                 self.set_traj_lift_object(full_observation, nGrid = 50, dt = 0.08)
             self.primitive_traj_computed = True
+
+        # If flipping, when done with ft_pos_traj, release object
+        if self.flipping and self.primitive_traj_computed and not self.release_traj_computed and \
+                self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
+            ft_goal = c_utils.get_flipping_release_ft_goal(obj_pose,
+                                                           current_ft_pos,
+                                                           self.cp_params)
+            self.run_finger_traj_opt(self.finger_nlp, full_observation, ft_goal)
+            self.release_traj_computed = True
+
+        if self.flipping and self.release_traj_computed and \
+                self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
+            self.done_with_primitive = True
 
         if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
             traj_waypoint_i = self.ft_pos_traj.shape[0] - 1
@@ -369,7 +362,7 @@ class HierarchicalControllerPolicy:
     DIST_THRESH = 0.09
     ORI_THRESH = np.pi / 6
 
-    RESET_TIME_LIMIT = 50
+    RESET_TIME_LIMIT = 20
     RL_RETRY_STEPS = 70
     MAX_RETRIES = 3
 
@@ -491,6 +484,7 @@ class HierarchicalControllerPolicy:
             if (self.impedance_controller.flipping and 
                 self.impedance_controller.done_with_primitive):
                 self.mode = PolicyMode.RESET
+                print("RESET")
                 return False
             return True
 

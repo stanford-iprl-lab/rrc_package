@@ -273,6 +273,16 @@ def get_wf_from_of(p, obj_pose):
     return rotation.apply(p) + translation
 
 """
+Rotate vector v from object frame to world frame, given object pose
+"""
+def rotate_wf_from_of(v, obj_pose):
+    cube_quat_wf = obj_pose.orientation
+
+    rotation = Rotation.from_quat(cube_quat_wf)
+    
+    return rotation.apply(v)
+
+"""
 Trasform point p from object frame to world frame, given object pose
 """
 def get_of_from_wf(p, obj_pose):
@@ -648,106 +658,83 @@ def get_flipping_waypoint(
                           fingertips_current_wf,
                           fingertips_init_wf,
                           cp_params,
-                          start_time,
+                          dt = 0.003,
+                          T  = 3, # total time for arc (seconds)
                          ):
 
-    print(obj_pose)
+    steps = int(T / dt)
     # Get goal face
     #goal_face = get_closest_ground_face(goal_pose)
     #print("Goal face: {}".format(goal_face))
     #print("ground face: {}".format(get_closest_ground_face(obj_pose)))
 
-    t = time.time() - start_time
     init_up_axis = OBJ_FACES_INFO[init_face]["up_axis"]
     goal_up_axis = OBJ_FACES_INFO[goal_face]["up_axis"]
     circle_y_dim = np.nonzero(init_up_axis)[0][0]
     circle_x_dim = np.nonzero(goal_up_axis)[0][0]
     circle_y_dir = np.sign(init_up_axis[circle_y_dim])
     circle_x_dir = np.sign(goal_up_axis[circle_x_dim])
-    print(circle_y_dim, circle_y_dir)
-    print(circle_x_dim, circle_x_dir)
-
     r = (0.65+1)*ACTUAL_CUBE_HALF_SIZE
-    print("R: {}".format(r))
-    #r = (0.65+1)*ACTUAL_CUBE_HALF_SIZE - ACTUAL_CUBE_HALF_SIZE
-    # Rotation circle radius
-    x = (r * np.cos(t/1000 + 0.4) - r/2) * circle_x_dir
-    y = (r * np.sin(t/1000 + 0.4) - r/2) * circle_y_dir
 
-    # Transform current fingertip positions to of
-    fingertips_new_wf = []
+    x_center = circle_x_dir * -1 * move_cube._CUBE_WIDTH / 2
+    y_center = circle_y_dir * -1 * move_cube._CUBE_WIDTH / 2
+
+    arc_theta = 100 * (np.pi/180)
+    ft_pos_traj = np.zeros((steps, 9))
+    ft_vel_traj = np.zeros((steps, 9))
+    for i in range(steps):
+        t = i * dt
+        a = -arc_theta / T
+        b = np.pi
+        x = r * np.cos(t * a+b) + x_center
+        y = r * np.sin(t * a+b) + y_center
+        dx = a * r * np.sin(t * a + b) + x_center
+        dy = -a * r * np.cos(t * a + b) + y_center
+
+        # Transform current fingertip positions to of
+        for f_i in range(3):
+            # Current ft pos in wf
+            f_wf = fingertips_current_wf[f_i]
+            if cp_params[f_i] is None:
+                f_new_wf = fingertips_init_wf[f_i]
+            else:
+                f_new_of = get_of_from_wf(f_wf, obj_pose)
+                f_new_of[circle_x_dim] = x
+                f_new_of[circle_y_dim] = y
+                # Convert back to wf
+                f_new_wf = get_wf_from_of(f_new_of, obj_pose)
+                
+                f_vel_of = np.zeros(3)
+                f_vel_of[circle_x_dim] = dx
+                f_vel_of[circle_y_dim] = dy
+                f_vel_wf = rotate_wf_from_of(f_vel_of, obj_pose)
+
+            ft_pos_traj[i,3*f_i:3*f_i+3] = f_new_wf
+            ft_vel_traj[i,3*f_i:3*f_i+3] = f_vel_wf
+
+    return ft_pos_traj, ft_vel_traj
+
+def get_flipping_release_ft_goal(obj_pose, fingertips_current_wf, cp_params):
+    ft_goal = np.zeros(9)
+    incr = 0.05
     for f_i in range(3):
-        print(f_i)
         f_wf = fingertips_current_wf[f_i]
         if cp_params[f_i] is None:
-            f_new_wf = fingertips_init_wf[f_i]
-        else:
-            # Get face that finger is on
-            f_new_of = get_of_from_wf(f_wf, obj_pose)
-            print(f_new_of)
-            f_new_of[circle_x_dim] = x
-            f_new_of[circle_y_dim] = y
-            print(f_new_of)
-            # Convert back to wf
-            f_new_wf = get_wf_from_of(f_new_of, obj_pose)
-        
-        fingertips_new_wf.append(f_new_wf)
-    print("flip: {}".format(fingertips_new_wf))
-
-    return fingertips_new_wf, False
-    #r =  
-
-    ground_face = get_closest_ground_face(obj_pose)
-    #if (get_closest_ground_face(obj_pose) == goal_face):
-    #  # Move fingers away from object
-    #  return fingertips_init_wf
-
-    # Transform current fingertip positions to of
-    fingertips_new_wf = []
-
-    incr = 0.0001
-    for f_i in range(3):
-        f_wf = fingertips_current_wf[f_i]
-        if cp_params[f_i] is None:
-            f_new_wf = fingertips_init_wf[f_i]
+            f_new_wf = fingertips_current_wf[f_i]
         else:
             # Get face that finger is on
             face = get_face_from_cp_param(cp_params[f_i])
             f_of = get_of_from_wf(f_wf, obj_pose)
 
-            if ground_face == goal_face:
-                # Release object
-                f_new_of = f_of - incr * OBJ_FACES_INFO[face]["up_axis"]
-                if obj_pose.position[2] <= 0.034: # TODO: HARDCODED
-                    flip_done = True
-                    #print("FLIP SUCCESSFUL!")
-                else:
-                    flip_done = False
-            elif ground_face != init_face:
-                # Ground face does not match goal force or init face, give up
-                f_new_of = f_of - incr * OBJ_FACES_INFO[face]["up_axis"]
-                if obj_pose.position[2] <= 0.034: # TODO: HARDCODED
-                    flip_done = True
-                else:
-                    flip_done = False
-            else:
-                # Increment up_axis of f_of
-                f_new_of = f_of + incr * OBJ_FACES_INFO[ground_face]["up_axis"]
-                flip_done = False
+            # Release object
+            f_new_of = f_of - incr * OBJ_FACES_INFO[face]["up_axis"]
 
             # Convert back to wf
             f_new_wf = get_wf_from_of(f_new_of, obj_pose)
-    
-        fingertips_new_wf.append(f_new_wf)
 
-    #print(fingertips_current_wf)
-    #print(fingertips_new_wf)
-    #fingertips_new_wf[2] = fingertips_init_wf[2]
-     
-    # TODO
-    # Need some velocity here? Just hard code for now?
-    # What to do when flip is done? Move fingers back to init position?
-    return fingertips_new_wf, flip_done
+        ft_goal[3*f_i:3*f_i+3] = f_new_wf
+
+    return ft_goal
 
 ##############################################################################
 # Private functions
