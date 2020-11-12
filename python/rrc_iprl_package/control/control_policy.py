@@ -63,7 +63,7 @@ class ImpedanceControllerPolicy:
         self.traj_to_object_computed = False
 
         # CSV logging file path
-        self.csv_filepath = "/output/control_policy_data.csv"
+        self.csv_filepath = "output/control_policy_data.csv"
 
 
     def reset_policy(self, platform=None):
@@ -94,7 +94,7 @@ class ImpedanceControllerPolicy:
             writer.writerow(csv_header)
 
         # Define nlp for finger traj opt
-        nGrid = 50
+        nGrid = 40
         dt = 0.04
         self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
 
@@ -161,20 +161,23 @@ class ImpedanceControllerPolicy:
             ft_vel[t_i, :] = np.tile(self.dx_soln[t_i, 0:3],3)
 
         # Number of interpolation points
-        interp_n = 64
+        interp_n = 4
 
-        # Linearly interpolate between each waypoint (row)
+        # Linearly interpolate between each position waypoint (row) and force waypoint
         # Initial row indices
         row_ind_in = np.arange(nGrid)
         # Output row coordinates
         row_coord_out = np.linspace(0, nGrid - 1, interp_n * (nGrid-1) + nGrid)
         # scipy.interpolate.interp1d instance
         itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
-        itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
+        #itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
         itp_lwf = interp1d(row_ind_in, l_wf, axis=0)
         self.ft_pos_traj = itp_pos(row_coord_out)
-        self.ft_vel_traj = itp_vel(row_coord_out)
+        #self.ft_vel_traj = itp_vel(row_coord_out)
         self.l_wf_traj = itp_lwf(row_coord_out)
+
+        # Zero-order hold for velocity waypoints
+        self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
     """
     Run trajectory optimization to move fingers to contact points on object
@@ -219,7 +222,7 @@ class ImpedanceControllerPolicy:
         print(ft_pos[-1,:])
     
         # Number of interpolation points
-        interp_n = 32
+        interp_n = 13
 
         # Linearly interpolate between each waypoint (row)
         # Initial row indices
@@ -228,10 +231,12 @@ class ImpedanceControllerPolicy:
         row_coord_out = np.linspace(0, nGrid - 1, interp_n * (nGrid-1) + nGrid)
         # scipy.interpolate.interp1d instance
         itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
-        itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
+        #itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
         self.ft_pos_traj = itp_pos(row_coord_out)
-        self.ft_vel_traj = itp_vel(row_coord_out)
+        #self.ft_vel_traj = itp_vel(row_coord_out)
         self.l_wf_traj = None
+        # Zero-order hold for velocity waypoints
+        self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
     def predict(self, full_observation):
         self.step_count += 1
@@ -281,7 +286,7 @@ class ImpedanceControllerPolicy:
         for f_i in range(3):
             for d in range(3):
                 row.append(fingertip_vel_goal_list[f_i][d])
-        with open(self.csv_filepath, mode="a") as fid:
+        with open(self.csv_filepath, mode="w") as fid:
             writer  = csv.writer(fid, delimiter=",")
             writer.writerow(row)
 
