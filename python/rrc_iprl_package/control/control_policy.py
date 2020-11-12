@@ -64,7 +64,7 @@ class ImpedanceControllerPolicy:
         self.traj_to_object_computed = False
 
         # CSV logging file path
-        self.csv_filepath = "./output/control_policy_data.csv"
+        self.csv_filepath = "/output/control_policy_data.csv"
 
 
     def reset_policy(self, platform=None):
@@ -162,7 +162,7 @@ class ImpedanceControllerPolicy:
             ft_vel[t_i, :] = np.tile(self.dx_soln[t_i, 0:3],3)
 
         # Number of interpolation points
-        interp_n = 4
+        interp_n = 32
 
         # Linearly interpolate between each position waypoint (row) and force waypoint
         # Initial row indices
@@ -287,7 +287,7 @@ class ImpedanceControllerPolicy:
         for f_i in range(3):
             for d in range(3):
                 row.append(fingertip_vel_goal_list[f_i][d])
-        with open(self.csv_filepath, mode="w") as fid:
+        with open(self.csv_filepath, mode="a") as fid:
             writer  = csv.writer(fid, delimiter=",")
             writer.writerow(row)
 
