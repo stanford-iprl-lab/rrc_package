@@ -550,6 +550,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
                 {k: rl_obs_spaces[k] for k in self.observation_names})
         self.full_observation_space = gym.spaces.Dict(
                 {'impedance': imp_obs_space, 'rl': rl_obs_space})
+        self.impedance_controller = None
 
         if self.goal_env:
             imp_obs_spaces = imp_obs_space.spaces
@@ -601,9 +602,17 @@ class ResidualPolicyWrapper(ObservationWrapper):
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
         object_observation = camera_observation.object_pose
-        robot_tip_positions = self.platform.forward_kinematics(
-            robot_observation.position)
-        robot_tip_positions = np.array(robot_tip_positions)
+        try:
+            robot_tip_positions = self.platform.forward_kinematics(
+                robot_observation.position)
+            robot_tip_positions = np.array(robot_tip_positions)
+        except:
+            if self.impedance_controller is not None:
+                robot_tip_positions = self.impedance_controller.custom_pinocchio_utils.forward_kinematics(robot_observation.position)
+            else:
+                robot_tip_positions = [0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7]
+            robot_tip_positions = np.array(robot_tip_positions)
+
         observation = {
             "robot_position": robot_observation.position,
             "robot_velocity": robot_observation.velocity,
