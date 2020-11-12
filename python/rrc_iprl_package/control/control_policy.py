@@ -364,7 +364,7 @@ class HierarchicalControllerPolicy:
         self.rl_frameskip = self.rl_env.unwrapped.frameskip
         self.observation_names = list(self.rl_env.unwrapped.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
-        self.sb_policy = sb_utils.make_her_sac_model(None, None)
+        self.sb_policy = sb_utils.make_model(None, None)
         self.sb_policy.load(load_dir)
         self.rl_policy = lambda obs: self.sb_policy.predict(obs)[0]
 
