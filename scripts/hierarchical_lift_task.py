@@ -52,7 +52,7 @@ def main():
 
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose.to_dict(), difficulty,
-        cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
+        cube_env.ActionType.TORQUE, frameskip=FRAMESKIP,
         num_steps=MAX_STEPS, visualization = True
     )
     rl_load_dir = './models/HER.zip'

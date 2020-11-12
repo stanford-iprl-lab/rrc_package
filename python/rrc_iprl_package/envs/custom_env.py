@@ -575,6 +575,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         init_pose, goal_pose = self.process_obs_init_goal(self._obs_dict['impedance'])
         self.impedance_controller = ImpedanceControllerPolicy(
                 self.action_space, init_pose, goal_pose)
+        self.impedance_controller.set_init_goal(init_pose, goal_pose)
         self.impedance_controller.reset_policy(self.platform)
 
     def grasp_object(self, obs):
@@ -629,8 +630,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
 
     def action(self, res_torque=None):
         des_torque = self.impedance_controller.predict(self._obs_dict['impedance'])
-        self._prev_action = action = res_torque + des_torque
+        self._prev_action = action = np.clip(res_torque + des_torque, self.action_space.low, self.action_space.high)
         if self.env.action_type == ActionType.TORQUE_AND_POSITION:
-            return {'torque': action, 'position': np.zeros(9)} 
+            return {'torque': action, 'position': np.repeat(np.nan, 9)} 
         return action
 
