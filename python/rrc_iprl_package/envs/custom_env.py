@@ -226,10 +226,13 @@ class PushCubeEnv(gym.Env):
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
         object_observation = camera_observation.object_pose
-        robot_tip_positions = self.platform.forward_kinematics(
-            robot_observation.position
-        )
-        robot_tip_positions = np.array(robot_tip_positions)
+        try:
+            robot_tip_positions = self.platform.forward_kinematics(
+                robot_observation.position
+            )
+            robot_tip_positions = np.array(robot_tip_positions)
+        except:
+            robot_tip_positions = np.zeros(9)
 
         self._obs_dict = observation = {
             "robot_position": robot_observation.position,
