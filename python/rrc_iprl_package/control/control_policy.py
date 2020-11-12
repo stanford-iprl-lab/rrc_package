@@ -54,6 +54,7 @@ class ImpedanceControllerPolicy:
         print("KP: {}".format(KP))
         print("KV: {}".format(KV))
         self.start_time = None
+        self.WAIT_TIME = 2
 
         # Counters
         self.step_count = 0 # Number of times predict() is called
@@ -249,7 +250,7 @@ class ImpedanceControllerPolicy:
         else:
             t = time.time() - self.start_time
 
-        if not self.traj_to_object_computed and t > 3:
+        if not self.traj_to_object_computed and t > self.WAIT_TIME:
             self.set_traj_to_object(full_observation)
             self.traj_to_object_computed = True
 
