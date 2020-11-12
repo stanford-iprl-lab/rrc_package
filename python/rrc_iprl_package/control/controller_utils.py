@@ -431,7 +431,7 @@ def define_static_object_opt(nGrid, dt):
 Solve traj opt to get finger waypoints
 """
 def get_finger_waypoints(nlp, ft_goal, q_cur, obj_pose, npz_filepath = None):
-    nlp.solve_nlp(ft_goal, q_cur, obj_pose = obj_pose, npz_filepath)
+    nlp.solve_nlp(ft_goal, q_cur, obj_pose = obj_pose, npz_filepath = npz_filepath)
     ft_pos = nlp.ft_pos_soln
     ft_vel = nlp.ft_vel_soln
     return ft_pos, ft_vel
