@@ -62,6 +62,7 @@ class ImpedanceControllerPolicy:
 
         self.grasped = False
         self.traj_to_object_computed = False
+        self.custom_pinocchio_utils = None
 
         # CSV logging file path 
         if osp.exists('/output'):
@@ -69,16 +70,20 @@ class ImpedanceControllerPolicy:
         else:
             self.csv_filepath = "./control_policy_data.csv"
 
-
+    def mock_pinocchio_utils(self, platform):
+        self.custom_pinocchio_utils = CustomPinocchioUtils(
+                    platform.simfinger.finger_urdf_path,
+                    platform.simfinger.tip_link_names)
 
     def reset_policy(self, platform=None):
         self.step_count = 0
         if platform:
             self.platform = platform
 
-        self.custom_pinocchio_utils = CustomPinocchioUtils(
-                self.platform.simfinger.finger_urdf_path,
-                self.platform.simfinger.tip_link_names)
+        if self.custom_pinocchio_utils is None:
+            self.custom_pinocchio_utils = CustomPinocchioUtils(
+                    self.platform.simfinger.finger_urdf_path,
+                    self.platform.simfinger.tip_link_names)
 
         init_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
         self.init_ft_pos = self.get_fingertip_pos_wf(init_position)
