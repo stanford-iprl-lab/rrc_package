@@ -7,8 +7,7 @@ import time
 import numpy as np
 import functools
 
-from rrc_iprl_package.envs import cube_env, custom_env, env_wrappers
-from spinup.utils import rrc_utils
+from rrc_iprl_package.envs import cube_env, custom_env, env_wrappers, rrc_utils
 from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import HER, SAC
 from stable_baselines.common.atari_wrappers import FrameStack

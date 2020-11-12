@@ -8,8 +8,9 @@ import json
 import sys
 import os
 import numpy as np
+from gym.wrappers import TimeLimit
 
-from rrc_iprl_package.envs import cube_env, custom_env
+from rrc_iprl_package.envs import cube_env, custom_env, env_wrappers
 from trifinger_simulation.tasks import move_cube 
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
@@ -17,8 +18,8 @@ from rrc_iprl_package.envs.custom_env import ResidualPolicyWrapper
 
 import rrc_iprl_package.run_rrc_sb as sb_utils
 
-FRAMESKIP = 10
-# MAX_STEPS = 120 * 1000 // FRAMESKIP
+FRAMESKIP = 1
+EP_LEN = 120 * 1000 // FRAMESKIP
 MAX_STEPS = None
 
 class RandomPolicy:
@@ -47,10 +48,13 @@ def main():
         num_steps=MAX_STEPS
     )
     rl_load_dir = './models/HER.zip'
-    policy = sb_utils.make_model(None, None)
-    policy.load(rl_load_dir)
     env = custom_env.ResidualPolicyWrapper(env, goal_env=True)
+    env = TimeLimit(env, max_episode_steps=EP_LEN)
+    env = env_wrappers.FlattenGoalWrapper(env)
+    policy = sb_utils.make_model(env, None)
+    policy.load(rl_load_dir)
     observation = env.reset()
+    print("Finished reset")
 
     accumulated_reward = 0
     is_done = False
