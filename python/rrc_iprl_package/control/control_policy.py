@@ -56,7 +56,7 @@ class ImpedanceControllerPolicy:
         self.start_time = None
         self.flip_start_time = None
         self.WAIT_TIME = 1
-
+        self.FLIP_RADIUS = 0.075
         # Counters
         self.step_count = 0 # Number of times predict() is called
         self.traj_waypoint_counter = 0
@@ -120,10 +120,6 @@ class ImpedanceControllerPolicy:
         self.release_traj_computed   = False
         self.goal_pose = goal_pose
         self.x0 = np.concatenate([initial_pose.position, initial_pose.orientation])[None]
-        if not flip:
-            self.flipping = False
-        else:
-            self.flipping = True
         init_goal_dist = np.linalg.norm(goal_pose.position - initial_pose.position)
         #print(f'init position: {initial_pose.position}, goal position: {goal_pose.position}, '
         #      f'dist: {init_goal_dist}')
@@ -207,12 +203,17 @@ class ImpedanceControllerPolicy:
     Run trajectory optimization to move fingers to contact points on object
     """
     def set_traj_to_object(self, observation):
-        self.traj_waypoint_counter = 0
-        # First, set cp_params based on mode
-        self.set_cp_params(observation)
-
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
+
+        self.traj_waypoint_counter = 0
+
+        if not flip_needed(obj_pose, self.goal_pose) or np.linalg.norm(obj_pose.position[0:2]) > self.FLIP_RADIUS:
+            self.flipping = False
+        else:
+            self.flipping = True
+        # First, set cp_params based on mode
+        self.set_cp_params(observation)
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
