@@ -693,6 +693,7 @@ def get_flipping_waypoint(
             f_wf = fingertips_current_wf[f_i]
             if cp_params[f_i] is None:
                 f_new_wf = fingertips_init_wf[f_i]
+                f_vel_wf = np.zeros(3)
             else:
                 f_new_of = get_of_from_wf(f_wf, obj_pose)
                 f_new_of[circle_x_dim] = x
