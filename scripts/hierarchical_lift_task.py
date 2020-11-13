@@ -49,7 +49,7 @@ def main():
     else:
         save_path = 'action_log.npz'
 
-    if difficulty == 2:
+    if difficulty == -2:
         env = cube_env.RealRobotCubeEnv(
             goal, initial_pose.to_dict(), difficulty,
             cube_env.ActionType.TORQUE, frameskip=FRAMESKIP,
@@ -82,7 +82,7 @@ def main():
     accumulated_reward = 0
     is_done = False
     steps_so_far = 0
-    if difficulty == 2:
+    if difficulty == -2:
         while not is_done:
             if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
             action, _ = policy.predict(observation)
