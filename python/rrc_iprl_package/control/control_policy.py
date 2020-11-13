@@ -515,7 +515,8 @@ class HierarchicalControllerPolicy:
         if self.mode == PolicyMode.TRAJ_OPT:
             init_pose = get_pose_from_observation(observation)
             goal_pose = get_pose_from_observation(observation, goal_pose=True)
-            if self.difficulty == 4:
+            dist_to_center = np.linalg.norm(init_pose.position[0:2])
+            if self.difficulty == 4 and dist_to_center < 0.075:
                 self.impedance_controller.set_init_goal(
                         init_pose, goal_pose, flip=flip_needed(init_pose, goal_pose))
             else:
