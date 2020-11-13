@@ -64,9 +64,14 @@ class ImpedanceControllerPolicy:
         self.traj_to_object_computed = False
 
         # CSV logging file path # need leading / for singularity image
-        self.csv_filepath           = "/output/control_policy_data.csv"
-        self.grasp_trajopt_filepath = "/output/grasp_trajopt_data"
-        self.lift_trajopt_filepath  = "/output/lift_trajopt_data"
+        if osp.exists("/output"):
+            self.csv_filepath           = "/output/control_policy_data.csv"
+            self.grasp_trajopt_filepath = "/output/grasp_trajopt_data"
+            self.lift_trajopt_filepath  = "/output/lift_trajopt_data"
+        else:
+            self.csv_filepath           = "./output/control_policy_data.csv"
+            self.grasp_trajopt_filepath = "./output/grasp_trajopt_data"
+            self.lift_trajopt_filepath  = "./output/lift_trajopt_data"
 
 
     def reset_policy(self, platform=None):
