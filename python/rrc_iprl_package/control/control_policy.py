@@ -29,9 +29,9 @@ except ImportError:
 
 
 # Parameters for tuning gains
-KP = [200, 200, 200,
-      200, 200, 200,
-      200, 200, 200]
+KP = [200, 200, 300,
+      200, 200, 300,
+      200, 200, 300]
 KV = [0.5, 0.5, 0.5, 
       0.5, 0.5, 0.5,
       0.5, 0.5, 0.5]
@@ -54,7 +54,7 @@ class ImpedanceControllerPolicy:
         # print("KP: {}".format(KP))
         # print("KV: {}".format(KV))
         self.start_time = None
-        self.WAIT_TIME = 2
+        self.WAIT_TIME = 1
 
         # Counters
         self.step_count = 0 # Number of times predict() is called
@@ -64,11 +64,15 @@ class ImpedanceControllerPolicy:
         self.traj_to_object_computed = False
         self.custom_pinocchio_utils = None
 
-        # CSV logging file path 
-        if osp.exists('/output'):
-            self.csv_filepath = "/output/control_policy_data.csv"
+        # CSV logging file path # need leading / for singularity image
+        if osp.exists("/output"):
+            self.csv_filepath           = "/output/control_policy_data.csv"
+            self.grasp_trajopt_filepath = "/output/grasp_trajopt_data"
+            self.lift_trajopt_filepath  = "/output/lift_trajopt_data"
         else:
-            self.csv_filepath = "./control_policy_data.csv"
+            self.csv_filepath           = "./output/control_policy_data.csv"
+            self.grasp_trajopt_filepath = "./output/grasp_trajopt_data"
+            self.lift_trajopt_filepath  = "./output/lift_trajopt_data"
 
     def mock_pinocchio_utils(self, platform):
         self.custom_pinocchio_utils = CustomPinocchioUtils(
@@ -143,18 +147,23 @@ class ImpedanceControllerPolicy:
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
             
-        x0 = np.concatenate([obj_pose.position, obj_pose.orientation])[None]
+        # Clip obj z coord to half width of cube
+        clipped_pos = obj_pose.position.copy()
+        clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBE_WIDTH/2) 
+        x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
 
-        # print(x0)
-        # print(x_goal)
+        print("Object pose position: {}".format(obj_pose.position))
+        print("Object pose orientation: {}".format(obj_pose.orientation))
+        print("Traj lift x0: {}".format(repr(x0)))
+        print("Traj lift x_goal: {}".format(repr(x_goal)))
         # Get initial fingertip positions in world frame
         current_position, _ = get_robot_position_velocity(observation)
         
         self.x_soln, self.dx_soln, l_wf = c_utils.run_fixed_cp_traj_opt(
                 obj_pose, self.cp_params, current_position, self.custom_pinocchio_utils,
-                x0, x_goal, nGrid, dt)
+                x0, x_goal, nGrid, dt, npz_filepath = self.lift_trajopt_filepath)
 
         ft_pos = np.zeros((nGrid, 9))
         ft_vel = np.zeros((nGrid, 9))
@@ -170,7 +179,7 @@ class ImpedanceControllerPolicy:
             ft_vel[t_i, :] = np.tile(self.dx_soln[t_i, 0:3],3)
 
         # Number of interpolation points
-        interp_n = 64
+        interp_n = 26
 
         # Linearly interpolate between each position waypoint (row) and force waypoint
         # Initial row indices
@@ -225,13 +234,13 @@ class ImpedanceControllerPolicy:
         #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
         #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
-        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose)
+        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
 
         # print("FT_GOAL: {}".format(ft_goal))
         # print(ft_pos[-1,:])
     
         # Number of interpolation points
-        interp_n = 13
+        interp_n = 26
 
         # Linearly interpolate between each waypoint (row)
         # Initial row indices
@@ -456,7 +465,7 @@ class HierarchicalControllerPolicy:
             goal_pose = get_pose_from_observation(observation, goal_pose=True)
             if self.difficulty == 4:
                 self.impedance_controller.set_init_goal(
-                        init_pose, goal_pose, flip=flip_needed(init_pose, goal_pose))
+                        init_pose, goal_pose, flip=False)
             else:
                 self.impedance_controller.set_init_goal(init_pose, goal_pose)
 

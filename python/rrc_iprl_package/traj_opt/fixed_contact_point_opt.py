@@ -6,13 +6,14 @@ from rrc_iprl_package.traj_opt.fixed_contact_point_system import FixedContactPoi
 class FixedContactPointOpt:
   
   def __init__(self,
-               nGrid     = 100,
-               dt        = 0.1,
-               cp_params = None,
-               x0        = np.array([[0,0,0.0325,0,0,0,1]]),
-               x_goal    = None,
-               obj_shape = None,
-               obj_mass  = None,
+               nGrid        = 100,
+               dt           = 0.1,
+               cp_params    = None,
+               x0           = np.array([[0,0,0.0325,0,0,0,1]]),
+               x_goal       = None,
+               obj_shape    = None,
+               obj_mass     = None,
+               npz_filepath = None,
                ):
 
     self.nGrid = nGrid
@@ -51,10 +52,10 @@ class FixedContactPointOpt:
 
     # Formulate nlp
     problem = {"x":self.z, "f":self.cost, "g":self.g}
-    options = {"ipopt.print_level":0,
+    options = {"ipopt.print_level":5,
                "ipopt.max_iter":10000,
                 "ipopt.tol": 1e-4,
-                "print_time": 0
+                "print_time": 1
               }
     #options["print_time"] = 0;
     #options = {"iteration_callback": MyCallback('callback',self.z.shape[0],self.g.shape[0],self.system)}
@@ -115,6 +116,21 @@ class FixedContactPointOpt:
     # Save solver time
     statistics = self.solver.stats()
     #self.total_time_sec = statistics["t_wall_total"]
+
+    # Save solution
+    if npz_filepath is not None:
+        np.savez(npz_filepath,
+                 dt     = self.system.dt,
+                 nGrid  = self.system.nGrid,
+                 x0     = x0,
+                 x_goal = x_goal,
+                 t      = self.t_soln,
+                 x      = self.x_soln,
+                 dx      = self.dx_soln,
+                 l_of      = self.l_soln,
+                 l_wf      = self.l_wf_soln,
+                 cp_params = cp_params,
+                )
 
   """
   Computes cost
@@ -206,12 +222,12 @@ class FixedContactPointOpt:
         ubg.append(0)
 
     # Linearized friction cone constraints
-    f_constraints = system.friction_cone_constraints(l)
-    for r in range(f_constraints.shape[0]):
-      for c in range(f_constraints.shape[1]):
-        g.append(f_constraints[r,c])
-        lbg.append(0)
-        ubg.append(np.inf)
+    # f_constraints = system.friction_cone_constraints(l)
+    # for r in range(f_constraints.shape[0]):
+    #   for c in range(f_constraints.shape[1]):
+    #     g.append(f_constraints[r,c])
+    #     lbg.append(0)
+    #     ubg.append(np.inf)
 
     #tol = 1e-16
     x_goal_constraints = system.x_goal_constraint(s, a, x_goal)

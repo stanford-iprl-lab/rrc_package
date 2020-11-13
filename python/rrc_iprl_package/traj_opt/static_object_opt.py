@@ -61,6 +61,7 @@ class StaticObjectOpt:
                ft_goal, 
                q0,
                obj_pose  = move_cube.Pose(),
+               npz_filepath = None
                ):
                 
     qnum = self.system.qnum
@@ -106,6 +107,20 @@ class StaticObjectOpt:
     # Save solver time
     #statistics = self.solver.stats()
     #self.total_time_sec = statistics["t_wall_total"]
+
+    # Save solution
+    if npz_filepath is not None:
+        np.savez(npz_filepath,
+                 dt     = self.system.dt,
+                 nGrid  = self.system.nGrid,
+                 q0     = q0,
+                 ft_goal = ft_goal,
+                 obj_pose = obj_pose_val,
+                 t      = self.t_soln,
+                 q      = self.q_soln,
+                 dq     = self.dq_soln,
+                 a      = self.a_soln,
+                )
 
   """
   Computes cost
