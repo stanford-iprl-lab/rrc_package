@@ -649,6 +649,6 @@ class ResidualPolicyWrapper(ObservationWrapper):
         des_torque = self.impedance_controller.predict(self._obs_dict['impedance'])
         self._prev_action = action = np.clip(res_torque + des_torque, self.action_space.low, self.action_space.high)
         if self.env.action_type == ActionType.TORQUE_AND_POSITION:
-            return {'torque': action, 'position': np.repeat(np.nan, 9)} 
+            return {'torque': action, 'position': np.repeat(np.nan, 9)}
         return action
 

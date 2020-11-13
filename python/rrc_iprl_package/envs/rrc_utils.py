@@ -19,7 +19,7 @@ registered_envs = [spec.id for spec in gym.envs.registry.all()]
 
 FRAMESKIP = 10
 EPLEN = 120 * 1000 // FRAMESKIP  # 15 seconds
-EPLEN_SHORT = 5 * 1000 // FRAMESKIP  # 5 seconds, 500 total timesteps
+EPLEN_SHORT = 15 * 1000 // FRAMESKIP  # 5 seconds, 500 total timesteps
 
 if phase == 1:
     if "real_robot_challenge_phase_1-v2" not in registered_envs:

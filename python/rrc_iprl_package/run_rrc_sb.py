@@ -26,7 +26,7 @@ def make_l2_goal_env():
                 functools.partial(env_wrappers.ReorientWrapper, goal_env=True,
                                 dist_thresh=0.06),
                 functools.partial(custom_env.ResidualPolicyWrapper, goal_env=True),
-                functools.partial(gym.wrappers.TimeLimit, max_episode_steps=rrc_utils.EPLEN),
+                functools.partial(gym.wrappers.TimeLimit, max_episode_steps=rrc_utils.EPLEN_SHORT),
                 env_wrappers.FlattenGoalWrapper]
     initializer = env_wrappers.ReorientInitializer(2, 0.1)
     env_fn = rrc_utils.make_env_fn('real_robot_challenge_phase_2-v1', wrapper_params=wrappers,
@@ -60,7 +60,7 @@ l3_env_fn = rrc_utils.make_env_fn('real_robot_challenge_phase_2-v1', wrapper_par
                                initializer=initializer,
                                frameskip=rrc_utils.FRAMESKIP,
                                )
- 
+
 
 def make_l3_env(**kwargs):
     return l3_env_fn(**kwargs)
@@ -92,7 +92,7 @@ def make_env():
 def make_exp_dir():
     exp_root = './data'
     hms_time = time.strftime("%Y-%m-%d_%H-%M-%S")
-    exp_name = 'HER-SAC_sparse_push'
+    exp_name = 'HER-SAC_d3'
     exp_dir = osp.join(exp_root, exp_name, hms_time)
     os.makedirs(exp_dir)
     return exp_dir
@@ -109,6 +109,15 @@ def make_model(env, exp_dir):
     return model
 
 
+def make_sac_model(env, exp_dir):
+    model = SAC('MlpPolicy', env,
+                tensorboard_log=exp_dir,
+                verbose=1, buffer_size=int(5e5),
+                gamma=0.95, batch_size=256,
+                policy_kwargs=dict(layers=[256, 256]))
+    return model
+
+
 def train_save_model(model, exp_dir, steps=1e6, reset_num_timesteps=False):
 # Train for 1e6 steps
     model.learn(int(steps), reset_num_timesteps=reset_num_timesteps)
@@ -118,7 +127,7 @@ def train_save_model(model, exp_dir, steps=1e6, reset_num_timesteps=False):
 
 
 def main():
-    env = make_reorient_env()
+    env = make_l3_env()
     exp_dir = make_exp_dir()
     model = make_model(env, exp_dir)
     train_save_model(model, exp_dir, 1e6)
