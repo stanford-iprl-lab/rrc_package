@@ -16,7 +16,7 @@ theta_1 = 310
 theta_2 = 200
 #theta_2 = 3.66519 # 210 degrees
 ACTUAL_CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2
-CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2 + 0.001
+CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2 + 0.0
 
 FINGER_BASE_POSITIONS = [
                        np.array([[np.cos(theta_0*(np.pi/180))*r, np.sin(theta_0*(np.pi/180))*r, 0]]),
