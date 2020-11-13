@@ -68,16 +68,19 @@ def main():
     is_done = False
     old_mode = policy.mode
     steps_so_far = 0
-    while not is_done:
-        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
-        action = policy.predict(observation)
-        observation, reward, is_done, info = env.step(action)
-        if old_mode != policy.mode:
-            #print('mode changed: {} to {}'.format(old_mode, policy.mode))
-            old_mode = policy.mode
-        #print("reward:", reward)
-        accumulated_reward += reward
-        steps_so_far += 1
+    try:
+        while not is_done:
+            if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+            action = policy.predict(observation)
+            observation, reward, is_done, info = env.step(action)
+            if old_mode != policy.mode:
+                #print('mode changed: {} to {}'.format(old_mode, policy.mode))
+                old_mode = policy.mode
+            #print("reward:", reward)
+            accumulated_reward += reward
+            steps_so_far += 1
+    except:
+        pass
 
     env.save_action_log()
 
