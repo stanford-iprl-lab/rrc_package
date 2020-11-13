@@ -5,3 +5,4 @@ python/rrc_iprl_package.egg-info/
 
 logs/
 **/data
+*.csv
