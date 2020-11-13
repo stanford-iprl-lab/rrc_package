@@ -160,15 +160,18 @@ def impedance_controller_single_finger(
     # Just take first 3 rows, which correspond to linear velocities of fingertip
     Ji = Ji[:3, :]
 
+    # Get g matrix for gravity compensation
+    _, g = custom_pinocchio_utils.get_lambda_and_g_matrix(finger_id, q_current, Ji)
+
     # Get current fingertip velocity
     dx_current = Ji @ np.expand_dims(np.array(dq_current), 1)
 
     delta_dx = np.expand_dims(np.array(tip_vel_desired),1) - np.array(dx_current)
 
     if tip_force_wf is not None:
-        torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx) + Ji.T @ tip_force_wf)
+        torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx) + Ji.T @ tip_force_wf) + g
     else:
-        torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx))
+        torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx)) + g
 
     #print("Finger {} delta".format(finger_id))
     #print(np.linalg.norm(delta_x))
@@ -309,7 +312,7 @@ x_goal: object goal position for traj opt
 nGrid: number of grid points
 dt: delta t
 """
-def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, save_dir=None):
+def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, npz_filepath = None):
 
     cube_shape = (move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH)
     cube_mass = 0.094 # TODO Hardcoded
@@ -323,6 +326,7 @@ def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchi
                                        x_goal    = x_goal,
                                        obj_shape = cube_shape,
                                        obj_mass  = cube_mass,
+                                       npz_filepath = npz_filepath
                                        )
     
     x_soln     = np.array(opt_problem.x_soln)
@@ -330,26 +334,6 @@ def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchi
     l_wf_soln  = np.array(opt_problem.l_wf_soln)
     cp_params  = np.array(cp_params)
 
-    # Save solution in npz file
-    if save_dir is not None:
-        save_string = "{}/trajectory".format(save_dir)
-        np.savez(save_string,
-                         dt                 = opt_problem.dt,
-                         x0                 = x0,
-                         x_goal         = x_goal,
-                         t                  = opt_problem.t_soln,
-                         x                  = opt_problem.x_soln,
-                         dx                 = opt_problem.dx_soln,
-                         l                  = opt_problem.l_soln,
-                         l_wf               = opt_problem.l_wf_soln,
-                         cp_params  = np.array(cp_params),
-                         obj_shape  = cube_shape,
-                         obj_mass       = cube_mass,
-                         fnum               = opt_problem.system.fnum, 
-                         qnum               = opt_problem.system.qnum, 
-                         x_dim          = opt_problem.system.x_dim, 
-                         dx_dim         = opt_problem.system.dx_dim, 
-                        )
     return x_soln, dx_soln, l_wf_soln
     
 
@@ -464,8 +448,8 @@ def define_static_object_opt(nGrid, dt):
 """
 Solve traj opt to get finger waypoints
 """
-def get_finger_waypoints(nlp, ft_goal, q_cur, obj_pose):
-    nlp.solve_nlp(ft_goal, q_cur, obj_pose = obj_pose)
+def get_finger_waypoints(nlp, ft_goal, q_cur, obj_pose, npz_filepath = None):
+    nlp.solve_nlp(ft_goal, q_cur, obj_pose = obj_pose, npz_filepath = npz_filepath)
     ft_pos = nlp.ft_pos_soln
     ft_vel = nlp.ft_vel_soln
     return ft_pos, ft_vel

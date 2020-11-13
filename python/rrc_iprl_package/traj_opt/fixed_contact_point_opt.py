@@ -6,13 +6,14 @@ from rrc_iprl_package.traj_opt.fixed_contact_point_system import FixedContactPoi
 class FixedContactPointOpt:
   
   def __init__(self,
-               nGrid     = 100,
-               dt        = 0.1,
-               cp_params = None,
-               x0        = np.array([[0,0,0.0325,0,0,0,1]]),
-               x_goal    = None,
-               obj_shape = None,
-               obj_mass  = None,
+               nGrid        = 100,
+               dt           = 0.1,
+               cp_params    = None,
+               x0           = np.array([[0,0,0.0325,0,0,0,1]]),
+               x_goal       = None,
+               obj_shape    = None,
+               obj_mass     = None,
+               npz_filepath = None,
                ):
 
     self.nGrid = nGrid
@@ -51,11 +52,10 @@ class FixedContactPointOpt:
 
     # Formulate nlp
     problem = {"x":self.z, "f":self.cost, "g":self.g}
-    options = {"ipopt.print_level":0,
+    options = {"ipopt.print_level":5,
                "ipopt.max_iter":10000,
                 "ipopt.tol": 1e-4,
-                "ipopt.print_level":0,
-                "print_time": 0
+                "print_time": 1
               }
     #options["print_time"] = 0;
     #options = {"iteration_callback": MyCallback('callback',self.z.shape[0],self.g.shape[0],self.system)}
@@ -116,6 +116,21 @@ class FixedContactPointOpt:
     # Save solver time
     statistics = self.solver.stats()
     #self.total_time_sec = statistics["t_wall_total"]
+
+    # Save solution
+    if npz_filepath is not None:
+        np.savez(npz_filepath,
+                 dt     = self.system.dt,
+                 nGrid  = self.system.nGrid,
+                 x0     = x0,
+                 x_goal = x_goal,
+                 t      = self.t_soln,
+                 x      = self.x_soln,
+                 dx      = self.dx_soln,
+                 l_of      = self.l_soln,
+                 l_wf      = self.l_wf_soln,
+                 cp_params = cp_params,
+                )
 
   """
   Computes cost

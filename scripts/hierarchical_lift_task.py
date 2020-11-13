@@ -7,6 +7,7 @@ dummy policy which uses random actions.
 import json
 import sys
 import os
+import os.path as osp
 import numpy as np
 
 from rrc_iprl_package.envs import cube_env, custom_env
@@ -39,19 +40,22 @@ def main():
     else:
         goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)
-    initial_pose.position = np.array([-0.02,0.02,.0325])
+    initial_pose.position = np.array([0,0,.0325])
+    #initial_pose.position = np.array([-0.02,0.02,.0325])
     #initial_pose.position = np.array([-0.08,-0.02,.0325])
-    theta = np.pi/6
-    initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
-
+    #theta = np.pi/6
+    #initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
+   
+    if osp.exists('/output'):
+        save_path = '/output/action_log.npz'
+    else:
+        save_path = 'action_log.npz'
     env = cube_env.RealRobotCubeEnv(
-        goal, initial_pose, difficulty,
+        goal, initial_pose.to_dict(), difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
-        num_steps=MAX_STEPS, visualization = True
+        num_steps=MAX_STEPS, visualization=False, save_npz=save_path
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
-    initial_pose = move_cube.sample_goal(difficulty=-1)
-    initial_pose.position = np.array([0,0,.0325])
     goal_pose = move_cube.Pose.from_dict(goal)
     policy = HierarchicalControllerPolicy(action_space=env.action_space,
                    initial_pose=initial_pose, goal_pose=goal_pose,
@@ -64,16 +68,21 @@ def main():
     is_done = False
     old_mode = policy.mode
     steps_so_far = 0
-    while not is_done:
-        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
-        action = policy.predict(observation)
-        observation, reward, is_done, info = env.step(action)
-        if old_mode != policy.mode:
-            #print('mode changed: {} to {}'.format(old_mode, policy.mode))
-            old_mode = policy.mode
-        #print("reward:", reward)
-        accumulated_reward += reward
-        steps_so_far += 1
+    try:
+        while not is_done:
+            if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+            action = policy.predict(observation)
+            observation, reward, is_done, info = env.step(action)
+            if old_mode != policy.mode:
+                #print('mode changed: {} to {}'.format(old_mode, policy.mode))
+                old_mode = policy.mode
+            #print("reward:", reward)
+            accumulated_reward += reward
+            steps_so_far += 1
+    except:
+        pass
+
+    env.save_action_log()
 
     #print("------")
     #print("Accumulated Reward: {:.3f}".format(accumulated_reward))
