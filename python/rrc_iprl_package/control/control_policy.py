@@ -300,14 +300,14 @@ class ImpedanceControllerPolicy:
                 self.flip_start_time = time.time()
                 self.flip_start_pose = obj_pose
                 # Get next flipping waypoint
-                self.ft_pos_traj, self.ft_vel_traj = c_utils.get_flipping_waypoint(obj_pose,
+                self.ft_pos_traj, self.ft_vel_traj, self.l_wf_traj = c_utils.get_flipping_waypoint(obj_pose,
                                                               self.init_face,
                                                               self.goal_face,
                                                               current_ft_pos,
                                                               self.init_ft_pos_list,
                                                               self.cp_params,
                                                               )
-                self.l_wf_traj = None
+                #self.l_wf_traj = None
                 self.traj_waypoint_counter = 0
             else:
                 # Do fixed cp traj opt

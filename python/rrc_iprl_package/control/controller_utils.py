@@ -673,6 +673,7 @@ def get_flipping_waypoint(
     arc_theta = 95 * (np.pi/180)
     ft_pos_traj = np.zeros((steps, 9))
     ft_vel_traj = np.zeros((steps, 9))
+    ft_l_traj = np.zeros((steps, 9))
     for i in range(steps):
         t = i * dt
         if circle_x_dir < 0:
@@ -694,6 +695,7 @@ def get_flipping_waypoint(
             if cp_params[f_i] is None:
                 f_new_wf = fingertips_init_wf[f_i]
                 f_vel_wf = np.zeros(3)
+                f_l_wf = np.zeros(3)
             else:
                 f_new_of = get_of_from_wf(f_wf, obj_pose)
                 f_new_of[circle_x_dim] = x
@@ -706,10 +708,18 @@ def get_flipping_waypoint(
                 f_vel_of[circle_y_dim] = dy
                 f_vel_wf = rotate_wf_from_of(f_vel_of, obj_pose)
 
+                face = get_face_from_cp_param(cp_params[f_i])
+                f_l_of = np.zeros(3)
+                f_l_of[np.nonzero(OBJ_FACES_INFO[face]["up_axis"])[0][0]] = 0.2
+                print(f_l_of)
+                f_l_wf = rotate_wf_from_of(f_l_of, obj_pose)
+                print(f_l_wf)
+
             ft_pos_traj[i,3*f_i:3*f_i+3] = f_new_wf
             ft_vel_traj[i,3*f_i:3*f_i+3] = f_vel_wf
+            ft_l_traj[i,3*f_i:3*f_i+3] = f_l_wf
 
-    return ft_pos_traj, ft_vel_traj
+    return ft_pos_traj, ft_vel_traj, ft_l_traj
 
 def get_flipping_release_ft_goal(obj_pose, fingertips_current_wf, cp_params):
     ft_goal = np.zeros(9)
