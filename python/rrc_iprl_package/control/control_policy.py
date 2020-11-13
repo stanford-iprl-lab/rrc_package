@@ -29,9 +29,9 @@ except ImportError:
 
 
 # Parameters for tuning gains
-KP = [200, 200, 300,
-      200, 200, 300,
-      200, 200, 300]
+KP = [200, 200, 400,
+      200, 200, 400,
+      200, 200, 400]
 KV = [0.5, 0.5, 0.5, 
       0.5, 0.5, 0.5,
       0.5, 0.5, 0.5]
@@ -253,7 +253,7 @@ class ImpedanceControllerPolicy:
         #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
         #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
-        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
+        ft_pos, ft_vel = c_utils.get_finger_waypoints(nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
 
         print("FT_GOAL: {}".format(ft_goal))
         print(ft_pos[-1,:])

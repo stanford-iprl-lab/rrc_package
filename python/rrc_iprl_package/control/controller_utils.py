@@ -643,7 +643,7 @@ def get_flipping_waypoint(
                           fingertips_init_wf,
                           cp_params,
                           dt = 0.003,
-                          T  = 3, # total time for arc (seconds)
+                          T  = 2, # total time for arc (seconds)
                          ):
 
     steps = int(T / dt)
@@ -660,22 +660,25 @@ def get_flipping_waypoint(
     circle_x_dir = np.sign(goal_up_axis[circle_x_dim])
     r = (0.65+1)*ACTUAL_CUBE_HALF_SIZE
 
-    x_center = circle_x_dir * -1 * move_cube._CUBE_WIDTH / 2
-    y_center = circle_y_dir * -1 * move_cube._CUBE_WIDTH / 2
-    print("CIRCLE CENTER:")
-    print(x_center, y_center)
+    #x_center = circle_x_dir * -1 * move_cube._CUBE_WIDTH / 2
+    #y_center = circle_y_dir * -1 * move_cube._CUBE_WIDTH / 2
+    x_center = circle_x_dir * 1 * r / 2
+    y_center = circle_y_dir * 1 * r / 2
 
-    arc_theta = 100 * (np.pi/180)
+    arc_theta = 75 * (np.pi/180)
     ft_pos_traj = np.zeros((steps, 9))
     ft_vel_traj = np.zeros((steps, 9))
     for i in range(steps):
+        #print(i)
         t = i * dt
         if circle_x_dir < 0:
-            b = np.pi
+            #b = np.pi
+            b = 3*np.pi/2
             a = -arc_theta / T
         else:
             b = 0
             a = arc_theta / T
+        #print("a")
         x = r * np.cos(t * a+b) + x_center
         y = r * np.sin(t * a+b) + y_center
         dx = a * r * np.sin(t * a + b) + x_center
@@ -706,7 +709,7 @@ def get_flipping_waypoint(
 
 def get_flipping_release_ft_goal(obj_pose, fingertips_current_wf, cp_params):
     ft_goal = np.zeros(9)
-    incr = 0.05
+    incr = 0.07
     for f_i in range(3):
         f_wf = fingertips_current_wf[f_i]
         if cp_params[f_i] is None:
