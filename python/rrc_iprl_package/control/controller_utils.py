@@ -711,10 +711,8 @@ def get_flipping_waypoint(
                 f_vel_wf = rotate_wf_from_of(f_vel_of, obj_pose)
 
                 f_l_of = np.zeros(3)
-                #f_l_of[np.nonzero(OBJ_FACES_INFO[face]["up_axis"])[0][0]] = 1
-                print(f_l_of)
+                f_l_of[np.nonzero(OBJ_FACES_INFO[face]["up_axis"])[0][0]] = 1
                 f_l_wf = rotate_wf_from_of(f_l_of, obj_pose)
-                print(f_l_wf)
 
             ft_pos_traj[i,3*f_i:3*f_i+3] = f_new_wf
             ft_vel_traj[i,3*f_i:3*f_i+3] = f_vel_wf
