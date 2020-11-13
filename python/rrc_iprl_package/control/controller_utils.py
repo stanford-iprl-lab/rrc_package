@@ -642,7 +642,7 @@ def get_flipping_waypoint(
                           fingertips_current_wf,
                           fingertips_init_wf,
                           cp_params,
-                          dt = 0.003,
+                          dt = 0.001,
                           T  = 4, # total time for arc (seconds)
                          ):
 
