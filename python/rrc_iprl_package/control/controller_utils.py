@@ -701,7 +701,7 @@ def get_flipping_waypoint(
                 f_new_of = get_of_from_wf(f_wf, obj_pose)
                 f_new_of[circle_x_dim] = x
                 f_new_of[circle_y_dim] = y
-                f_new_of[np.nonzero(OBJ_FACES_INFO[face]["up_axis"])[0][0]] += 0.003
+                f_new_of[np.nonzero(OBJ_FACES_INFO[face]["up_axis"])[0][0]] += 0.002
                 # Convert back to wf
                 f_new_wf = get_wf_from_of(f_new_of, obj_pose)
                 
@@ -711,7 +711,7 @@ def get_flipping_waypoint(
                 f_vel_wf = rotate_wf_from_of(f_vel_of, obj_pose)
 
                 f_l_of = np.zeros(3)
-                f_l_of[np.nonzero(OBJ_FACES_INFO[face]["up_axis"])[0][0]] = 3
+                f_l_of[np.nonzero(OBJ_FACES_INFO[face]["up_axis"])[0][0]] = 0.1
                 f_l_wf = rotate_wf_from_of(f_l_of, obj_pose)
 
             ft_pos_traj[i,3*f_i:3*f_i+3] = f_new_wf
