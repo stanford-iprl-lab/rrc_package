@@ -107,6 +107,9 @@ class ImpedanceControllerPolicy:
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.done_with_primitive = False
+        self.primitive_traj_computed = False
+        self.traj_to_object_computed = False
+        self.release_traj_computed   = False
         self.goal_pose = goal_pose
         self.x0 = np.concatenate([initial_pose.position, initial_pose.orientation])[None]
         if not flip:
@@ -483,9 +486,11 @@ class HierarchicalControllerPolicy:
         else:
             if (self.impedance_controller.flipping and 
                 self.impedance_controller.done_with_primitive):
-                self.mode = PolicyMode.RESET
-                print("RESET")
-                return False
+                self.mode = PolicyMode.TRAJ_OPT
+                print("FLIPPING DONE")
+                #import pdb
+                #pdb.set_trace()
+                #return False
             return True
 
     def set_waypoints(self, observation):
