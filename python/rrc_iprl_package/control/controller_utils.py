@@ -158,15 +158,18 @@ def impedance_controller_single_finger(
     # Just take first 3 rows, which correspond to linear velocities of fingertip
     Ji = Ji[:3, :]
 
+    # Get g matrix for gravity compensation
+    _, g = custom_pinocchio_utils.get_lambda_and_g_matrix(finger_id, q_current, Ji)
+
     # Get current fingertip velocity
     dx_current = Ji @ np.expand_dims(np.array(dq_current), 1)
 
     delta_dx = np.expand_dims(np.array(tip_vel_desired),1) - np.array(dx_current)
 
     if tip_force_wf is not None:
-        torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx) + Ji.T @ tip_force_wf)
+        torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx) + Ji.T @ tip_force_wf) + g
     else:
-        torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx))
+        torque = np.squeeze(Ji.T @ (Kp @ delta_x + Kv @ delta_dx)) + g
 
     #print("Finger {} delta".format(finger_id))
     #print(np.linalg.norm(delta_x))
