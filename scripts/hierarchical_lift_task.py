@@ -7,6 +7,7 @@ dummy policy which uses random actions.
 import json
 import sys
 import os
+import os.path as osp
 import numpy as np
 
 from rrc_iprl_package.envs import cube_env, custom_env
@@ -43,11 +44,15 @@ def main():
     #initial_pose.position = np.array([-0.08,-0.02,.0325])
     theta = np.pi/6
     initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
-
+   
+    if osp.exists('/output'):
+        save_path = '/output/action_log.npz'
+    else:
+        save_path = 'action_log.npz'
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose, difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
-        num_steps=MAX_STEPS, visualization = True
+        num_steps=MAX_STEPS, visualization=False, save_npz=save_path
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
     initial_pose = move_cube.sample_goal(difficulty=-1)
@@ -74,6 +79,8 @@ def main():
         #print("reward:", reward)
         accumulated_reward += reward
         steps_so_far += 1
+
+    env.save_action_log()
 
     #print("------")
     #print("Accumulated Reward: {:.3f}".format(accumulated_reward))
