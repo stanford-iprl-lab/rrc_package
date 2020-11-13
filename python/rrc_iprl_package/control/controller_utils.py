@@ -678,14 +678,20 @@ def get_flipping_waypoint(
 
     x_center = circle_x_dir * -1 * move_cube._CUBE_WIDTH / 2
     y_center = circle_y_dir * -1 * move_cube._CUBE_WIDTH / 2
+    print("CIRCLE CENTER:")
+    print(x_center, y_center)
 
     arc_theta = 100 * (np.pi/180)
     ft_pos_traj = np.zeros((steps, 9))
     ft_vel_traj = np.zeros((steps, 9))
     for i in range(steps):
         t = i * dt
-        a = -arc_theta / T
-        b = np.pi
+        if circle_x_dir < 0:
+            b = np.pi
+            a = -arc_theta / T
+        else:
+            b = 0
+            a = arc_theta / T
         x = r * np.cos(t * a+b) + x_center
         y = r * np.sin(t * a+b) + y_center
         dx = a * r * np.sin(t * a + b) + x_center
