@@ -643,7 +643,7 @@ def get_flipping_waypoint(
                           fingertips_init_wf,
                           cp_params,
                           dt = 0.003,
-                          T  = 2, # total time for arc (seconds)
+                          T  = 4, # total time for arc (seconds)
                          ):
 
     steps = int(T / dt)
@@ -711,7 +711,7 @@ def get_flipping_waypoint(
                 f_vel_wf = rotate_wf_from_of(f_vel_of, obj_pose)
 
                 f_l_of = np.zeros(3)
-                f_l_of[np.nonzero(OBJ_FACES_INFO[face]["up_axis"])[0][0]] = 1.5
+                f_l_of[np.nonzero(OBJ_FACES_INFO[face]["up_axis"])[0][0]] = 1
                 f_l_wf = rotate_wf_from_of(f_l_of, obj_pose)
 
             ft_pos_traj[i,3*f_i:3*f_i+3] = f_new_wf
