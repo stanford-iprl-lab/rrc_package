@@ -333,10 +333,12 @@ class ImpedanceControllerPolicy:
         self.l_desired_ft_vel.append(np.asarray(fingertip_vel_goal_list).flatten())  
         self.l_actual_ft_pos.append(cur_ft_pos)  
         if self.x_traj is None:
+            # Nan if there is no obj traj (during grasping)
             self.l_desired_obj_pose.append(np.ones(7) * np.nan)
         else:
             self.l_desired_obj_pose.append(self.x_traj[self.traj_waypoint_counter, :])
         if self.tip_forces_wf is None:
+            # Nan if no desired ft forces (during grasping)
             self.l_desired_ft_force.append(np.ones(9) * np.nan)
         else:
             self.l_desired_ft_force.append(self.tip_forces_wf)
