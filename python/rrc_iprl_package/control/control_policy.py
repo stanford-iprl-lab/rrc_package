@@ -68,11 +68,36 @@ class ImpedanceControllerPolicy:
             self.csv_filepath           = "/output/control_policy_data.csv"
             self.grasp_trajopt_filepath = "/output/grasp_trajopt_data"
             self.lift_trajopt_filepath  = "/output/lift_trajopt_data"
+            self.control_policy_log_filepath = "/output/control_policy_log"
         else:
             self.csv_filepath           = "./output/control_policy_data.csv"
             self.grasp_trajopt_filepath = "./output/grasp_trajopt_data"
             self.lift_trajopt_filepath  = "./output/lift_trajopt_data"
+            self.control_policy_log_filepath = "./output/control_policy_log"
 
+        # Lists for logging data
+        # Rows correspond to step_count / timestamp
+        self.l_step_count       = [] # step_count
+        self.l_timestamp        = [] # time
+        self.l_desired_ft_pos   = [] # fingertip positions - desired
+        self.l_desired_ft_vel   = [] # fingertip velocities - desired
+        self.l_actual_ft_pos    = [] # fingertip positions - actual (computed from observation)
+        self.l_desired_obj_pose = [] # object position - desired  
+        self.l_desired_ft_force = [] # fingerip forces - desired
+
+    """
+    Store logs in npz file
+    """
+    def save_log(self):
+        np.savez(self.control_policy_log_filepath,
+                 step_count       = np.asarray(self.l_step_count),
+                 timestamp        = np.asarray(self.l_timestamp),
+                 desired_ft_pos   = np.asarray(self.l_desired_ft_pos),
+                 desired_ft_vel   = np.asarray(self.l_desired_ft_vel),
+                 actual_ft_pos    = np.asarray(self.l_actual_ft_pos),
+                 desired_obj_pose = np.squeeze(np.asarray(self.l_desired_obj_pose)),
+                 desired_ft_force = np.squeeze(np.asarray(self.l_desired_ft_force))
+                )
 
     def reset_policy(self, platform=None):
         self.step_count = 0
@@ -90,16 +115,7 @@ class ImpedanceControllerPolicy:
         self.ft_pos_traj = np.tile(self.init_ft_pos, (10000,1))
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
-
-        csv_header = ["step", "timestamp"]
-        # Formulate row to print csv_row = "{},".format(self.step_count)
-        for i in range(9):
-            csv_header.append("desired_ft_pos_{}".format(i))
-        for i in range(9):
-            csv_header.append("desired_ft_vel_{}".format(i))
-        with open(self.csv_filepath, mode="a") as fid:
-            writer  = csv.writer(fid, delimiter=",")
-            writer.writerow(csv_header)
+        self.x_traj = None
 
         # Define nlp for finger traj opt
         nGrid = 40
@@ -189,6 +205,11 @@ class ImpedanceControllerPolicy:
         #self.ft_vel_traj = itp_vel(row_coord_out)
         self.l_wf_traj = itp_lwf(row_coord_out)
 
+        # Linearly interpolate between each object pose
+        # TODO: Does it make sense to linearly interpolate quaternions?
+        itp_x_soln = interp1d(row_ind_in, self.x_soln, axis=0)
+        self.x_traj = itp_x_soln(row_coord_out)
+
         # Zero-order hold for velocity waypoints
         self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
@@ -248,6 +269,7 @@ class ImpedanceControllerPolicy:
         self.ft_pos_traj = itp_pos(row_coord_out)
         #self.ft_vel_traj = itp_vel(row_coord_out)
         self.l_wf_traj = None
+        self.x_traj = None
         # Zero-order hold for velocity waypoints
         self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
@@ -255,6 +277,10 @@ class ImpedanceControllerPolicy:
         self.step_count += 1
         observation = full_observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
+        
+        # Get current fingertip position
+        cur_ft_pos = self.get_fingertip_pos_wf(current_position)
+        cur_ft_pos = np.asarray(cur_ft_pos).flatten()
 
         if self.start_time is None:
             self.start_time = time.time()
@@ -290,19 +316,6 @@ class ImpedanceControllerPolicy:
         else:
             self.tip_forces_wf = self.l_wf_traj[traj_waypoint_i, :]
 
-        # Print fingertip goal position and velocities to stdout for logging
-        row = [self.step_count, time.time()]
-        # Formulate row to print csv_row = "{},".format(self.step_count)
-        for f_i in range(3):
-            for d in range(3):
-                row.append(fingertip_pos_goal_list[f_i][d])
-        for f_i in range(3):
-            for d in range(3):
-                row.append(fingertip_vel_goal_list[f_i][d])
-        with open(self.csv_filepath, mode="a") as fid:
-            writer  = csv.writer(fid, delimiter=",")
-            writer.writerow(row)
-
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(fingertip_pos_goal_list,
                                               fingertip_vel_goal_list,
@@ -312,6 +325,21 @@ class ImpedanceControllerPolicy:
                                               Kp = KP, Kv = KV)
 
         torque = np.clip(torque, self.action_space.low, self.action_space.high)
+
+        # LOGGING
+        self.l_step_count.append(self.step_count)       
+        self.l_timestamp.append(time.time())
+        self.l_desired_ft_pos.append(np.asarray(fingertip_pos_goal_list).flatten())  
+        self.l_desired_ft_vel.append(np.asarray(fingertip_vel_goal_list).flatten())  
+        self.l_actual_ft_pos.append(cur_ft_pos)  
+        if self.x_traj is None:
+            self.l_desired_obj_pose.append(np.ones(7) * np.nan)
+        else:
+            self.l_desired_obj_pose.append(self.x_traj[self.traj_waypoint_counter, :])
+        if self.tip_forces_wf is None:
+            self.l_desired_ft_force.append(np.ones(9) * np.nan)
+        else:
+            self.l_desired_ft_force.append(self.tip_forces_wf)
 
         self.traj_waypoint_counter += 1
 
