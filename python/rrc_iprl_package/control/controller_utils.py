@@ -17,7 +17,7 @@ class PolicyMode(enum.Enum):
 
 # Object properties
 OBJ_MASS = 0.016 # 16 grams
-OBJ_SIZE = move_cube._CUBOID_SIZE
+OBJ_SIZE = move_cube._CUBOID_SIZE# + 0.016
 
 # Here, hard code the base position of the fingers (as angle on the arena)
 r = 0.15
@@ -184,6 +184,8 @@ cube: Block object, which contains object shape info
 def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf):
     cp = get_cp_of_from_cp_param(cp_param)
 
+    cp.print_pt_of()
+
     rotation = Rotation.from_quat(cube_quat_wf)
     translation = np.asarray(cube_pos_wf)
 
@@ -209,7 +211,7 @@ def get_cp_of_from_cp_param(cp_param):
     cp_of = []
     # Get cp position in OF
     for i in range(3):
-        cp_of.append(-OBJ_SIZE[i] + (cp_param[i]+1)*OBJ_SIZE[i])
+        cp_of.append(-OBJ_SIZE[i]/2 + (cp_param[i]+1)*OBJ_SIZE[i]/2)
 
     cp_of = np.asarray(cp_of)
 
