@@ -8,21 +8,6 @@ from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.traj_opt.fixed_contact_point_opt import FixedContactPointOpt
 from rrc_iprl_package.traj_opt.static_object_opt import StaticObjectOpt
 
-# Here, hard code the base position of the fingers (as angle on the arena)
-r = 0.15
-theta_0 = 90
-theta_1 = 310
-theta_2 = 200
-#theta_2 = 3.66519 # 210 degrees
-CUBE_HALF_SIZE = move_cube._CUBE_WIDTH/2 + 0.001
-
-FINGER_BASE_POSITIONS = [
-                       np.array([[np.cos(theta_0*(np.pi/180))*r, np.sin(theta_0*(np.pi/180))*r, 0]]),
-                       np.array([[np.cos(theta_1*(np.pi/180))*r, np.sin(theta_1*(np.pi/180))*r, 0]]),
-                       np.array([[np.cos(theta_2*(np.pi/180))*r, np.sin(theta_2*(np.pi/180))*r, 0]]),
-                       ]
-
-
 class PolicyMode(enum.Enum):
         RESET = enum.auto()
         TRAJ_OPT = enum.auto()
@@ -30,44 +15,59 @@ class PolicyMode(enum.Enum):
         RL_PUSH = enum.auto()
         RESIDUAL = enum.auto()
 
+# Object properties
+OBJ_MASS = 0.016 # 16 grams
+OBJ_SIZE = move_cube._CUBOID_SIZE
+
+# Here, hard code the base position of the fingers (as angle on the arena)
+r = 0.15
+theta_0 = 90
+theta_1 = 310
+theta_2 = 200
+FINGER_BASE_POSITIONS = [
+           np.array([[np.cos(theta_0*(np.pi/180))*r, np.sin(theta_0*(np.pi/180))*r, 0]]),
+           np.array([[np.cos(theta_1*(np.pi/180))*r, np.sin(theta_1*(np.pi/180))*r, 0]]),
+           np.array([[np.cos(theta_2*(np.pi/180))*r, np.sin(theta_2*(np.pi/180))*r, 0]]),
+           ]
+
 # Information about object faces given face_id
 OBJ_FACES_INFO = {
-                   1: {"center_param": np.array([0.,-1.,0.]),
-                           "face_down_default_quat": np.array([0.707,0,0,0.707]),
-                           "adjacent_faces": [6,4,3,5],
-                           "opposite_face": 2,
-                           "up_axis": np.array([0.,1.,0.]), # UP axis when this face is ground face
-                           },
-                   2: {"center_param": np.array([0.,1.,0.]),
-                           "face_down_default_quat": np.array([-0.707,0,0,0.707]),
-                           "adjacent_faces": [6,4,3,5],
-                           "opposite_face": 1,
-                           "up_axis": np.array([0.,-1.,0.]),
-                           },
-                   3: {"center_param": np.array([1.,0.,0.]),
-                           "face_down_default_quat": np.array([0,0.707,0,0.707]),
-                           "adjacent_faces": [1,2,4,6],
-                           "opposite_face": 5,
-                           "up_axis": np.array([-1.,0.,0.]),
-                           },
-                   4: {"center_param": np.array([0.,0.,1.]),
-                           "face_down_default_quat": np.array([0,1,0,0]),
-                           "adjacent_faces": [1,2,3,5],
-                           "opposite_face": 6,
-                           "up_axis": np.array([0.,0.,-1.]),
-                           },
-                   5: {"center_param": np.array([-1.,0.,0.]),
-                           "face_down_default_quat": np.array([0,-0.707,0,0.707]),
-                           "adjacent_faces": [1,2,4,6],
-                           "opposite_face": 3,
-                           "up_axis": np.array([1.,0.,0.]),
-                           },
-                   6: {"center_param": np.array([0.,0.,-1.]),
-                           "face_down_default_quat": np.array([0,0,0,1]),
-                           "adjacent_faces": [1,2,3,5],
-                           "opposite_face": 4,
-                           "up_axis": np.array([0.,0.,1.]),
-                           },
+                 1: {"center_param": np.array([0.,-1.,0.]),
+                         "face_down_default_quat": np.array([0.707,0,0,0.707]),
+                         "adjacent_faces": [6,4,3,5],
+                         "opposite_face": 2,
+                         "up_axis": np.array([0.,1.,0.]), # UP axis when this face is ground face
+                         },
+                 2: {"center_param": np.array([0.,1.,0.]),
+                         "face_down_default_quat": np.array([-0.707,0,0,0.707]),
+                         "adjacent_faces": [6,4,3,5],
+                         "opposite_face": 1,
+                         "up_axis": np.array([0.,-1.,0.]),
+                         },
+                 3: {"center_param": np.array([1.,0.,0.]),
+                         "face_down_default_quat": np.array([0,0.707,0,0.707]),
+                         "adjacent_faces": [1,2,4,6],
+                         "opposite_face": 5,
+                         "up_axis": np.array([-1.,0.,0.]),
+                         },
+                 4: {"center_param": np.array([0.,0.,1.]),
+                         "face_down_default_quat": np.array([0,1,0,0]),
+                         "adjacent_faces": [1,2,3,5],
+                         "opposite_face": 6,
+                         "up_axis": np.array([0.,0.,-1.]),
+                         },
+                 5: {"center_param": np.array([-1.,0.,0.]),
+                         "face_down_default_quat": np.array([0,-0.707,0,0.707]),
+                         "adjacent_faces": [1,2,4,6],
+                         "opposite_face": 3,
+                         "up_axis": np.array([1.,0.,0.]),
+                         },
+                 6: {"center_param": np.array([0.,0.,-1.]),
+                         "face_down_default_quat": np.array([0,0,0,1]),
+                         "adjacent_faces": [1,2,3,5],
+                         "opposite_face": 4,
+                         "up_axis": np.array([0.,0.,1.]),
+                         },
                 }
 
 """
@@ -181,8 +181,8 @@ Inputs:
 cp_param: Contact point param [px, py, pz]
 cube: Block object, which contains object shape info
 """
-def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf, cube_half_size=CUBE_HALF_SIZE):
-    cp = get_cp_of_from_cp_param(cp_param, cube_half_size)
+def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf):
+    cp = get_cp_of_from_cp_param(cp_param)
 
     rotation = Rotation.from_quat(cube_quat_wf)
     translation = np.asarray(cube_pos_wf)
@@ -192,12 +192,12 @@ def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf, cube_half_s
 """
 Get contact point positions in world frame from cp_params
 """
-def get_cp_pos_wf_from_cp_params(cp_params, cube_pos, cube_quat, cube_half_size=CUBE_HALF_SIZE):
+def get_cp_pos_wf_from_cp_params(cp_params, cube_pos, cube_quat):
     # Get contact points in wf
     fingertip_goal_list = []
     for i in range(len(cp_params)):
     #for i in range(cp_params.shape[0]):
-        fingertip_goal_list.append(get_cp_pos_wf_from_cp_param(cp_params[i], cube_pos, cube_quat, cube_half_size))
+        fingertip_goal_list.append(get_cp_pos_wf_from_cp_param(cp_params[i], cube_pos, cube_quat))
     return fingertip_goal_list
 
 """
@@ -205,12 +205,11 @@ Compute contact point position in object frame
 Inputs:
 cp_param: Contact point param [px, py, pz]
 """
-def get_cp_of_from_cp_param(cp_param, cube_half_size=CUBE_HALF_SIZE):
-    obj_shape = (cube_half_size, cube_half_size, cube_half_size)
+def get_cp_of_from_cp_param(cp_param):
     cp_of = []
     # Get cp position in OF
     for i in range(3):
-        cp_of.append(-obj_shape[i] + (cp_param[i]+1)*obj_shape[i])
+        cp_of.append(-OBJ_SIZE[i] + (cp_param[i]+1)*OBJ_SIZE[i])
 
     cp_of = np.asarray(cp_of)
 
@@ -299,9 +298,6 @@ dt: delta t
 """
 def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, npz_filepath = None):
 
-    cube_shape = (move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH)
-    cube_mass = 0.094 # TODO Hardcoded
-
     # Formulate and solve optimization problem
     opt_problem = FixedContactPointOpt(
                                        nGrid     = nGrid,    # Number of timesteps
@@ -309,8 +305,8 @@ def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchi
                                        cp_params = cp_params,
                                        x0        = x0,
                                        x_goal    = x_goal,
-                                       obj_shape = cube_shape,
-                                       obj_mass  = cube_mass,
+                                       obj_shape = OBJ_SIZE,
+                                       obj_mass  = OBJ_MASS,
                                        npz_filepath = npz_filepath
                                        )
     
@@ -422,11 +418,10 @@ def get_lifting_cp_params(obj_pose):
 Set up traj opt for fingers and static object
 """
 def define_static_object_opt(nGrid, dt):
-    cube_shape = (move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH)
     problem = StaticObjectOpt(
                  nGrid     = nGrid,
                  dt        = dt,
-                 obj_shape = cube_shape,
+                 obj_shape = OBJ_SIZE,
                  )
     return problem
 
@@ -438,83 +433,6 @@ def get_finger_waypoints(nlp, ft_goal, q_cur, obj_pose, npz_filepath = None):
     ft_pos = nlp.ft_pos_soln
     ft_vel = nlp.ft_vel_soln
     return ft_pos, ft_vel
-
-"""
-Get waypoints to initial contact point on object
-For now, we assume that contact points are always in the center of cube face
-Return waypoints in world frame
-Inputs:
-cp_param: target contact point param
-fingertip_pos: fingertip start position in world frame
-"""
-def get_waypoints_to_cp_param(obj_pose, fingertip_pos, cp_param, cube_half_size=CUBE_HALF_SIZE):
-    # Get ground face
-    ground_face = get_closest_ground_face(obj_pose)
-    # Transform finger tip positions to object frame
-    fingertip_pos_of = np.squeeze(get_of_from_wf(fingertip_pos, obj_pose))
-
-    waypoints = []
-    if cp_param is not None:
-        # Transform cp_param to object frame
-        cp = get_cp_of_from_cp_param(cp_param, cube_half_size=CUBE_HALF_SIZE)
-        cp_pos_of = cp.pos_of
-
-        tol = 0.05
-
-        # Get the non-zero cp_param dimension (to determine which face the contact point is on)
-        # This works because we assume z is always 0, and either x or y is 0
-        non_zero_dim = np.argmax(abs(cp_param))
-        zero_dim = abs(1-non_zero_dim)
-
-        # Work with absolute values, and then correct sign at the end
-        w = np.expand_dims(fingertip_pos_of,0)
-        w[0,:] = 0.07 * OBJ_FACES_INFO[ground_face]["up_axis"] # Bring fingers lower, to avoid links colliding with each other
-        if abs(fingertip_pos_of[non_zero_dim]) < abs(cp_pos_of[non_zero_dim]) + tol:
-            w[0,non_zero_dim] = cp_param[non_zero_dim] * (abs(cp_pos_of[non_zero_dim]) + tol) # fix sign
-        if abs(fingertip_pos_of[zero_dim]) < abs(cp_pos_of[zero_dim]) + tol:
-            w[0,zero_dim] = cp_param[zero_dim] * (abs(cp_pos_of[zero_dim]) + tol) # fix sign
-        #print(w)
-        waypoints.append(w.copy())
-
-        # Align zero_dim 
-        w[0,zero_dim] = 0
-        waypoints.append(w.copy())
-
-        #w[0,non_zero_dim] = cp_pos_of[non_zero_dim]
-        #w[0,2] = 0
-        #waypoints.append(w.copy())
-        waypoints.append(cp_pos_of)
-    else:
-        w = np.expand_dims(fingertip_pos_of,0)
-        waypoints.append(w.copy())
-        waypoints.append(w.copy())
-        waypoints.append(w.copy())
-
-    # Transform waypoints from object frame to world frame
-    waypoints_wf = []
-    #waypoints_wf.append(fingertip_pos)
-    for wp in waypoints:
-        wp_wf = np.squeeze(get_wf_from_of(wp, obj_pose))
-        # If world frame z coord in less than 0, clip this to 0.01
-        if wp_wf[2] <= 0:
-                wp_wf[2] = 0.01
-        waypoints_wf.append(wp_wf)
-
-    #return waypoints_wf
-    # Add intermediate waypoints
-    interp_num = 10
-    waypoints_final = []
-    for i in range(len(waypoints_wf) - 1):
-        curr_w = waypoints_wf[i]
-        next_w = waypoints_wf[i+1] 
-
-        interp_pts = np.linspace(curr_w, next_w, interp_num)
-        for r in range(interp_num):
-            waypoints_final.append(interp_pts[r])
-
-    #waypoints_final.pop(-1)
-
-    return waypoints_final
 
 ##############################################################################
 # Lift mode functions
@@ -539,10 +457,9 @@ def get_closest_ground_face(obj_pose):
 Get flipping contact points
 """
 def get_flipping_cp_params(
-                                                    init_pose,
-                                                    goal_pose,
-                                                    cube_half_size=CUBE_HALF_SIZE,
-                                                    ):
+                           init_pose,
+                           goal_pose,
+                          ):
     # Get goal face
     init_face = get_closest_ground_face(init_pose)
     #print("Init face: {}".format(init_face))
@@ -606,6 +523,7 @@ def get_flipping_cp_params(
         xy_distances[f_i, :] = np.nan
 
     cp_params = [None, None, None]
+    # TODO Hardcoded
     height_param = -0.65 # Always want cps to be at this height
     width_param = 0.65 
     for face in common_adjacent_faces:
@@ -616,71 +534,6 @@ def get_flipping_cp_params(
         #cp_params.append(param)
     #print("Assignments: {}".format(finger_assignments))
     return cp_params, init_face, goal_face
-
-"""
-Get next waypoint for flipping
-"""
-def get_flipping_waypoint(
-                                                    obj_pose,
-                                                    init_face,
-                                                    goal_face,
-                                                    fingertips_current_wf,
-                                                    fingertips_init_wf,
-                                                    cp_params,
-                                                 ):
-    # Get goal face
-    #goal_face = get_closest_ground_face(goal_pose)
-    #print("Goal face: {}".format(goal_face))
-    #print("ground face: {}".format(get_closest_ground_face(obj_pose)))
-
-    ground_face = get_closest_ground_face(obj_pose)
-    #if (get_closest_ground_face(obj_pose) == goal_face):
-    #  # Move fingers away from object
-    #  return fingertips_init_wf
-
-    # Transform current fingertip positions to of
-    fingertips_new_wf = []
-
-    incr = 0.01
-    for f_i in range(3):
-        f_wf = fingertips_current_wf[f_i]
-        if cp_params[f_i] is None:
-            f_new_wf = fingertips_init_wf[f_i]
-        else:
-            # Get face that finger is one
-            face = get_face_from_cp_param(cp_params[f_i])
-            f_of = get_of_from_wf(f_wf, obj_pose)
-
-            if ground_face == goal_face:
-                # Release object
-                f_new_of = f_of - 0.01 * OBJ_FACES_INFO[face]["up_axis"]
-                if obj_pose.position[2] <= 0.034: # TODO: HARDCODED
-                    flip_done = True
-                    #print("FLIP SUCCESSFUL!")
-                else:
-                    flip_done = False
-            elif ground_face != init_face:
-                # Ground face does not match goal force or init face, give up
-                f_new_of = f_of - 0.01 * OBJ_FACES_INFO[face]["up_axis"]
-                if obj_pose.position[2] <= 0.034: # TODO: HARDCODED
-                    flip_done = True
-                else:
-                    flip_done = False
-            else:
-                # Increment up_axis of f_of
-                f_new_of = f_of + incr * OBJ_FACES_INFO[ground_face]["up_axis"]
-                flip_done = False
-
-            # Convert back to wf
-            f_new_wf = get_wf_from_of(f_new_of, obj_pose)
-
-        fingertips_new_wf.append(f_new_wf)
-
-    #print(fingertips_current_wf)
-    #print(fingertips_new_wf)
-    #fingertips_new_wf[2] = fingertips_init_wf[2]
-     
-    return fingertips_new_wf, flip_done
 
 ##############################################################################
 # Private functions

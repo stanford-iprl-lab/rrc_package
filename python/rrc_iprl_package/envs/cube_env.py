@@ -308,11 +308,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         # visualize the goal
         if self.visualization:
-            self.goal_marker = trifinger_simulation.visual_objects.CubeMarker(
-                width=0.065,
+            self.goal_marker = trifinger_simulation.visual_objects.CuboidMarker(
+                size=move_cube._CUBOID_SIZE,
                 position=self.goal["position"],
                 orientation=self.goal["orientation"],
-                physicsClientId=self.platform.simfinger._pybullet_client_id,
+                pybullet_client_id=self.platform.simfinger._pybullet_client_id,
             )
             pbutils.reset_camera()
 

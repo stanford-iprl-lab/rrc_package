@@ -233,7 +233,7 @@ def main():
   nGrid = 20
   dt = 0.1
 
-  cube_shape = (move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH, move_cube._CUBE_WIDTH)
+  cube_shape = move_cube._CUBOID_SIZE
 
   opt_problem = StaticObjectOpt(
                nGrid     = nGrid,

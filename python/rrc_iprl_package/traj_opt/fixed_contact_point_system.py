@@ -2,7 +2,6 @@ import numpy as np
 from casadi import *
 import pybullet
 
-from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.traj_opt import utils
 
 class FixedContactPointSystem:
