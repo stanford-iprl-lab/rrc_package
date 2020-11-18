@@ -20,8 +20,8 @@ from rrc_iprl_package import run_rrc_sb as sb_utils
 
 FRAMESKIP = 1
 #MAX_STEPS = 3 * 1000 // FRAMESKIP
-EP_LEN = 120 * 1000 // FRAMESKIP - 150 // FRAMESKIP
-MAX_STEPS = 120 * 1000
+EP_LEN = 60 * 1000 // FRAMESKIP - 150 // FRAMESKIP
+MAX_STEPS = 15 * 1000
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -85,6 +85,7 @@ def main():
     is_done = False
     steps_so_far = 0
     if difficulty == -2:
+        print("--------difficulty is -2--------")
         while not is_done:
             if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
             action, _ = policy.predict(observation)
@@ -92,17 +93,31 @@ def main():
             accumulated_reward += reward
             steps_so_far += 1
     else:
+        print("--------other difficulties--------")
         old_mode = policy.mode
         while not is_done:
-            if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
-            action = policy.predict(observation)
-            observation, reward, is_done, info = env.step(action)
-            if old_mode != policy.mode:
-                print('mode changed: {} to {}'.format(old_mode, policy.mode))
-                old_mode = policy.mode
-            #print("reward:", reward)
-            accumulated_reward += reward
-            steps_so_far += 1
+            # if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+
+            # if virtual episode is not done running and real EP_LEN hasn't been reached, keep running
+            if not is_done and steps_so_far != EP_LEN:     
+                action = policy.predict(observation)
+                observation, reward, is_done, info = env.step(action)
+                if old_mode != policy.mode:
+                    print('mode changed: {} to {}'.format(old_mode, policy.mode))
+                    old_mode = policy.mode
+                #print("reward:", reward)
+                accumulated_reward += reward
+                steps_so_far += 1
+            # if current virtual episode is done, but hasn't reached the end of real episode,
+            # reset and run the next episode 
+            elif is_done is True and steps_so_far != EP_LEN:
+                print("RESET in hierarchical_lift: ", steps_so_far)
+                observation = env.reset()
+                policy.reset_policy()
+                is_done = False
+                steps_so_far += 1
+                continue
+            elif MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
     env.save_action_log()
 
     print("------")
