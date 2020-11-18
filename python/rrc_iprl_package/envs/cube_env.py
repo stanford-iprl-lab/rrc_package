@@ -92,7 +92,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             raise ValueError("frameskip cannot be less than 1.")
         self.frameskip = frameskip
         self.episode_length = num_steps * frameskip if num_steps else move_cube.episode_length
-        self.max_resets = 60 * 1000 // self.episode_length     # number of virtual resets
+        self.max_resets = (60 * 1000 - 150) // self.episode_length     # number of virtual resets
 
         # will be initialized in reset()
         self.platform = None
