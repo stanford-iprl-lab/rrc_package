@@ -168,8 +168,7 @@ class StaticObjectOpt:
             #penalty = fmax(collision_weight * (pnorm_min - pnorm), 0) 
             # smooth max
             penalty = ((pnorm_min - pnorm) * np.e**(alpha*(pnorm_min - pnorm)))/(1 + np.e**(alpha*(pnorm_min - pnorm)))
-            #penalty = 0
-            #cost -= pnorm * collision_weight
+            penalty = 0
             cost += penalty * collision_weight
 
     return cost

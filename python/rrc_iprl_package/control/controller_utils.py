@@ -17,7 +17,7 @@ class PolicyMode(enum.Enum):
 
 # Object properties
 OBJ_MASS = 0.016 # 16 grams
-OBJ_SIZE = move_cube._CUBOID_SIZE# + 0.016
+OBJ_SIZE = move_cube._CUBOID_SIZE + 0.016
 
 # Here, hard code the base position of the fingers (as angle on the arena)
 r = 0.15
@@ -69,6 +69,9 @@ OBJ_FACES_INFO = {
                          "up_axis": np.array([0.,0.,1.]),
                          },
                 }
+
+CUBOID_SHORT_FACES = [1,2]
+CUBOID_LONG_FACES = [3,4,5,6]
 
 """
 Compute joint torques to move fingertips to desired locations
@@ -198,8 +201,10 @@ def get_cp_pos_wf_from_cp_params(cp_params, cube_pos, cube_quat):
     # Get contact points in wf
     fingertip_goal_list = []
     for i in range(len(cp_params)):
-    #for i in range(cp_params.shape[0]):
-        fingertip_goal_list.append(get_cp_pos_wf_from_cp_param(cp_params[i], cube_pos, cube_quat))
+        if cp_params[i] is None:
+            fingertip_goal_list.append(None)
+        else:
+            fingertip_goal_list.append(get_cp_pos_wf_from_cp_param(cp_params[i], cube_pos, cube_quat))
     return fingertip_goal_list
 
 """
@@ -300,22 +305,27 @@ dt: delta t
 """
 def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, npz_filepath = None):
 
+    cp_params_on_obj = []
+    for cp in cp_params:
+        if cp is not None: cp_params_on_obj.append(cp)
+    fnum = len(cp_params_on_obj)
+
     # Formulate and solve optimization problem
     opt_problem = FixedContactPointOpt(
-                                       nGrid     = nGrid,    # Number of timesteps
-                                       dt        = dt,       # Length of each timestep (seconds)
-                                       cp_params = cp_params,
-                                       x0        = x0,
-                                       x_goal    = x_goal,
-                                       obj_shape = OBJ_SIZE,
-                                       obj_mass  = OBJ_MASS,
-                                       npz_filepath = npz_filepath
-                                       )
+                                      nGrid     = nGrid,    # Number of timesteps
+                                      dt        = dt,       # Length of each timestep (seconds)
+                                      fnum      = fnum,
+                                      cp_params = cp_params_on_obj,
+                                      x0        = x0,
+                                      x_goal    = x_goal,
+                                      obj_shape = OBJ_SIZE,
+                                      obj_mass  = OBJ_MASS,
+                                      npz_filepath = npz_filepath
+                                      )
     
     x_soln     = np.array(opt_problem.x_soln)
     dx_soln    = np.array(opt_problem.dx_soln)
     l_wf_soln  = np.array(opt_problem.l_wf_soln)
-    cp_params  = np.array(cp_params)
 
     return x_soln, dx_soln, l_wf_soln
     
@@ -330,10 +340,10 @@ def get_lifting_cp_params(obj_pose):
     ground_face = get_closest_ground_face(obj_pose)
 
     # Transform finger base positions to object frame
-    base_pos_list_of = []
+    finger_base_of = []
     for f_wf in FINGER_BASE_POSITIONS:
         f_of = get_of_from_wf(f_wf, obj_pose)
-        base_pos_list_of.append(f_of)
+        finger_base_of.append(f_of)
 
     # Find distance from x axis and y axis, and store in xy_distances
     # Need some additional logic to prevent multiple fingers from being assigned to same face
@@ -344,76 +354,49 @@ def get_lifting_cp_params(obj_pose):
     x_ind, y_ind = __get_parallel_ground_plane_xy(ground_face)
         
     xy_distances = np.zeros((3, 2)) # Row corresponds to a finger, columns are x and y axis distances
-    for f_i, f_of in enumerate(base_pos_list_of):
+    for f_i, f_of in enumerate(finger_base_of):
         point_in_plane = np.array([f_of[0,x_ind], f_of[0,y_ind]]) # Ignore dimension of point that's not in the plane
         x_dist = __get_distance_from_pt_2_line(x_axis, np.array([0,0]), point_in_plane)
         y_dist = __get_distance_from_pt_2_line(y_axis, np.array([0,0]), point_in_plane)
         
-        xy_distances[f_i, 0] = x_dist
-        xy_distances[f_i, 1] = y_dist
-
-    # Do the face assignment - greedy approach (assigned closest fingers first)
-    free_faces = OBJ_FACES_INFO[ground_face]["adjacent_faces"].copy() # List of face ids that haven't been assigned yet
-    assigned_faces = np.zeros(3) 
-    for i in range(3):
-        # Find indices max element in array
-        max_ind = np.unravel_index(np.argmax(xy_distances), xy_distances.shape)
-        curr_finger_id = max_ind[0] 
-        furthest_axis = max_ind[1]
-
-        #print("current finger {}".format(curr_finger_id))
-        # Do the assignment
-        x_dist = xy_distances[curr_finger_id, 0]
-        y_dist = xy_distances[curr_finger_id, 1]
-        if furthest_axis == 0: # distance to x axis is greater than to y axis
-            if base_pos_list_of[curr_finger_id][0, y_ind] > 0:
-                face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
-            else:
-                face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
-        else:
-            if base_pos_list_of[curr_finger_id][0, x_ind] > 0:
-                face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
-            else:
-                face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
-        #print("first choice face: {}".format(face))
-
-        # Handle faces that may already be assigned
-        if face not in free_faces:
-            alternate_axis = abs(furthest_axis - 1)
-            if alternate_axis == 0:
-                if base_pos_list_of[curr_finger_id][0, y_ind] > 0:
-                    face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
-                else:
-                    face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
-            else:
-                if base_pos_list_of[curr_finger_id][0, x_ind] > 0:
-                    face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
-                else:
-                    face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
-            #print("second choice face: {}".format(face))
+        xy_distances[f_i, 0] = np.sign(f_of[0,y_ind]) * x_dist
+        xy_distances[f_i, 1] = np.sign(f_of[0,x_ind]) * y_dist
         
-        # If backup face isn't free, assign random face from free_faces
-        if face not in free_faces:
-            #print("random")
-            #print(xy_distances[curr_finger_id, :])
-            face = free_faces[0] 
-        assigned_faces[curr_finger_id] = face 
+    free_faces = \
+        [x for x in OBJ_FACES_INFO[ground_face]["adjacent_faces"] if x not in CUBOID_SHORT_FACES]
 
-        # Replace row with -np.inf so we can assign other fingers
-        xy_distances[curr_finger_id, :] = -np.inf
-        # Remove face from free_faces
-        free_faces.remove(face)
-    #print(assigned_faces)
-    # Set contact point params
-    cp_params = []
-    for i in range(3):
-        face = assigned_faces[i]
+    # For each face, choose closest finger
+    finger_assignments = {}
+    for face in free_faces:
+        face_ind = OBJ_FACES_INFO[ground_face]["adjacent_faces"].index(face)
+        if face_ind in [2,3]:
+            # Check y_ind column for finger that is furthest away
+            if OBJ_FACES_INFO[face]["center_param"][x_ind] < 0: 
+                # Want most negative value
+                f_i = np.nanargmin(xy_distances[:,1])
+            else:
+                # Want most positive value
+                f_i = np.nanargmax(xy_distances[:,1])
+        else:
+            # Check x_ind column for finger that is furthest away
+            if OBJ_FACES_INFO[face]["center_param"][y_ind] < 0: 
+                f_i = np.nanargmin(xy_distances[:,0])
+            else:
+                f_i = np.nanargmax(xy_distances[:,0])
+        finger_assignments[face] = f_i
+        xy_distances[f_i, :] = np.nan
+
+    # Set contact point params for two long faces
+    cp_params = [None, None, None]
+    for face, finger_id in finger_assignments.items():
         param = OBJ_FACES_INFO[face]["center_param"].copy()
-        #print(i)
-        #print(param)
-        cp_params.append(param)
-    #print("assigning cp params for lifting")
-    #print(cp_params)
+        cp_params[finger_id] = param
+
+
+    # Assign remaining finger to either face 1 or 2 (short face)
+    # TODO: or, no face at all (which means need to modify fixed_cp_traj_opt)
+    # TODO Hardcoded right now
+    #cp_params[0] = OBJ_FACES_INFO[2]["center_param"].copy()
     return cp_params
 
 """

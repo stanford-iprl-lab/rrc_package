@@ -154,6 +154,7 @@ class ImpedanceControllerPolicy:
     """
     def set_traj_lift_object(self, observation, nGrid = 50, dt = 0.01):
         self.traj_waypoint_counter = 0
+        qnum = 3
 
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
@@ -169,15 +170,25 @@ class ImpedanceControllerPolicy:
         print("Object pose orientation: {}".format(obj_pose.orientation))
         print("Traj lift x0: {}".format(repr(x0)))
         print("Traj lift x_goal: {}".format(repr(x_goal)))
-        # Get initial fingertip positions in world frame
+    
+        # Get current joint positions
         current_position, _ = get_robot_position_velocity(observation)
+        # Get current fingertip positions
+        current_ft_pos = self.get_fingertip_pos_wf(current_position)
         
-        self.x_soln, self.dx_soln, l_wf = c_utils.run_fixed_cp_traj_opt(
+        self.x_soln, self.dx_soln, l_wf_soln = c_utils.run_fixed_cp_traj_opt(
                 obj_pose, self.cp_params, current_position, self.custom_pinocchio_utils,
                 x0, x_goal, nGrid, dt, npz_filepath = self.lift_trajopt_filepath)
 
         ft_pos = np.zeros((nGrid, 9))
         ft_vel = np.zeros((nGrid, 9))
+
+        free_finger_id = None
+        for i, cp in enumerate(self.cp_params):
+            if cp is None:
+                free_finger_id = i
+                break
+
         for t_i in range(nGrid):
             # Set fingertip goal positions and velocities from x_soln, dx_soln
             next_cube_pos_wf = self.x_soln[t_i, 0:3]
@@ -186,8 +197,24 @@ class ImpedanceControllerPolicy:
             ft_pos_list = c_utils.get_cp_pos_wf_from_cp_params(
                     self.cp_params, next_cube_pos_wf, next_cube_quat_wf)
 
+            # Hold free_finger at current ft position
+            if free_finger_id is not None:
+                ft_pos_list[free_finger_id] = current_ft_pos[free_finger_id]
             ft_pos[t_i, :] = np.asarray(ft_pos_list).flatten()
-            ft_vel[t_i, :] = np.tile(self.dx_soln[t_i, 0:3],3)
+
+            # Fingertip velocities
+            ft_vel_arr = np.tile(self.dx_soln[t_i, 0:3], 3)
+            if free_finger_id is not None:
+                ft_vel_arr[free_finger_id * qnum : free_finger_id * qnum + qnum] = np.zeros(qnum)
+            ft_vel[t_i, :] = ft_vel_arr
+
+        # Add 0 forces for free_fingertip to l_wf
+        l_wf = np.zeros((nGrid, 9))
+        i = 0
+        for f_i in range(3):
+            if f_i == free_finger_id: continue
+            l_wf[:,f_i * qnum : f_i * qnum + qnum] = l_wf_soln[:, i * qnum : i * qnum + qnum]
+            i += 1
 
         # Number of interpolation points
         interp_n = 26
@@ -224,10 +251,24 @@ class ImpedanceControllerPolicy:
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
 
+        # Get joint positions
+        current_position, _ = get_robot_position_velocity(observation)
+
+        # Get current fingertip positions
+        current_ft_pos = self.get_fingertip_pos_wf(current_position)
+
         # Get list of desired fingertip positions
         cp_wf_list = c_utils.get_cp_pos_wf_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation)
+
+        # Deal with None fingertip_goal here
+        # If cp_wf is None, set ft_goal to be  current ft position
+        for i in range(len(cp_wf_list)):
+            if cp_wf_list[i] is None:
+                cp_wf_list[i] = current_ft_pos[i]
+
         ft_goal = np.asarray(cp_wf_list).flatten()
         self.run_finger_traj_opt(observation, ft_goal)
+
 
     """
     Run trajectory optimization for fingers, given fingertip goal positions

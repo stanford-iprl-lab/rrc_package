@@ -9,6 +9,7 @@ class FixedContactPointSystem:
   def __init__(self,
                nGrid     = 100,
                dt        = 0.1,
+               fnum      = 3,
                cp_params = None,
                obj_shape = None,
                obj_mass  = None,
@@ -20,7 +21,7 @@ class FixedContactPointSystem:
     self.dt = dt
     self.tf = dt * (nGrid-1) # Final time
 
-    self.fnum = 3
+    self.fnum = fnum
     self.qnum = 3
     self.obj_dof = 6
     self.x_dim = 7 # Dimension of object pose
