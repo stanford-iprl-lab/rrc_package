@@ -51,7 +51,7 @@ class StaticObjectOpt:
     options = {"ipopt.print_level":5,
                "ipopt.max_iter":10000,
                 "ipopt.tol": 1e-4,
-                "print_time": 1
+                "print_time": 0
               }
     #options["monitor"] = ["nlp_g"]
     #options = {"monitor":["nlp_f","nlp_g"]}
@@ -61,6 +61,7 @@ class StaticObjectOpt:
                ft_goal, 
                q0,
                obj_pose  = move_cube.Pose(),
+               npz_filepath = None
                ):
                 
     qnum = self.system.qnum
@@ -101,11 +102,25 @@ class StaticObjectOpt:
       for f_i in range(self.system.fnum):
         self.ft_pos_soln[t_i, f_i * qnum: f_i * qnum + qnum] = ft_pos_list[f_i].T
 
-    print("SLACK VARS: {}".format(self.a_soln))
+    # print("SLACK VARS: {}".format(self.a_soln))
 
     # Save solver time
     #statistics = self.solver.stats()
     #self.total_time_sec = statistics["t_wall_total"]
+
+    # Save solution
+    if npz_filepath is not None:
+        np.savez(npz_filepath,
+                 dt     = self.system.dt,
+                 nGrid  = self.system.nGrid,
+                 q0     = q0,
+                 ft_goal = ft_goal,
+                 obj_pose = obj_pose_val,
+                 t      = self.t_soln,
+                 q      = self.q_soln,
+                 dq     = self.dq_soln,
+                 a      = self.a_soln,
+                )
 
   """
   Computes cost

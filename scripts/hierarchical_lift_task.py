@@ -8,17 +8,20 @@ import csv
 import json
 import sys
 import os
+import os.path as osp
 import numpy as np
+from gym.wrappers import TimeLimit
 
-from rrc_iprl_package.envs import cube_env, custom_env
+from rrc_iprl_package.envs import cube_env, custom_env, env_wrappers
 from trifinger_simulation.tasks import move_cube 
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
+from rrc_iprl_package import run_rrc_sb as sb_utils 
 
 FRAMESKIP = 1
-REAL_EPISODE_LENGTH = 60 * 1000 // FRAMESKIP
-MAX_STEPS = 15 * 1000 // FRAMESKIP
-# MAX_STEPS = None
+#MAX_STEPS = 3 * 1000 // FRAMESKIP
+EP_LEN = 120 * 1000 // FRAMESKIP - 150 // FRAMESKIP
+MAX_STEPS = 120 * 1000
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -41,71 +44,69 @@ def main():
     else:
         goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)
-    initial_pose.position = np.array([0,0,.0325])
 
-    # CSV logging file path
-    csv_filepath = "/output/hierarchical_lift_output.csv"
+    if osp.exists('/output'):
+        save_path = '/output/action_log.npz'
+    else:
+        save_path = 'action_log.npz'
 
-    env = cube_env.RealRobotCubeEnv(
-        goal, initial_pose, difficulty,
-        cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
-        num_steps=MAX_STEPS
-    )
-    rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
-    initial_pose = move_cube.sample_goal(difficulty=-1)
-    initial_pose.position = np.array([0,0,.0325])
-    goal_pose = move_cube.Pose.from_dict(goal)
-    policy = HierarchicalControllerPolicy(action_space=env.action_space,
-                   initial_pose=initial_pose, goal_pose=goal_pose,
-                   load_dir=rl_load_dir, difficulty=difficulty,
-                   start_mode=start_mode)
-    env = custom_env.HierarchicalPolicyWrapper(env, policy)
+    if difficulty == -2:
+        env = cube_env.RealRobotCubeEnv(
+            goal, initial_pose.to_dict(), difficulty,
+            cube_env.ActionType.TORQUE, frameskip=FRAMESKIP,
+            num_steps=MAX_STEPS, visualization=True, save_npz=save_path
+        )
+        if os.path.exists('/ws/src/usercode'):
+            rl_load_dir = '/ws/src/usercode/models/HER.zip'
+        else:
+            rl_load_dir = './models/HER.zip'
+        env = custom_env.ResidualPolicyWrapper(env, goal_env=True)
+        env = TimeLimit(env, max_episode_steps=EP_LEN)
+        env = env_wrappers.FlattenGoalWrapper(env)
+        policy = sb_utils.make_model(env, None)
+        policy.load(rl_load_dir)
+    else:
+        env = cube_env.RealRobotCubeEnv(
+            goal, initial_pose.to_dict(), difficulty,
+            cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
+            num_steps=MAX_STEPS, visualization=True, save_npz=save_path
+        )
+        rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
+        goal_pose = move_cube.Pose.from_dict(goal)
+        policy = HierarchicalControllerPolicy(action_space=env.action_space,
+                       initial_pose=initial_pose, goal_pose=goal_pose,
+                       load_dir=rl_load_dir, difficulty=difficulty,
+                       start_mode=start_mode)
+        env = custom_env.HierarchicalPolicyWrapper(env, policy)
     observation = env.reset()
     print("init current observation is: ", observation)
 
     accumulated_reward = 0
     is_done = False
-    old_mode = policy.mode
     steps_so_far = 0
-
-    with open(csv_filepath, mode="a") as file:
-        writer  = csv.writer(file, delimiter=",")
-        csv_header = ["Steps"]
-        writer.writerow(csv_header)
-
-    while not is_done or steps_so_far != REAL_EPISODE_LENGTH:
-        # if current virtual episode is not done running, keep running it
-        if not is_done:
+    if difficulty == -2:
+        while not is_done:
+            if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+            action, _ = policy.predict(observation)
+            observation, reward, is_done, info = env.step(action)
+            accumulated_reward += reward
+            steps_so_far += 1
+    else:
+        old_mode = policy.mode
+        while not is_done:
+            if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
             action = policy.predict(observation)
-            print("in normal step, action is: ", action)
             observation, reward, is_done, info = env.step(action)
             if old_mode != policy.mode:
                 print('mode changed: {} to {}'.format(old_mode, policy.mode))
                 old_mode = policy.mode
-            # print("reward:", reward)
+            #print("reward:", reward)
             accumulated_reward += reward
             steps_so_far += 1
-            print("in normal step, steps so far: ", steps_so_far)
-            csv_row = "{}".format(steps_so_far)
-        # if current virtual episode is done, but hasn't reached the end of real episode,
-        # reset and run the next episode 
-        elif is_done is True and steps_so_far != REAL_EPISODE_LENGTH:
-            print("RESET in hierarchical_lift: ", steps_so_far)
-            observation = env.reset()
-            policy.reset_policy()
-            is_done = False
-            csv_row = "{}".format("RESET")
-            continue
-        
-        elif steps_so_far == REAL_EPISODE_LENGTH:
-            break
-        with open(csv_filepath, mode="a") as file:
-            writer  = csv.writer(file, delimiter=",")
-            csv_header = ["Steps"]
-            writer.writerow(csv_row)
+    env.save_action_log()
 
-    #print("------")
-    #print("Accumulated Reward: {:.3f}".format(accumulated_reward))
+    print("------")
+    print("Accumulated Reward: {:.3f}".format(accumulated_reward))
 
 
 if __name__ == "__main__":

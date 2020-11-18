@@ -10,6 +10,7 @@ import joblib
 import copy
 import time
 from scipy.interpolate import interp1d
+import csv
 
 from datetime import date
 from trifinger_simulation import TriFingerPlatform
@@ -28,9 +29,9 @@ except ImportError:
 
 
 # Parameters for tuning gains
-KP = [200, 200, 200,
-      200, 200, 200,
-      200, 200, 200]
+KP = [200, 200, 300,
+      200, 200, 300,
+      200, 200, 300]
 KV = [0.5, 0.5, 0.5, 
       0.5, 0.5, 0.5,
       0.5, 0.5, 0.5]
@@ -50,9 +51,10 @@ class ImpedanceControllerPolicy:
         self.init_face = None
         self.goal_face = None
         self.platform = None
-        print("KP: {}".format(KP))
-        print("KV: {}".format(KV))
+        # print("KP: {}".format(KP))
+        # print("KV: {}".format(KV))
         self.start_time = None
+        self.WAIT_TIME = 1
 
         # Counters
         self.step_count = 0 # Number of times predict() is called
@@ -60,15 +62,32 @@ class ImpedanceControllerPolicy:
 
         self.grasped = False
         self.traj_to_object_computed = False
+        self.custom_pinocchio_utils = None
+
+        # CSV logging file path # need leading / for singularity image
+        if osp.exists("/output"):
+            self.csv_filepath           = "/output/control_policy_data.csv"
+            self.grasp_trajopt_filepath = "/output/grasp_trajopt_data"
+            self.lift_trajopt_filepath  = "/output/lift_trajopt_data"
+        else:
+            self.csv_filepath           = "./output/control_policy_data.csv"
+            self.grasp_trajopt_filepath = "./output/grasp_trajopt_data"
+            self.lift_trajopt_filepath  = "./output/lift_trajopt_data"
+
+    def mock_pinocchio_utils(self, platform):
+        self.custom_pinocchio_utils = CustomPinocchioUtils(
+                    platform.simfinger.finger_urdf_path,
+                    platform.simfinger.tip_link_names)
 
     def reset_policy(self, platform=None):
         self.step_count = 0
         if platform:
             self.platform = platform
 
-        self.custom_pinocchio_utils = CustomPinocchioUtils(
-                self.platform.simfinger.finger_urdf_path,
-                self.platform.simfinger.tip_link_names)
+        if self.custom_pinocchio_utils is None:
+            self.custom_pinocchio_utils = CustomPinocchioUtils(
+                    self.platform.simfinger.finger_urdf_path,
+                    self.platform.simfinger.tip_link_names)
 
         init_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
         self.init_ft_pos = self.get_fingertip_pos_wf(init_position)
@@ -78,16 +97,18 @@ class ImpedanceControllerPolicy:
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
 
-        csv_row = "step,timestamp,"
+        csv_header = ["step", "timestamp"]
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for i in range(9):
-            csv_row += "desired_ft_pos_{},".format(i)
+            csv_header.append("desired_ft_pos_{}".format(i))
         for i in range(9):
-            csv_row += "desired_ft_vel_{},".format(i)
-        # print(csv_row)
+            csv_header.append("desired_ft_vel_{}".format(i))
+        with open(self.csv_filepath, mode="a") as fid:
+            writer  = csv.writer(fid, delimiter=",")
+            writer.writerow(csv_header)
 
         # Define nlp for finger traj opt
-        nGrid = 50
+        nGrid = 40
         dt = 0.04
         self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
 
@@ -126,18 +147,23 @@ class ImpedanceControllerPolicy:
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
             
-        x0 = np.concatenate([obj_pose.position, obj_pose.orientation])[None]
+        # Clip obj z coord to half width of cube
+        clipped_pos = obj_pose.position.copy()
+        clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBE_WIDTH/2) 
+        x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
 
-        print(x0)
-        print(x_goal)
+        print("Object pose position: {}".format(obj_pose.position))
+        print("Object pose orientation: {}".format(obj_pose.orientation))
+        print("Traj lift x0: {}".format(repr(x0)))
+        print("Traj lift x_goal: {}".format(repr(x_goal)))
         # Get initial fingertip positions in world frame
         current_position, _ = get_robot_position_velocity(observation)
         
         self.x_soln, self.dx_soln, l_wf = c_utils.run_fixed_cp_traj_opt(
                 obj_pose, self.cp_params, current_position, self.custom_pinocchio_utils,
-                x0, x_goal, nGrid, dt)
+                x0, x_goal, nGrid, dt, npz_filepath = self.lift_trajopt_filepath)
 
         ft_pos = np.zeros((nGrid, 9))
         ft_vel = np.zeros((nGrid, 9))
@@ -153,20 +179,23 @@ class ImpedanceControllerPolicy:
             ft_vel[t_i, :] = np.tile(self.dx_soln[t_i, 0:3],3)
 
         # Number of interpolation points
-        interp_n = 64
+        interp_n = 26
 
-        # Linearly interpolate between each waypoint (row)
+        # Linearly interpolate between each position waypoint (row) and force waypoint
         # Initial row indices
         row_ind_in = np.arange(nGrid)
         # Output row coordinates
         row_coord_out = np.linspace(0, nGrid - 1, interp_n * (nGrid-1) + nGrid)
         # scipy.interpolate.interp1d instance
         itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
-        itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
+        #itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
         itp_lwf = interp1d(row_ind_in, l_wf, axis=0)
         self.ft_pos_traj = itp_pos(row_coord_out)
-        self.ft_vel_traj = itp_vel(row_coord_out)
+        #self.ft_vel_traj = itp_vel(row_coord_out)
         self.l_wf_traj = itp_lwf(row_coord_out)
+
+        # Zero-order hold for velocity waypoints
+        self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
     """
     Run trajectory optimization to move fingers to contact points on object
@@ -190,7 +219,6 @@ class ImpedanceControllerPolicy:
     """
     def run_finger_traj_opt(self, observation, ft_goal):
         nGrid = self.finger_nlp.nGrid
-        dt = self.finger_nlp.nGrid
         self.traj_waypoint_counter = 0
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
@@ -206,13 +234,13 @@ class ImpedanceControllerPolicy:
         #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
         #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
-        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose)
+        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
 
-        print("FT_GOAL: {}".format(ft_goal))
-        print(ft_pos[-1,:])
+        # print("FT_GOAL: {}".format(ft_goal))
+        # print(ft_pos[-1,:])
     
         # Number of interpolation points
-        interp_n = 32
+        interp_n = 26
 
         # Linearly interpolate between each waypoint (row)
         # Initial row indices
@@ -221,10 +249,12 @@ class ImpedanceControllerPolicy:
         row_coord_out = np.linspace(0, nGrid - 1, interp_n * (nGrid-1) + nGrid)
         # scipy.interpolate.interp1d instance
         itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
-        itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
+        #itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
         self.ft_pos_traj = itp_pos(row_coord_out)
-        self.ft_vel_traj = itp_vel(row_coord_out)
+        #self.ft_vel_traj = itp_vel(row_coord_out)
         self.l_wf_traj = None
+        # Zero-order hold for velocity waypoints
+        self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
     def predict(self, full_observation):
         self.step_count += 1
@@ -237,7 +267,7 @@ class ImpedanceControllerPolicy:
         else:
             t = time.time() - self.start_time
 
-        if not self.traj_to_object_computed and t > 3:
+        if not self.traj_to_object_computed and t > self.WAIT_TIME:
             self.set_traj_to_object(full_observation)
             self.traj_to_object_computed = True
 
@@ -266,15 +296,17 @@ class ImpedanceControllerPolicy:
             self.tip_forces_wf = self.l_wf_traj[traj_waypoint_i, :]
 
         # Print fingertip goal position and velocities to stdout for logging
-        csv_row = "{},{},".format(self.step_count,time.time())
+        row = [self.step_count, time.time()]
         # Formulate row to print csv_row = "{},".format(self.step_count)
         for f_i in range(3):
             for d in range(3):
-                csv_row += "{},".format(fingertip_pos_goal_list[f_i][d])
+                row.append(fingertip_pos_goal_list[f_i][d])
         for f_i in range(3):
             for d in range(3):
-                csv_row += "{},".format(fingertip_vel_goal_list[f_i][d])
-        # print(csv_row)
+                row.append(fingertip_vel_goal_list[f_i][d])
+        with open(self.csv_filepath, mode="a") as fid:
+            writer  = csv.writer(fid, delimiter=",")
+            writer.writerow(row)
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(fingertip_pos_goal_list,
@@ -364,7 +396,7 @@ class HierarchicalControllerPolicy:
         self.rl_frameskip = self.rl_env.unwrapped.frameskip
         self.observation_names = list(self.rl_env.unwrapped.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
-        self.sb_policy = sb_utils.make_her_sac_model(None, None)
+        self.sb_policy = sb_utils.make_model(None, None)
         self.sb_policy.load(load_dir)
         self.rl_policy = lambda obs: self.sb_policy.predict(obs)[0]
 
@@ -433,7 +465,7 @@ class HierarchicalControllerPolicy:
             goal_pose = get_pose_from_observation(observation, goal_pose=True)
             if self.difficulty == 4:
                 self.impedance_controller.set_init_goal(
-                        init_pose, goal_pose, flip=flip_needed(init_pose, goal_pose))
+                        init_pose, goal_pose, flip=False)
             else:
                 self.impedance_controller.set_init_goal(init_pose, goal_pose)
 
@@ -566,7 +598,7 @@ def load_pytorch_policy(fpath, itr, deterministic=False):
     """ Load a pytorch policy saved with Spinning Up Logger."""
 
     fname = osp.join(fpath, 'pyt_save', 'model'+itr+'.pt')
-    print('\n\nLoading from %s.\n\n'%fname)
+    # print('\n\nLoading from %s.\n\n'%fname)
 
     model = torch.load(fname)
 

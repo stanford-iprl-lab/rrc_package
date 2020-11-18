@@ -4,4 +4,5 @@ python/rrc_iprl_package.egg-info/
 *.swp
 
 logs/
-
+**/data
+*.csv

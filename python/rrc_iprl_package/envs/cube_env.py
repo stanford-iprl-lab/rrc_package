@@ -46,12 +46,13 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def __init__(
         self,
         cube_goal_pose: dict,
-        cube_initial_pose: dict,
-        goal_difficulty: int,
+        cube_initial_pose: dict = None,
+        goal_difficulty: int = 1,
         action_type: ActionType = ActionType.POSITION,
         visualization: bool = True,
         frameskip: int = 1,
         num_steps: int = None,
+        save_npz: str = None,
     ):
         """Initialize.
 
@@ -72,7 +73,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if not isinstance(cube_goal_pose, dict):
             self.goal = cube_goal_pose.as_dict()
         self.info = {"difficulty": goal_difficulty}
-        self.initial_pose = cube_initial_pose if cube_initial_pose else move_cube.sample_goal(-1)
+        self.initial_pose = move_cube.Pose.from_dict(cube_initial_pose) if cube_initial_pose else move_cube.sample_goal(-1)
 
         self.action_type = action_type
 
@@ -125,6 +126,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 ),
             }
         )
+        self.save_npz = save_npz
 
         # verify that the given goal pose is contained in the cube state space
         if not object_state_space.contains(self.goal):
@@ -164,6 +166,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "achieved_goal": object_state_space,
             }
         )
+        self.save_npz = save_npz
+        self.action_log = []
 
     def compute_reward(self, achieved_goal, desired_goal, info):
         """Compute the reward for the given achieved and desired goal.
@@ -249,11 +253,27 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 break
 
         is_done = self.step_count == self.episode_length
+        self.write_action_log(observation, action, reward)
 
         self._last_obs = observation
         self._last_reward = reward
 
         return observation, reward, is_done, self.info
+
+    def write_action_log(self, observation, action, reward):
+        if self.save_npz:
+            self.action_log.append(dict(
+                observation=observation, action=action, t=self.step_count,
+                reward=reward))
+
+    def save_action_log(self):
+        if self.save_npz and self.action_log:
+            self.action_log.append(dict(initial_pose=self.initial_pose.to_dict(),
+                                   goal_pose=self.goal))
+
+            np.savez(self.save_npz, action_log=self.action_log, allow_pickle=True)
+            del self.action_log
+        self.action_log = []
 
     def reset(self):
         # By changing the `_reset_*` method below you can switch between using
@@ -261,6 +281,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
         print("Resetting")
+        if self.save_npz and self.action_log:
+            self.save_action_log()
+
         if robot_fingers is not None:
             self._reset_platform_frontend()
         else:
@@ -396,12 +419,13 @@ class RealRobotCubeEnv(gym.GoalEnv):
 class CubeEnv(RealRobotCubeEnv):
     def __init__(
         self,
-        initializer ,
+        initializer,
         goal_difficulty: int,
         action_type: ActionType = ActionType.POSITION,
-        visualization: bool = True,
+        visualization: bool = False,
         frameskip: int = 1,
         num_steps: int = None,
+        save_npz: str = None
     ):
         """Initialize.
 
@@ -418,12 +442,12 @@ class CubeEnv(RealRobotCubeEnv):
         self.initializer = initializer
         initial_pose = self.initializer.get_initial_state().to_dict()
         goal_pose = self.initializer.get_goal().to_dict()
-        super().__init__(goal_pose, initial_pose,goal_difficulty,
-        action_type, visualization, frameskip, num_steps)
+        super().__init__(goal_pose, initial_pose, goal_difficulty,
+            action_type, visualization, frameskip, num_steps, save_npz)
 
     def reset(self): 
         self.initial_pose = self.initializer.get_initial_state()
-        self.goal = self.initializer.get_goal()
+        self.goal = self.initializer.get_goal().to_dict()
         return super(CubeEnv, self).reset()
 
 
