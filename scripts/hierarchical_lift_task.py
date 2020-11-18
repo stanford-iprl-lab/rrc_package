@@ -95,11 +95,11 @@ def main():
     else:
         print("--------other difficulties--------")
         old_mode = policy.mode
-        while not is_done or steps_so_far != MAX_STEPS:
+        while steps_so_far != EP_LEN:
             # if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
 
             # if virtual episode is not done running and real EP_LEN hasn't been reached, keep running
-            if not is_done and steps_so_far != EP_LEN:     
+            if not is_done:     
                 action = policy.predict(observation)
                 observation, reward, is_done, info = env.step(action)
                 if old_mode != policy.mode:
@@ -110,7 +110,7 @@ def main():
                 steps_so_far += 1
             # if current virtual episode is done, but hasn't reached the end of real episode,
             # reset and run the next episode 
-            elif is_done is True and steps_so_far != EP_LEN:
+            else:
                 print("RESET in hierarchical_lift: ", steps_so_far)
                 observation = env.reset()
                 policy.reset_policy()
