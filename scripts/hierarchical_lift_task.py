@@ -95,7 +95,7 @@ def main():
     else:
         print("--------other difficulties--------")
         old_mode = policy.mode
-        while not is_done:
+        while not is_done or steps_so_far != MAX_STEPS:
             # if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
 
             # if virtual episode is not done running and real EP_LEN hasn't been reached, keep running
@@ -103,7 +103,7 @@ def main():
                 action = policy.predict(observation)
                 observation, reward, is_done, info = env.step(action)
                 if old_mode != policy.mode:
-                    print('mode changed: {} to {}'.format(old_mode, policy.mode))
+                    # print('mode changed: {} to {}'.format(old_mode, policy.mode))
                     old_mode = policy.mode
                 #print("reward:", reward)
                 accumulated_reward += reward
@@ -117,7 +117,8 @@ def main():
                 is_done = False
                 steps_so_far += 1
                 continue
-            elif MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+            # elif MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+            print("steps_so_far: ", steps_so_far)
     env.save_action_log()
 
     print("------")
