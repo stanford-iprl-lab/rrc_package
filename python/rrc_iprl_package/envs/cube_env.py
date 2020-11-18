@@ -327,13 +327,13 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def _reset_platform_frontend(self):
         """Reset the platform frontend."""
         # reset is not really possible
-        print("Hardware Restting")
+        print("Hardware Resetting")
         if self.platform is None:
-            print("Hardware Restting Init")
+            print("Hardware Resetting Init")
             self.platform = robot_fingers.TriFingerPlatformFrontend()
             self.num_reset = 0  
         else:
-            print("Hardware Restting Further")
+            print("Hardware Resetting Further")
             self.num_reset += 1        
 
     def _reset_direct_simulation(self):
@@ -341,7 +341,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         With this the env can be used without backend.
         """
-        print("Simulation Restting")
+        print("Simulation Resetting")
         # initialize number of resets here too so overall reset() function works
         self.num_reset = 0
         

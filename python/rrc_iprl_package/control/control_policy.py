@@ -486,7 +486,7 @@ class HierarchicalControllerPolicy:
         return robot_position
 
     def predict(self, observation):
-        print("self.mode: ", self.mode)
+        # print("self.mode: ", self.mode)
         if not self.traj_initialized and self.initialize_traj_opt(observation['impedance']):
             self.set_waypoints(observation['impedance'])
 

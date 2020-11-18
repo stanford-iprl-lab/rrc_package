@@ -99,7 +99,8 @@ def main():
             # if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
 
             # if virtual episode is not done running and real EP_LEN hasn't been reached, keep running
-            if not is_done:     
+            if not is_done:    
+                print("normal stepping: ", env.platform) 
                 action = policy.predict(observation)
                 observation, reward, is_done, info = env.step(action)
                 if old_mode != policy.mode:
@@ -111,7 +112,7 @@ def main():
             # if current virtual episode is done, but hasn't reached the end of real episode,
             # reset and run the next episode 
             else:
-                print("RESET in hierarchical_lift: ", steps_so_far)
+                print("RESET in hierarchical_lift: ", env.platform)
                 observation = env.reset()
                 policy.reset_policy()
                 is_done = False
