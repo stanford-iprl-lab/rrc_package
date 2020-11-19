@@ -17,7 +17,7 @@ class PolicyMode(enum.Enum):
 
 # Object properties
 OBJ_MASS = 0.016 # 16 grams
-OBJ_SIZE = move_cube._CUBOID_SIZE + 0.016
+OBJ_SIZE = move_cube._CUBOID_SIZE + 0.012
 
 # Here, hard code the base position of the fingers (as angle on the arena)
 r = 0.15
@@ -399,6 +399,31 @@ def get_lifting_cp_params(obj_pose):
     #cp_params[0] = OBJ_FACES_INFO[2]["center_param"].copy()
     return cp_params
 
+def get_pre_grasp_ft_goal(obj_pose, fingertips_current_wf, cp_params):
+    ft_goal = np.zeros(9)
+    incr = 0.03
+
+    # Get list of desired fingertip positions
+    cp_wf_list = get_cp_pos_wf_from_cp_params(cp_params, obj_pose.position, obj_pose.orientation)
+
+    for f_i in range(3):
+        f_wf = cp_wf_list[f_i]
+        if cp_params[f_i] is None:
+            f_new_wf = fingertips_current_wf[f_i]
+        else:
+            # Get face that finger is on
+            face = get_face_from_cp_param(cp_params[f_i])
+            f_of = get_of_from_wf(f_wf, obj_pose)
+
+            # Release object
+            f_new_of = f_of - incr * OBJ_FACES_INFO[face]["up_axis"]
+
+            # Convert back to wf
+            f_new_wf = get_wf_from_of(f_new_of, obj_pose)
+
+        ft_goal[3*f_i:3*f_i+3] = f_new_wf
+    return ft_goal
+
 """
 Set up traj opt for fingers and static object
 """
@@ -420,7 +445,7 @@ def get_finger_waypoints(nlp, ft_goal, q_cur, obj_pose, npz_filepath = None):
     return ft_pos, ft_vel
 
 ##############################################################################
-# Lift mode functions
+# Flip mode functions
 ##############################################################################
 
 """

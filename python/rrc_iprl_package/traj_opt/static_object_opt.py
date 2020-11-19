@@ -152,8 +152,9 @@ class StaticObjectOpt:
       cost += 0.5 * dq_cur @ R @ dq_cur.T
 
     # Collision cost
-    collision_weight = 0.03 # Increase to encourage collision avoidance
-    pnorm_min = 2
+    collision_weight = 0 # Increase to encourage collision avoidance
+    #collision_weight = 0.03 # Increase to encourage collision avoidance
+    pnorm_min = 1.2
     alpha = 8
     for t_i in range(t.shape[0]):
       q_cur = q[t_i, :]
@@ -168,7 +169,6 @@ class StaticObjectOpt:
             #penalty = fmax(collision_weight * (pnorm_min - pnorm), 0) 
             # smooth max
             penalty = ((pnorm_min - pnorm) * np.e**(alpha*(pnorm_min - pnorm)))/(1 + np.e**(alpha*(pnorm_min - pnorm)))
-            penalty = 0
             cost += penalty * collision_weight
 
     return cost

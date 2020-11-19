@@ -60,6 +60,7 @@ class ImpedanceControllerPolicy:
         self.step_count = 0 # Number of times predict() is called
         self.traj_waypoint_counter = 0
 
+        self.fingers_lowered = False
         self.grasped = False
         self.traj_to_object_computed = False
 
@@ -267,29 +268,41 @@ class ImpedanceControllerPolicy:
                 cp_wf_list[i] = current_ft_pos[i]
 
         ft_goal = np.asarray(cp_wf_list).flatten()
-        self.run_finger_traj_opt(observation, ft_goal)
+        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
+        self.l_wf_traj = None
+        self.x_traj = None
 
+    """
+    Run traj opt to lower fingers to ground level
+    """
+    def set_traj_lower_finger(self, observation):
+        self.traj_waypoint_counter = 0
+        # First, set cp_params based on mode
+        self.set_cp_params(observation)
+
+        # Get object pose
+        obj_pose = get_pose_from_observation(observation)
+
+        # Get joint positions
+        current_position, _ = get_robot_position_velocity(observation)
+
+        # Get current fingertip positions
+        current_ft_pos = self.get_fingertip_pos_wf(current_position)
+
+        ft_goal = c_utils.get_pre_grasp_ft_goal(obj_pose, current_ft_pos, self.cp_params)
+
+        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
+        self.l_wf_traj = None
+        self.x_traj = None
+    
 
     """
     Run trajectory optimization for fingers, given fingertip goal positions
     ft_goal: (9,) array of fingertip x,y,z goal positions in world frame
     """
-    def run_finger_traj_opt(self, observation, ft_goal):
+    def run_finger_traj_opt(self, current_position, obj_pose, ft_goal):
         nGrid = self.finger_nlp.nGrid
         self.traj_waypoint_counter = 0
-        # Get object pose
-        obj_pose = get_pose_from_observation(observation)
-        # Get initial fingertip positions in world frame
-        current_position, _ = get_robot_position_velocity(observation)
-
-        # Where the fingers start on the real robot (once they retract)
-        #current_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
-        #self.init_ft_pos = self.get_fingertip_pos_wf(current_position)
-        #self.init_ft_pos = np.asarray(current_ft_pos).flatten()
-        #self.ft_tracking_init_pos_list = []
-        #self.ft_tracking_init_pos_list.append(np.array([0.08, 0.07, 0.07]))
-        #self.ft_tracking_init_pos_list.append(np.array([0.01, -0.1, 0.07]))
-        #self.ft_tracking_init_pos_list.append(np.array([-0.1, 0.04, 0.07]))
 
         ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
 
@@ -307,12 +320,12 @@ class ImpedanceControllerPolicy:
         # scipy.interpolate.interp1d instance
         itp_pos = interp1d(row_ind_in, ft_pos, axis=0)
         #itp_vel = interp1d(row_ind_in, ft_vel, axis=0)
-        self.ft_pos_traj = itp_pos(row_coord_out)
-        #self.ft_vel_traj = itp_vel(row_coord_out)
-        self.l_wf_traj = None
-        self.x_traj = None
+        ft_pos_traj = itp_pos(row_coord_out)
+
         # Zero-order hold for velocity waypoints
-        self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
+        ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
+
+        return ft_pos_traj, ft_vel_traj
 
     def predict(self, full_observation):
         self.step_count += 1
@@ -329,15 +342,18 @@ class ImpedanceControllerPolicy:
         else:
             t = time.time() - self.start_time
 
-        if not self.traj_to_object_computed and t > self.WAIT_TIME:
-            self.set_traj_to_object(full_observation)
-            self.traj_to_object_computed = True
-
-        # HANDLE ANY TRAJECTORY RECOMPUTATION HERE
-        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0] and not self.grasped:
-            # If at end of trajectory, do fixed cp traj opt
-            self.set_traj_lift_object(full_observation, nGrid = 50, dt = 0.08)
-            self.grasped = True
+        if not self.fingers_lowered and t > self.WAIT_TIME:
+            self.set_traj_lower_finger(full_observation)
+            self.fingers_lowered = True
+    
+        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
+            if not self.traj_to_object_computed:
+                self.set_traj_to_object(full_observation)
+                self.traj_to_object_computed = True
+            elif not self.grasped:
+                # If at end of trajectory, do fixed cp traj opt
+                self.set_traj_lift_object(full_observation, nGrid = 50, dt = 0.08)
+                self.grasped = True
 
         if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
             traj_waypoint_i = self.ft_pos_traj.shape[0] - 1
