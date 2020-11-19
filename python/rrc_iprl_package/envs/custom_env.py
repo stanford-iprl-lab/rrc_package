@@ -436,9 +436,6 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
         reward = 0.0
         for _ in range(num_steps):
-            self.step_count += 1
-            #if self.step_count > self.episode_length:
-            #    raise RuntimeError("Exceeded number of steps for one episode.")
 
             # send action to robot
             robot_action = self._gym_action_to_robot_action(action)
@@ -454,6 +451,8 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 observation["desired_goal"],
                 self.unwrapped.info,
             )
+
+            print("step_count: {}, episode_length: {}".format(self.step_count, self.episode_length))
 
             if self.step_count >= self.episode_length:
                 break
