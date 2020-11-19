@@ -416,12 +416,12 @@ def get_lifting_cp_params(obj_pose):
     if face not in CUBOID_SHORT_FACES:
         alternate_axis = abs(furthest_axis - 1)
         if alternate_axis == 0:
-            if base_pos_list_of[curr_finger_id][0, y_ind] > 0:
+            if finger_base_of[curr_finger_id][0, y_ind] > 0:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
             else:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
         else:
-            if base_pos_list_of[curr_finger_id][0, x_ind] > 0:
+            if finger_base_of[curr_finger_id][0, x_ind] > 0:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
             else:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
