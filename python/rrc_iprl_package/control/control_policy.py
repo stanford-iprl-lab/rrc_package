@@ -81,10 +81,12 @@ class ImpedanceControllerPolicy:
         self.l_step_count       = [] # step_count
         self.l_timestamp        = [] # time
         self.l_desired_ft_pos   = [] # fingertip positions - desired
-        self.l_desired_ft_vel   = [] # fingertip velocities - desired
         self.l_actual_ft_pos    = [] # fingertip positions - actual (computed from observation)
+        self.l_desired_ft_vel   = [] # fingertip velocities - desired
         self.l_desired_obj_pose = [] # object position - desired  
+        self.l_observed_obj_pose = [] # object position - desired  
         self.l_desired_ft_force = [] # fingerip forces - desired
+        self.l_desired_torque = []
 
     """
     Store logs in npz file
@@ -97,7 +99,9 @@ class ImpedanceControllerPolicy:
                  desired_ft_vel   = np.asarray(self.l_desired_ft_vel),
                  actual_ft_pos    = np.asarray(self.l_actual_ft_pos),
                  desired_obj_pose = np.squeeze(np.asarray(self.l_desired_obj_pose)),
-                 desired_ft_force = np.squeeze(np.asarray(self.l_desired_ft_force))
+                 observed_obj_pose = np.squeeze(np.asarray(self.l_observed_obj_pose)),
+                 desired_ft_force = np.squeeze(np.asarray(self.l_desired_ft_force)),
+                 desired_torque   = np.squeeze(np.asarray(self.l_desired_torque)),
                 )
 
     def reset_policy(self, platform=None):
@@ -162,7 +166,7 @@ class ImpedanceControllerPolicy:
             
         # Clip obj z coord to half width of cube
         clipped_pos = obj_pose.position.copy()
-        clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[1]/2) 
+        clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2) 
         x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
@@ -331,6 +335,9 @@ class ImpedanceControllerPolicy:
         self.step_count += 1
         observation = full_observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
+
+        # Get object pose
+        obj_pose = get_pose_from_observation(full_observation)
         
         # Get current fingertip position
         cur_ft_pos = self.get_fingertip_pos_wf(current_position)
@@ -389,11 +396,14 @@ class ImpedanceControllerPolicy:
         self.l_desired_ft_pos.append(np.asarray(fingertip_pos_goal_list).flatten())  
         self.l_desired_ft_vel.append(np.asarray(fingertip_vel_goal_list).flatten())  
         self.l_actual_ft_pos.append(cur_ft_pos)  
+        self.l_observed_obj_pose.append(np.concatenate((obj_pose.position,obj_pose.orientation)))
+        self.l_desired_torque.append(np.asarray(torque))
+
         if self.x_traj is None:
             # Nan if there is no obj traj (during grasping)
             self.l_desired_obj_pose.append(np.ones(7) * np.nan)
         else:
-            self.l_desired_obj_pose.append(self.x_traj[self.traj_waypoint_counter, :])
+            self.l_desired_obj_pose.append(self.x_traj[traj_waypoint_i, :])
         if self.tip_forces_wf is None:
             # Nan if no desired ft forces (during grasping)
             self.l_desired_ft_force.append(np.ones(9) * np.nan)

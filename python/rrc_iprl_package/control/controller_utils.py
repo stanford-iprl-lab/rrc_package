@@ -187,8 +187,6 @@ cube: Block object, which contains object shape info
 def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf):
     cp = get_cp_of_from_cp_param(cp_param)
 
-    cp.print_pt_of()
-
     rotation = Rotation.from_quat(cube_quat_wf)
     translation = np.asarray(cube_pos_wf)
 
@@ -388,10 +386,11 @@ def get_lifting_cp_params(obj_pose):
 
     # Set contact point params for two long faces
     cp_params = [None, None, None]
+    height_param = -0.65 # Always want cps to be at this height
     for face, finger_id in finger_assignments.items():
         param = OBJ_FACES_INFO[face]["center_param"].copy()
+        param += OBJ_FACES_INFO[OBJ_FACES_INFO[ground_face]["opposite_face"]]["center_param"] * height_param
         cp_params[finger_id] = param
-
 
     # Assign remaining finger to either face 1 or 2 (short face)
     # TODO: or, no face at all (which means need to modify fixed_cp_traj_opt)

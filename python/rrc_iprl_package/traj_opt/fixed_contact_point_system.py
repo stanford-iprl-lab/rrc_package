@@ -605,7 +605,7 @@ class FixedContactPointSystem:
     x_range = np.array([
                        [-0.15, 0.15], # x coord range
                        [-0.15,0.15], # y coord range
-                       [0.0325,0.15], # z coord range
+                       [0.01,0.15], # z coord range TODO Hardcoded
                        [-np.inf, np.inf], # qx range
                        [-np.inf, np.inf], # qy range
                        [-np.inf, np.inf], # qz range
