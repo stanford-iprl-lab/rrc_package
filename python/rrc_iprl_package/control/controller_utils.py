@@ -334,6 +334,7 @@ Assign closest cube face to each finger
 Since we are lifting object, don't worry about wf z-axis, just care about wf xy-plane
 """
 def get_lifting_cp_params(obj_pose):
+    # TODO this is assuming that cuboid is always resting on one of its long sides
     # face that is touching the ground
     ground_face = get_closest_ground_face(obj_pose)
 
@@ -392,7 +393,43 @@ def get_lifting_cp_params(obj_pose):
         param += OBJ_FACES_INFO[OBJ_FACES_INFO[ground_face]["opposite_face"]]["center_param"] * height_param
         cp_params[finger_id] = param
 
-    # Assign remaining finger to either face 1 or 2 (short face)
+    # Assign remaining finger to either face 1 or 2 (short faces)
+    max_ind = np.unravel_index(np.nanargmax(xy_distances), xy_distances.shape)
+    curr_finger_id = max_ind[0] 
+    furthest_axis = max_ind[1]
+
+    # Do the assignment
+    x_dist = xy_distances[curr_finger_id, 0]
+    y_dist = xy_distances[curr_finger_id, 1]
+    if furthest_axis == 0: # distance to x axis is greater than to y axis
+        if finger_base_of[curr_finger_id][0, y_ind] > 0:
+            face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
+        else:
+            face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
+    else:
+        if finger_base_of[curr_finger_id][0, x_ind] > 0:
+            face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
+        else:
+            face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
+
+    # Handle faces that may already be assigned
+    if face not in CUBOID_SHORT_FACES:
+        alternate_axis = abs(furthest_axis - 1)
+        if alternate_axis == 0:
+            if base_pos_list_of[curr_finger_id][0, y_ind] > 0:
+                face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
+            else:
+                face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
+        else:
+            if base_pos_list_of[curr_finger_id][0, x_ind] > 0:
+                face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
+            else:
+                face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
+
+    param = OBJ_FACES_INFO[face]["center_param"].copy()
+    param += OBJ_FACES_INFO[OBJ_FACES_INFO[ground_face]["opposite_face"]]["center_param"] * height_param
+    cp_params[curr_finger_id] = param
+
     # TODO: or, no face at all (which means need to modify fixed_cp_traj_opt)
     # TODO Hardcoded right now
     #cp_params[0] = OBJ_FACES_INFO[2]["center_param"].copy()
