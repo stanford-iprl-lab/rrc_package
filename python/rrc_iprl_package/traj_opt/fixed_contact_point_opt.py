@@ -223,12 +223,12 @@ class FixedContactPointOpt:
         ubg.append(0)
 
     # Linearized friction cone constraints
-    f_constraints = system.friction_cone_constraints(l)
-    for r in range(f_constraints.shape[0]):
-      for c in range(f_constraints.shape[1]):
-        g.append(f_constraints[r,c])
-        lbg.append(0)
-        ubg.append(np.inf)
+    #f_constraints = system.friction_cone_constraints(l)
+    #for r in range(f_constraints.shape[0]):
+    #  for c in range(f_constraints.shape[1]):
+    #    g.append(f_constraints[r,c])
+    #    lbg.append(0)
+    #    ubg.append(np.inf)
 
     #tol = 1e-16
     x_goal_constraints = system.x_goal_constraint(s, a, x_goal)
