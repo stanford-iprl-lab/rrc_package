@@ -327,6 +327,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def _reset_platform_frontend(self):
         """Reset the platform frontend."""
         # reset is not really possible
+        import pdb; pdb.set_trace()
         print("Hardware Resetting")
         if self.platform is None:
             print("Hardware Resetting Init")
