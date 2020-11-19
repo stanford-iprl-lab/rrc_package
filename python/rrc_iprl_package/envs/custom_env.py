@@ -455,8 +455,8 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 self.unwrapped.info,
             )
 
-        if self.step_count >= self.episode_length:
-            break
+            if self.step_count >= self.episode_length:
+                break
 
         self.unwrapped.write_action_log(observation, action, reward)
 
