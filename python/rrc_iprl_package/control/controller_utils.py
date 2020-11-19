@@ -387,7 +387,7 @@ def get_lifting_cp_params(obj_pose):
 
     # Set contact point params for two long faces
     cp_params = [None, None, None]
-    height_param = -0.65 # Always want cps to be at this height
+    height_param = -0.85 # Always want cps to be at this height
     for face, finger_id in finger_assignments.items():
         param = OBJ_FACES_INFO[face]["center_param"].copy()
         param += OBJ_FACES_INFO[OBJ_FACES_INFO[ground_face]["opposite_face"]]["center_param"] * height_param
