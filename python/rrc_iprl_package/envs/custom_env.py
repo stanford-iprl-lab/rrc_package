@@ -455,6 +455,8 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 self.unwrapped.info,
             )
 
+            print("self.step_count: {} self.episode_length: {}".format(self.step_count, self.episode_length))
+
             if self.step_count >= self.episode_length:
                 break
 
