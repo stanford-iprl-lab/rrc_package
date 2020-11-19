@@ -238,7 +238,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
             self.step_count = t
             # make sure to not exceed the episode length
-            if self.step_count >= self.episode_length - 1:
+            if self.step_count >= self.episode_length:
                 break
 
         is_done = self.step_count == self.episode_length
