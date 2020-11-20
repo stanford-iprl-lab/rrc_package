@@ -360,7 +360,7 @@ def get_lifting_cp_params(obj_pose):
         
         xy_distances[f_i, 0] = np.sign(f_of[0,y_ind]) * x_dist
         xy_distances[f_i, 1] = np.sign(f_of[0,x_ind]) * y_dist
-        
+    
     free_faces = \
         [x for x in OBJ_FACES_INFO[ground_face]["adjacent_faces"] if x not in CUBOID_SHORT_FACES]
 
@@ -382,58 +382,113 @@ def get_lifting_cp_params(obj_pose):
                 f_i = np.nanargmin(xy_distances[:,0])
             else:
                 f_i = np.nanargmax(xy_distances[:,0])
-        finger_assignments[face] = f_i
+        finger_assignments[face] = [f_i]
         xy_distances[f_i, :] = np.nan
 
+    # Assign last finger to one of the long faces
+    max_ind = np.unravel_index(np.nanargmax(xy_distances), xy_distances.shape)
+    curr_finger_id = max_ind[0] 
+    face = assign_faces_to_fingers(obj_pose, [curr_finger_id], free_faces)[curr_finger_id]
+    finger_assignments[face].append(curr_finger_id)
+    
     # Set contact point params for two long faces
     cp_params = [None, None, None]
     height_param = -0.85 # Always want cps to be at this height
-    for face, finger_id in finger_assignments.items():
+    width_param = 0.25 # Always want cps to be at this height
+
+    for face, finger_id_list in finger_assignments.items():
+        print(finger_id_list)
         param = OBJ_FACES_INFO[face]["center_param"].copy()
         param += OBJ_FACES_INFO[OBJ_FACES_INFO[ground_face]["opposite_face"]]["center_param"] * height_param
-        cp_params[finger_id] = param
-
-    # Assign remaining finger to either face 1 or 2 (short faces)
-    max_ind = np.unravel_index(np.nanargmax(xy_distances), xy_distances.shape)
-    curr_finger_id = max_ind[0] 
-    furthest_axis = max_ind[1]
-
-    # Do the assignment
-    x_dist = xy_distances[curr_finger_id, 0]
-    y_dist = xy_distances[curr_finger_id, 1]
-    if furthest_axis == 0: # distance to x axis is greater than to y axis
-        if finger_base_of[curr_finger_id][0, y_ind] > 0:
-            face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
+        if len(finger_id_list) == 2:
+            # Find the closest short face to each finger
+            nearest_short_faces = assign_faces_to_fingers(obj_pose,
+                                                          finger_id_list,
+                                                          CUBOID_SHORT_FACES.copy())
+    
+            for f_i, short_face in nearest_short_faces.items():
+                print(f_i, short_face)
+                new_param = param.copy()
+                new_param += OBJ_FACES_INFO[short_face]["center_param"] * width_param
+                cp_params[f_i] = new_param
+                
         else:
-            face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
-    else:
-        if finger_base_of[curr_finger_id][0, x_ind] > 0:
-            face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
-        else:
-            face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
+            cp_params[finger_id_list[0]] = param
+    print(cp_params)
 
-    # Handle faces that may already be assigned
-    if face not in CUBOID_SHORT_FACES:
-        alternate_axis = abs(furthest_axis - 1)
-        if alternate_axis == 0:
-            if finger_base_of[curr_finger_id][0, y_ind] > 0:
+    return cp_params
+
+"""
+For a specified finger f_i and list of available faces, get closest face
+"""
+def assign_faces_to_fingers(obj_pose, finger_id_list, free_faces):
+
+    ground_face = get_closest_ground_face(obj_pose)
+
+    # Find distance from x axis and y axis, and store in xy_distances
+    # Need some additional logic to prevent multiple fingers from being assigned to same face
+    x_axis = np.array([1,0])
+    y_axis = np.array([0,1])
+
+    # Object frame axis corresponding to plane parallel to ground plane
+    x_ind, y_ind = __get_parallel_ground_plane_xy(ground_face)
+
+    # Transform finger base positions to object frame
+    finger_base_of = []
+    for f_wf in FINGER_BASE_POSITIONS:
+        f_of = get_of_from_wf(f_wf, obj_pose)
+        finger_base_of.append(f_of)
+
+    xy_distances = np.zeros((3, 2)) # Rows: fingers, columns are x and y axis distances
+    for f_i, f_of in enumerate(finger_base_of):
+        point_in_plane = np.array([f_of[0,x_ind], f_of[0,y_ind]]) # Ignore dimension of point that's not in the plane
+        x_dist = __get_distance_from_pt_2_line(x_axis, np.array([0,0]), point_in_plane)
+        y_dist = __get_distance_from_pt_2_line(y_axis, np.array([0,0]), point_in_plane)
+        
+        xy_distances[f_i, 0] = x_dist
+        xy_distances[f_i, 1] = y_dist
+
+    assignments = {}
+    for i in range(3):
+        max_ind = np.unravel_index(np.nanargmax(xy_distances), xy_distances.shape)
+        f_i = max_ind[0]
+        if f_i not in finger_id_list:
+            xy_distances[f_i, :] = np.nan
+            continue
+        furthest_axis = max_ind[1]
+        x_dist = xy_distances[f_i, 0]
+        y_dist = xy_distances[f_i, 1]
+        if furthest_axis == 0: # distance to x axis is greater than to y axis
+            if finger_base_of[f_i][0, y_ind] > 0:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
             else:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
         else:
-            if finger_base_of[curr_finger_id][0, x_ind] > 0:
+            if finger_base_of[f_i][0, x_ind] > 0:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
             else:
                 face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
 
-    param = OBJ_FACES_INFO[face]["center_param"].copy()
-    param += OBJ_FACES_INFO[OBJ_FACES_INFO[ground_face]["opposite_face"]]["center_param"] * height_param
-    cp_params[curr_finger_id] = param
+        # Get alternate closest face
+        if face not in free_faces:
+            alternate_axis = abs(furthest_axis - 1)
+            if alternate_axis == 0:
+                if finger_base_of[f_i][0, y_ind] > 0:
+                    face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][1] # 2
+                else:
+                    face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][0] # 1
+            else:
+                if finger_base_of[f_i][0, x_ind] > 0:
+                    face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][2] # 3
+                else:
+                    face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
 
-    # TODO: or, no face at all (which means need to modify fixed_cp_traj_opt)
-    # TODO Hardcoded right now
-    #cp_params[0] = OBJ_FACES_INFO[2]["center_param"].copy()
-    return cp_params
+        assignments[f_i] = face
+
+        xy_distances[f_i, :] = np.nan
+        free_faces.remove(face)
+
+    return assignments
 
 def get_pre_grasp_ft_goal(obj_pose, fingertips_current_wf, cp_params):
     ft_goal = np.zeros(9)
