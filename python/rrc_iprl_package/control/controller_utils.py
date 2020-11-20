@@ -21,7 +21,7 @@ OBJ_SIZE = move_cube._CUBOID_SIZE + 0.012
 
 # Here, hard code the base position of the fingers (as angle on the arena)
 r = 0.15
-theta_0 = 90
+theta_0 = 80
 theta_1 = 310
 theta_2 = 200
 FINGER_BASE_POSITIONS = [
