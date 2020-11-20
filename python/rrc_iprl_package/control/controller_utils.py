@@ -390,6 +390,8 @@ def get_lifting_cp_params(obj_pose):
     curr_finger_id = max_ind[0] 
     face = assign_faces_to_fingers(obj_pose, [curr_finger_id], free_faces)[curr_finger_id]
     finger_assignments[face].append(curr_finger_id)
+
+    print("finger assignments: {}".format(finger_assignments))
     
     # Set contact point params for two long faces
     cp_params = [None, None, None]
@@ -397,7 +399,6 @@ def get_lifting_cp_params(obj_pose):
     width_param = 0.25 # Always want cps to be at this height
 
     for face, finger_id_list in finger_assignments.items():
-        print(finger_id_list)
         param = OBJ_FACES_INFO[face]["center_param"].copy()
         param += OBJ_FACES_INFO[OBJ_FACES_INFO[ground_face]["opposite_face"]]["center_param"] * height_param
         if len(finger_id_list) == 2:
@@ -407,14 +408,13 @@ def get_lifting_cp_params(obj_pose):
                                                           CUBOID_SHORT_FACES.copy())
     
             for f_i, short_face in nearest_short_faces.items():
-                print(f_i, short_face)
                 new_param = param.copy()
                 new_param += OBJ_FACES_INFO[short_face]["center_param"] * width_param
                 cp_params[f_i] = new_param
                 
         else:
             cp_params[finger_id_list[0]] = param
-    print(cp_params)
+    print("LIFT CP PARAMS: {}".format(cp_params))
 
     return cp_params
 
