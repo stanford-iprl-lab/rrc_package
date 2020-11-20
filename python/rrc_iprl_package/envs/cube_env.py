@@ -5,6 +5,7 @@ import gym
 import numpy as np
 import sys
 import time
+import os
 
 try:
     import robot_interfaces
@@ -78,7 +79,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.action_type = action_type
 
         # CSV logging file path
-        self.csv_filepath = "/output/virtual_reset.csv"
+        if os.path.exists("/output/"):
+            self.csv_filepath = "/output/virtual_reset.csv"
+        else:
+            self.csv_filepath = "./virtual_reset.csv"
 
         with open(self.csv_filepath, mode="a") as file:
             writer  = csv.writer(file, delimiter=",")

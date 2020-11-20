@@ -422,32 +422,37 @@ class HierarchicalControllerPolicy:
         goal_pose = get_pose_from_observation(observation, goal_pose=True)
 
         # TODO: check orientation error
-        if (self.activate_rl(obj_pose) and
-            self.start_mode == PolicyMode.RL_PUSH and
-            self.mode != PolicyMode.RESET):
+        # if the object is not centered, and start mode is RL_PUSH, and not resetting
+        if (self.activate_rl(obj_pose) and self.start_mode == PolicyMode.RL_PUSH and self.mode != PolicyMode.RESET):
+            # if current mode isn't RL_PUSH, set to RL_PUSH and log rl_start_step
             if self.mode != PolicyMode.RL_PUSH:
                 self.mode = PolicyMode.RL_PUSH
                 self.rl_start_step = self.step_count
+            # if current mode is RL_PUSH, and still not centered, reset PolicyMode
             elif self.step_count - self.rl_start_step == self.RL_RETRY_STEPS:
                 self.mode = PolicyMode.RESET
+            # still in RL_PUSH, don't start traj opt
             return False
+        # elif current mode is RL_PUSH
         elif self.mode == PolicyMode.RL_PUSH:
+            # if we're not starting at RL_PUSH
             if self.step_count > 0:
                 self.mode = PolicyMode.RESET
                 return False
             else: # skips reset if starting at RL_PUSH
                 self.mode = PolicyMode.TRAJ_OPT
                 return True
-        elif (self.mode == PolicyMode.RESET and
-              (self.steps_from_reset >= self.RESET_TIME_LIMIT and
-               obj_pose.position[2] < 0.034)):
+        # elif currently resetting and exceeding reset time limit and height is low (on the surface)
+        elif (self.mode == PolicyMode.RESET and (self.steps_from_reset >= self.RESET_TIME_LIMIT and obj_pose.position[2] < 0.034)):
+            # reset step count and try to trigger RL_PUSH
             self.steps_from_reset = 0
+            # if activate_rl returns a large enough value
             if self.activate_rl(obj_pose):
                 self.rl_retries += 1
                 self.mode = PolicyMode.RL_PUSH
                 self.rl_start_step = self.step_count
                 return False
-            else:
+            else:   # object already centered
                 self.mode = PolicyMode.TRAJ_OPT
                 return True
         elif self.mode == PolicyMode.TRAJ_OPT:
@@ -486,25 +491,34 @@ class HierarchicalControllerPolicy:
         return robot_position
 
     def predict(self, observation):
-        # print("self.mode: ", self.mode)
+        print("self.mode: ", self.mode)
         if not self.traj_initialized and self.initialize_traj_opt(observation['impedance']):
+            print("condition 0")
+            self.impedance_controller.traj_to_object_computed = False
+            self.impedance_controller.grasped = False
             self.set_waypoints(observation['impedance'])
 
         if self.mode == PolicyMode.RL_PUSH and self.rl_observation_space is not None:
+            print("condition 1")
             ac = self.rl_policy(observation['rl'])
             ac = np.clip(ac, self.full_action_space['position'].low,
                          self.full_action_space['position'].high)
         elif self.mode == PolicyMode.RESET:
+            print("condition 2")
             ac = self.reset_action(observation['impedance'])
             ac = np.clip(ac, self.full_action_space['position'].low,
                          self.full_action_space['position'].high)
         elif self.mode == PolicyMode.IMPEDANCE:
+            print("condition 3")
+            # print("observation IN PREDICT: ", observation["impedance"])
             ac = self.impedance_controller.predict(observation['impedance'])
             if self.impedance_controller.done_with_primitive:
                 self.traj_initialized = False
         else:
+            print("condition 4")
             assert False, 'use a different start mode, started with: {}'.format(self.start_mode)
         self.step_count += 1
+        # print("action is: ", ac)
         return ac
     
 
