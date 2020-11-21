@@ -107,6 +107,7 @@ def main():
             # reset and run the next episode 
             else:
                 observation = env.reset()
+                initial_pose = move_cube.Pose.from_dict(observation['achieved_goal'])
                 policy.impedance_controller.set_init_goal(initial_pose, goal_pose)
                 is_done = False
                 steps_so_far += 1
