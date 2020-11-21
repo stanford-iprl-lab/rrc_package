@@ -79,13 +79,11 @@ def main():
                        start_mode=start_mode)
         env = custom_env.HierarchicalPolicyWrapper(env, policy)
     observation = env.reset()
-    print("init current observation is: ", observation)
 
     accumulated_reward = 0
     is_done = False
     steps_so_far = 0
     if difficulty == -2:
-        print("--------difficulty is -2--------")
         while not is_done:
             if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
             action, _ = policy.predict(observation)
@@ -93,15 +91,10 @@ def main():
             accumulated_reward += reward
             steps_so_far += 1
     else:
-        print("--------other difficulties--------")
         old_mode = policy.mode
         while steps_so_far != EP_LEN:
-            # if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
-
             # if virtual episode is not done running and real EP_LEN hasn't been reached, keep running
             if not is_done:    
-                print("observation normal stepping: ", observation['impedance']) 
-                print("-------------------------------------------------------")
                 action = policy.predict(observation)
                 observation, reward, is_done, info = env.step(action)
                 if old_mode != policy.mode:
@@ -113,16 +106,11 @@ def main():
             # if current virtual episode is done, but hasn't reached the end of real episode,
             # reset and run the next episode 
             else:
-                print("Observation BEFORE reset in hierarchical_lift: ")
                 observation = env.reset()
-                # print("Observation AFTER reset in hierarchical_lift: ")
-                # policy.reset_policy(env.platform)
                 policy.impedance_controller.set_init_goal(initial_pose, goal_pose)
                 is_done = False
                 steps_so_far += 1
                 continue
-            # elif MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
-            print("steps_so_far: ", steps_so_far)
     env.save_action_log()
 
     print("------")

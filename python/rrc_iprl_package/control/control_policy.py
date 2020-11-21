@@ -80,6 +80,7 @@ class ImpedanceControllerPolicy:
                     platform.simfinger.tip_link_names)
 
     def reset_policy(self, platform=None):
+        print("Impedance controller reset policy")
         self.step_count = 0
         if platform:
             self.platform = platform
@@ -491,34 +492,26 @@ class HierarchicalControllerPolicy:
         return robot_position
 
     def predict(self, observation):
-        print("self.mode: ", self.mode)
         if not self.traj_initialized and self.initialize_traj_opt(observation['impedance']):
-            print("condition 0")
             self.impedance_controller.traj_to_object_computed = False
             self.impedance_controller.grasped = False
             self.set_waypoints(observation['impedance'])
 
         if self.mode == PolicyMode.RL_PUSH and self.rl_observation_space is not None:
-            print("condition 1")
             ac = self.rl_policy(observation['rl'])
             ac = np.clip(ac, self.full_action_space['position'].low,
                          self.full_action_space['position'].high)
         elif self.mode == PolicyMode.RESET:
-            print("condition 2")
             ac = self.reset_action(observation['impedance'])
             ac = np.clip(ac, self.full_action_space['position'].low,
                          self.full_action_space['position'].high)
         elif self.mode == PolicyMode.IMPEDANCE:
-            print("condition 3")
-            # print("observation IN PREDICT: ", observation["impedance"])
             ac = self.impedance_controller.predict(observation['impedance'])
             if self.impedance_controller.done_with_primitive:
                 self.traj_initialized = False
         else:
-            print("condition 4")
             assert False, 'use a different start mode, started with: {}'.format(self.start_mode)
         self.step_count += 1
-        # print("action is: ", ac)
         return ac
     
 

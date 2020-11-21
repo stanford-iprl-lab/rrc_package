@@ -284,7 +284,6 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
-        print("Resetting")
         if self.save_npz and self.action_log:
             self.save_action_log()
 
@@ -309,14 +308,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         elif self.num_reset == self.max_resets:     # if all virtual resets are completed
             return self._last_obs
         else:
-            print("Further resetting")
             observation, reward, _, _ = self.step(self._initial_action)  # try resetting fingers so we can check velocity
-            print("Velocity 0: ", observation["observation"]["velocity"])
             # virtual reset is done only when all joints velocity are zero
             while any(vel < 0.01 for vel in observation["observation"]["velocity"]) is False:
-                print("Keep resetting, velocity: ", observation["observation"]["velocity"])
                 observation, reward, _, _ = self.step(self._initial_action)
-            print("Resetting finished")
             self.reset_time = time.time() - self.init_time
             self._last_obs = observation   
             self._last_reward = reward
@@ -332,13 +327,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         """Reset the platform frontend."""
         # reset is not really possible
         # import pdb; pdb.set_trace()
-        print("Hardware Resetting")
         if self.platform is None:
-            print("Hardware Resetting Init")
             self.platform = robot_fingers.TriFingerPlatformFrontend()
             self.num_reset = 0  
         else:
-            print("Hardware Resetting Further")
             self.num_reset += 1        
 
     def _reset_direct_simulation(self):
@@ -346,7 +338,6 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         With this the env can be used without backend.
         """
-        print("Simulation Resetting")
         # initialize number of resets here too so overall reset() function works
         self.num_reset = 0
         
