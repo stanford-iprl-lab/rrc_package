@@ -106,8 +106,8 @@ def main():
             # if current virtual episode is done, but hasn't reached the end of real episode,
             # reset and run the next episode 
             else:
-                observation = env.reset()
                 policy.impedance_controller.set_init_goal(initial_pose, goal_pose)
+                observation = env.reset()
                 is_done = False
                 steps_so_far += 1
                 continue
