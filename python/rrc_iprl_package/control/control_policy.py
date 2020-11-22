@@ -48,7 +48,8 @@ else:
 SINE_WAVE_DIM = 1
 class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
-                 npz_file=None, debug_waypoints=False):
+                 npz_file=None, debug_waypoints=False, difficulty=None):
+        self.difficulty = difficulty
         self.action_space = action_space
         self.flipping = False
         self.debug_waypoints = debug_waypoints
@@ -178,6 +179,8 @@ class ImpedanceControllerPolicy:
         x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
+        if self.difficulty == 4:
+            x_goal[0, -4:] = self.goal_pose.orientation
 
         print("Object pose position: {}".format(obj_pose.position))
         print("Object pose orientation: {}".format(obj_pose.orientation))
@@ -445,7 +448,8 @@ class HierarchicalControllerPolicy:
         self.full_action_space = action_space
         action_space = action_space['torque']
         self.impedance_controller = ImpedanceControllerPolicy(
-                action_space, initial_pose, goal_pose, npz_file, debug_waypoints=debug_waypoints)
+                action_space, initial_pose, goal_pose, npz_file, debug_waypoints=debug_waypoints,
+                difficulty = difficulty)
         self.load_policy(load_dir, deterministic)
         self.start_mode = start_mode
         self._platform = None
