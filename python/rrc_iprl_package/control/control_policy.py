@@ -94,6 +94,7 @@ class ImpedanceControllerPolicy:
         self.init_ft_pos = self.get_fingertip_pos_wf(init_position)
         self.init_ft_pos = np.asarray(self.init_ft_pos).flatten()
 
+        self.traj_waypoint_counter = 0
         self.ft_pos_traj = np.tile(self.init_ft_pos, (10000,1))
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
