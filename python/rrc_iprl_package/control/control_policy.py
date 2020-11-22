@@ -81,6 +81,9 @@ class ImpedanceControllerPolicy:
 
     def reset_policy(self, platform=None):
         print("Impedance controller reset policy")
+        self.grasped = False
+        self.traj_to_object_computed = False
+        
         self.step_count = 0
         if platform:
             self.platform = platform
