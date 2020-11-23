@@ -6,6 +6,7 @@ from scipy.spatial.distance import pdist, squareform
 from rrc_iprl_package.control.contact_point import ContactPoint
 from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.traj_opt.fixed_contact_point_opt import FixedContactPointOpt
+from rrc_iprl_package.traj_opt.fixed_contact_point_system import FixedContactPointSystem
 from rrc_iprl_package.traj_opt.static_object_opt import StaticObjectOpt
 
 class PolicyMode(enum.Enum):
@@ -72,6 +73,42 @@ OBJ_FACES_INFO = {
 
 CUBOID_SHORT_FACES = [1,2]
 CUBOID_LONG_FACES = [3,4,5,6]
+
+"""
+Compute wrench that needs to be applied to boject to maintain it on desired trajectory
+"""
+def track_obj_traj_PD(x_des, dx_dex, x_cur, dx_cur, Kp, Kv, mass):
+    g = np.array([0, 0, -9.81, 0, 0, 0]) # Gravity vector
+
+    # Force
+    f = Kp @ x_delta + Kv @ dx_delta - mass * g
+    
+    # TODO: Compute moment
+
+    return f
+
+
+"""
+Force optimization
+"""
+def get_ft_forces(f_obj, cp_params, x_cur):
+
+    cp_params_on_obj = []
+    for cp in cp_params:
+        if cp is not None: cp_params_on_obj.append(cp)
+
+    fnum = len(cp_params_on_obj)
+
+    # To compute grasp matrix
+    # TODO and friction cone consraints..? 
+    system = FixedContactPointSystem(cp_params = cp_params_on_obj, 
+                                     obj_shape = OBJ_SIZE, obj_mass = OBJ_MASS)
+    
+    # Get grasp matrix
+    # TODO: Should I just make a function here to do this? So we don't need to make a new system every time?
+    G = system.get_grasp_matrix(x_cur)
+    
+    
 
 """
 Compute joint torques to move fingertips to desired locations
