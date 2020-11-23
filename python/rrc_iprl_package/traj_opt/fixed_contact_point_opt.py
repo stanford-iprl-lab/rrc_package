@@ -8,6 +8,7 @@ class FixedContactPointOpt:
   def __init__(self,
                nGrid        = 100,
                dt           = 0.1,
+               fnum         = 3,
                cp_params    = None,
                x0           = np.array([[0,0,0.0325,0,0,0,1]]),
                x_goal       = None,
@@ -23,6 +24,7 @@ class FixedContactPointOpt:
     self.system = FixedContactPointSystem(
                                      nGrid     = nGrid,
                                      dt        = dt,
+                                     fnum      = fnum,
                                      cp_params = cp_params,
                                      obj_shape = obj_shape,
                                      obj_mass  = obj_mass,
@@ -143,11 +145,10 @@ class FixedContactPointOpt:
     l = self.system.l_unpack(l_flat) 
     x,dx = self.system.s_unpack(s_flat)
 
-    n = 0.4
+    n = 0.1
     target_normal_forces = np.zeros(l[0,:].shape)
-    target_normal_forces[0,0] = n
-    target_normal_forces[0,3] = n
-    target_normal_forces[0,6] = n
+    for f_i in range(self.system.fnum):
+        target_normal_forces[0,self.system.qnum * f_i] = n
 
     # Slack variable penalties
     for i in range(a.shape[0]):
@@ -222,12 +223,12 @@ class FixedContactPointOpt:
         ubg.append(0)
 
     # Linearized friction cone constraints
-    # f_constraints = system.friction_cone_constraints(l)
-    # for r in range(f_constraints.shape[0]):
-    #   for c in range(f_constraints.shape[1]):
-    #     g.append(f_constraints[r,c])
-    #     lbg.append(0)
-    #     ubg.append(np.inf)
+    #f_constraints = system.friction_cone_constraints(l)
+    #for r in range(f_constraints.shape[0]):
+    #  for c in range(f_constraints.shape[1]):
+    #    g.append(f_constraints[r,c])
+    #    lbg.append(0)
+    #    ubg.append(np.inf)
 
     #tol = 1e-16
     x_goal_constraints = system.x_goal_constraint(s, a, x_goal)

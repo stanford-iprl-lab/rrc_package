@@ -278,8 +278,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
-        observation, _, _, _ = self.step(self._initial_action)
-
+        observation, reward, _, _ = self.step(self._initial_action)
+        while not any(vel < 0.01 for vel in observation["observation"]["velocity"]):
+            observation, reward, _, _ = self.step(self._initial_action)
         return observation
 
     def _reset_platform_frontend(self):
@@ -308,11 +309,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         # visualize the goal
         if self.visualization:
-            self.goal_marker = trifinger_simulation.visual_objects.CubeMarker(
-                width=0.065,
+            self.goal_marker = trifinger_simulation.visual_objects.CuboidMarker(
+                size=move_cube._CUBOID_SIZE,
                 position=self.goal["position"],
                 orientation=self.goal["orientation"],
-                physicsClientId=self.platform.simfinger._pybullet_client_id,
+                pybullet_client_id=self.platform.simfinger._pybullet_client_id,
             )
             pbutils.reset_camera()
 

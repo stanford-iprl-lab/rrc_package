@@ -6,7 +6,7 @@ import pybullet
 from gym import wrappers
 from gym import ObservationWrapper
 from gym.spaces import Dict
-from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy
+from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy, TrajMode
 
 try:
     import robot_interfaces
@@ -412,14 +412,15 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
     def reset(self):
         obs = super(HierarchicalPolicyWrapper, self).reset()
-        # TODO remove hardcoded visualization object pose
-        initial_object_pose = move_cube.sample_goal(difficulty=-1)
+        initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
+        # initial_object_pose = move_cube.sample_goal(difficulty=-1)
 
         self.policy.platform = trifinger_simulation.TriFingerPlatform(
             visualization=False,
             initial_object_pose=initial_object_pose,
         )
-        self.policy.reset_policy()
+        #import pdb; pdb.set_trace()
+        self.policy.reset_policy(obs['impedance'])
         self.step_count = 0
         return obs
 
@@ -460,7 +461,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             if self.step_count >= self.episode_length:
                 break
 
-        is_done = self.step_count >= self.episode_length
+        is_done = self.step_count == self.episode_length
         self.unwrapped.write_action_log(observation, action, reward)
         return observation, reward, is_done, self.env.info
 
@@ -482,7 +483,6 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         obs, r, d, i = self._step(action)
         obs = self.observation(obs)
         return obs, r, d, i
-
 
 class ResidualPolicyWrapper(ObservationWrapper):
     def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False, 
@@ -587,7 +587,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller.reset_policy(self.platform)
 
     def grasp_object(self, obs):
-        while not self.impedance_controller.grasped:
+        while not self.impedance_controller.mode != TrajMode.REPOSE:
             obs, _, _, _ = self.step(np.zeros(9))
         return obs
 

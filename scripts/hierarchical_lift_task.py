@@ -20,7 +20,8 @@ from rrc_iprl_package import run_rrc_sb as sb_utils
 FRAMESKIP = 1
 #MAX_STEPS = 3 * 1000 // FRAMESKIP
 EP_LEN = 120 * 1000 // FRAMESKIP - 150 // FRAMESKIP
-MAX_STEPS = 120 * 1000
+#MAX_STEPS = 5 * 1000 // FRAMESKIP
+MAX_STEPS = None
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -43,7 +44,6 @@ def main():
     else:
         goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)
-
     if osp.exists('/output'):
         save_path = '/output/action_log.npz'
     else:
@@ -66,22 +66,21 @@ def main():
     accumulated_reward = 0
     is_done = False
     steps_so_far = 0
-    old_mode = policy.mode
-    while steps_so_far != EP_LEN:
-        # if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+    while not is_done:
+        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
         action = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
         if old_mode != policy.mode:
-            print('mode changed: {} to {}'.format(old_mode, policy.mode))
+            #print('mode changed: {} to {}'.format(old_mode, policy.mode))
             old_mode = policy.mode
         #print("reward:", reward)
         accumulated_reward += reward
         steps_so_far += 1
     env.save_action_log()
-
+    # Save control_policy_log
+    policy.impedance_controller.save_log()
     print("------")
     print("Accumulated Reward: {:.3f}".format(accumulated_reward))
-
 
 if __name__ == "__main__":
     main()

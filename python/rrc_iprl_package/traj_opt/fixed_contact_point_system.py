@@ -2,7 +2,6 @@ import numpy as np
 from casadi import *
 import pybullet
 
-from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.traj_opt import utils
 
 class FixedContactPointSystem:
@@ -10,6 +9,7 @@ class FixedContactPointSystem:
   def __init__(self,
                nGrid     = 100,
                dt        = 0.1,
+               fnum      = 3,
                cp_params = None,
                obj_shape = None,
                obj_mass  = None,
@@ -21,7 +21,7 @@ class FixedContactPointSystem:
     self.dt = dt
     self.tf = dt * (nGrid-1) # Final time
 
-    self.fnum = 3
+    self.fnum = fnum
     self.qnum = 3
     self.obj_dof = 6
     self.x_dim = 7 # Dimension of object pose
@@ -605,7 +605,7 @@ class FixedContactPointSystem:
     x_range = np.array([
                        [-0.15, 0.15], # x coord range
                        [-0.15,0.15], # y coord range
-                       [0.0325,0.15], # z coord range
+                       [0.01,0.15], # z coord range TODO Hardcoded
                        [-np.inf, np.inf], # qx range
                        [-np.inf, np.inf], # qy range
                        [-np.inf, np.inf], # qz range
