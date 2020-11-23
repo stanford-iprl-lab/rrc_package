@@ -278,7 +278,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
-        observation, _, _, _ = self.step(self._initial_action)
+	observation, reward, _, _ = self.step(self._initial_action)
+	while not any(vel < 0.01 for vel in observation["observation"]["velocity"]):
+	    observation, reward, _, _ = self.step(self._initial_action)
 
         return observation
 

@@ -57,7 +57,6 @@ class ImpedanceControllerPolicy:
         print("KP: {}".format(KP))
         print("KV: {}".format(KV))
         
-        self.reset_policy()
         self.initialize_logging()
 
     def initialize_logging(self):
@@ -101,7 +100,7 @@ class ImpedanceControllerPolicy:
                  desired_torque   = np.squeeze(np.asarray(self.l_desired_torque)),
                 )
 
-    def reset_policy(self, platform=None):
+    def reset_policy(self, observation, platform=None):
         if platform:
             self.platform = platform
         self.custom_pinocchio_utils = CustomPinocchioUtils(
@@ -116,16 +115,11 @@ class ImpedanceControllerPolicy:
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
         self.x_traj = None
-        self.mode == TrajMode.RESET
+        self.mode = TrajMode.RESET
+        self.plan_trajectory(observation)
 
         # Counters
-        self.start_time = None
         self.step_count = 0 # Number of times predict() is called
-        self.traj_waypoint_counter = 0
-
-        self.fingers_lowered = False
-        self.grasped = False
-        self.traj_to_object_computed = False
 
         # Define nlp for finger traj opt
         nGrid = 40
@@ -294,7 +288,6 @@ class ImpedanceControllerPolicy:
         self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
         self.l_wf_traj = None
         self.x_traj = None
-    
 
     """
     Run trajectory optimization for fingers, given fingertip goal positions
@@ -351,26 +344,24 @@ class ImpedanceControllerPolicy:
             self.l_desired_ft_force.append(ft_des_force_wf)
         return
 
-    def plan_trajectory(self, ):
-        if self.start_time is None:
-            self.start_time = time.time()
-
-        t = time.time() - self.start_time
-
+    """
+    Replans trajectory according to TrajMode, and sets self.traj_waypoint_counter
+    """
+    def plan_trajectory(self, observation):
         if self.mode == TrajMode.RESET: 
+            self.set_traj_lower_finger(observation)
+            self.mode = TrajMode.PRE_TRAJ_LOWER
+        elif self.mode == TrajMode.PRE_TRAJ_LOWER:
+            self.set_traj_to_object(observation)
+            self.mode = TrajMode.PRE_TRAJ_REACH
+        elif self.mode == TrajMode.PRE_TRAJ_REACH:
+            self.set_traj_lift_object(observation, ngrid=50, dt=0.08)
+            self.mode = TrajMode.REPOSE
+        elif self.mode == TrajMode.REPOSE:
+            print("ERROR: should not reach this case")
 
-        if not self.fingers_lowered and t > self.WAIT_TIME:
-            self.set_traj_lower_finger(full_observation)
-            self.fingers_lowered = True
-    
-        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
-            if not self.traj_to_object_computed:
-                self.set_traj_to_object(full_observation)
-                self.traj_to_object_computed = True
-            elif not self.grasped:
-                # If at end of trajectory, do fixed cp traj opt
-                self.set_traj_lift_object(full_observation, nGrid = 50, dt = 0.08)
-                self.grasped = True
+        self.traj_waypoint_counter = 0
+        return 
 
     def predict(self, full_observation):
         self.step_count += 1
@@ -384,25 +375,22 @@ class ImpedanceControllerPolicy:
         cur_ft_pos = self.get_fingertip_pos_wf(current_position)
         cur_ft_pos = np.asarray(cur_ft_pos).flatten()
 
-        self.plan_trajectory()
-
-        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
-            traj_waypoint_i = self.ft_pos_traj.shape[0] - 1
-        else:
-            traj_waypoint_i = self.traj_waypoint_counter
+        if self.traj_waypoint_counter == self.ft_pos_traj.shape[0]:
+            # TODO: currently will redo the last waypoint after reaching end of trajectory
+            self.plan_trajectory(full_observation)
 
         ft_pos_goal_list = []
         ft_vel_goal_list = []
         for f_i in range(3):
-            new_pos = self.ft_pos_traj[traj_waypoint_i, f_i*3:f_i*3+3]
-            new_vel = self.ft_vel_traj[traj_waypoint_i, f_i*3:f_i*3+3]
+            new_pos = self.ft_pos_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
+            new_vel = self.ft_vel_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
             ft_pos_goal_list.append(new_pos)
             ft_vel_goal_list.append(new_vel)
 
         if self.l_wf_traj is None:
             ft_des_force_wf = None
         else:
-            ft_des_force_wf = self.l_wf_traj[traj_waypoint_i, :]
+            ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(ft_pos_goal_list,
@@ -415,8 +403,10 @@ class ImpedanceControllerPolicy:
 
         self.log_to_buffers(ft_pos_goal_list, ft_vel_goal_list,
                             cur_ft_pos, obj_pose, torque,
-                            self.x_traj[traj_waypoint_i, :], ft_des_force_wf)
-        self.traj_waypoint_counter += 1
+                            self.x_traj[self.traj_waypoint_counter, :], ft_des_force_wf)
+        # always increment traj_waypoint_counter UNLESS in repose mode and have reached final waypoint
+        if not (self.mode == REPOSE and self.traj_waypoint_counter == self.ft_pos_traj.shape[0] - 1):
+            self.traj_waypoint_counter += 1
         return torque
 
     """
@@ -425,6 +415,7 @@ class ImpedanceControllerPolicy:
     def get_fingertip_pos_wf(self, current_q):
         fingertip_pos_wf = self.custom_pinocchio_utils.forward_kinematics(current_q)
         return fingertip_pos_wf
+
 
 class HierarchicalControllerPolicy:
     DIST_THRESH = 0.09
@@ -453,13 +444,13 @@ class HierarchicalControllerPolicy:
         self.rl_retries = int(self.start_mode == PolicyMode.RL_PUSH)
         self.difficulty = difficulty
 
-    def reset_policy(self, platform=None):
+    def reset_policy(self, observation, platform=None):
         self.mode = self.start_mode
         self.traj_initialized = False
         self.steps_from_reset = self.step_count = self.rl_start_step = 0
         if platform:
             self._platform = platform
-        self.impedance_controller.reset_policy(platform)
+        self.impedance_controller.reset_policy(observation, platform)
 
     @property
     def platform(self):

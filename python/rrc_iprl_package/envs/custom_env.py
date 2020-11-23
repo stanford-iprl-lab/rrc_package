@@ -5,7 +5,7 @@ import pybullet
 
 from gym import wrappers
 from gym import ObservationWrapper
-from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy
+from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy, TrajMode
 
 try:
     import robot_interfaces
@@ -406,14 +406,14 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
     def reset(self):
         obs = super(HierarchicalPolicyWrapper, self).reset()
-        # TODO remove hardcoded visualization object pose
-        initial_object_pose = move_cube.sample_goal(difficulty=-1)
+        initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
+        # initial_object_pose = move_cube.sample_goal(difficulty=-1)
 
         self.policy.platform = trifinger_simulation.TriFingerPlatform(
             visualization=False,
             initial_object_pose=initial_object_pose,
         )
-        self.policy.reset_policy()
+        self.policy.reset_policy(obs['impedance'])
         self.step_count = 0
         return obs
 
@@ -482,7 +482,6 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         obs = self.observation(obs)
         return obs, r, d, i
 
-
 class ResidualPolicyWrapper(ObservationWrapper):
     def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False, 
                  rl_cp_params=False, 
@@ -495,6 +494,11 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller = None
         self.observation_names = PushCubeEnv.observation_names
         self.make_obs_space()
+        assert env.action_type in [ActionType.TORQUE,
+                                   ActionType.TORQUE_AND_POSITION]
+        if isinstance(env.action_space, gym.spaces.Dict):
+            self.action_space = env.action_space.spaces['torque']
+        self._prev_action = np.zeros(9)
 
     def make_obs_space(self):
         robot_torque_space = gym.spaces.Box(
@@ -515,90 +519,116 @@ class ResidualPolicyWrapper(ObservationWrapper):
                 "position": gym.spaces.Box(
                     low=trifingerpro_limits.object_position.low,
                     high=trifingerpro_limits.object_position.high,
-                ),
-                "orientation": gym.spaces.Box(
+                ), "orientation": gym.spaces.Box(
                     low=trifingerpro_limits.object_orientation.low,
                     high=trifingerpro_limits.object_orientation.high,
                 ),
             }
         )
+        p_low = np.concatenate([object_state_space.spaces['position'].low for _ in range(3)])
+        p_high = np.concatenate([object_state_space.spaces['position'].high for _ in range(3)])
+
 
         imp_obs_space = self.env.observation_space
         rl_obs_spaces = {
                 "robot_position": robot_position_space,
                 "robot_velocity": robot_velocity_space,
                 "robot_torque": robot_torque_space,
-                "robot_tip_positions": np.concatenate(
-                    [object_state_space.spaces['position'] for _ in range(3)]),
+                "robot_tip_positions": gym.spaces.Box(low=p_low, high=p_high),
                 "robot_tip_forces": gym.spaces.Box(low=np.zeros(3), high=np.ones(3)),
                 "action": self.action_space,
-                "goal_position": object_state_space.spaces['position'],
-                "goal_orientation": object_state_space.spaces['orientation'],
+                "goal_object_position": object_state_space.spaces['position'],
+                "goal_object_orientation": object_state_space.spaces['orientation'],
                 "object_position": object_state_space.spaces['position'],
                 "object_orientation": object_state_space.spaces['orientation'],
             }
 
-        rl_obs_space = {k:obs_spaces[k] for k in self.observation_names}
-        self.observation_space = gym.spaces.Dict(
+        rl_obs_space = gym.spaces.Dict(
+                {k: rl_obs_spaces[k] for k in self.observation_names})
+        self.full_observation_space = gym.spaces.Dict(
                 {'impedance': imp_obs_space, 'rl': rl_obs_space})
+        self.impedance_controller = None
+
+        if self.goal_env:
+            imp_obs_spaces = imp_obs_space.spaces
+            obs_space = Dict(action=imp_obs_spaces['action'],
+                             **imp_obs_spaces['observation'].spaces)
+            self.observation_space = Dict(observation=obs_space,
+                                          desired_goal=imp_obs_spaces['desired_goal'],
+                                          achieved_goal=imp_obs_spaces['achieved_goal'])
+        else:
+            self.observation_space = rl_obs_space
 
     def reset(self):
         obs = super(ResidualPolicyWrapper, self).reset()
-        obs = self.init_impedance_controller(obs)
+        self.init_impedance_controller()
+        obs = self.grasp_object(obs)
         return obs
+
+    def step(self, action):
+        action = self.action(action)
+        return super(ResidualPolicyWrapper, self).step(action)
 
     def process_observation_residual(self, observation):
         return observation
 
-    def make_impedance_controller(self, obs):
-        init_pose, goal_pose = self.process_obs_init_goal(obs)
-        self.impedance_controller = ImpedanceControlerPolicy(
+    def init_impedance_controller(self):
+        init_pose, goal_pose = self.process_obs_init_goal(self._obs_dict['impedance'])
+        self.impedance_controller = ImpedanceControllerPolicy(
                 self.action_space, init_pose, goal_pose)
-        self.impedance_controller.set_waypoints(obs['impedance'])
-        tip_force = obs['rl']['robot_tip_forces']
-        while np.isclose(tip_force).all():
-            torque = self.impedance_controller.predict(obs['impedance'])
-            obs, _, _, _ = self.step(torque)
-            tip_force = obs['rl']['robot_tip_forces']
+        self.impedance_controller.set_init_goal(init_pose, goal_pose)
+        mock_platform = trifinger_simulation.TriFingerPlatform(
+            visualization=False,
+            initial_object_pose=self.initial_pose,
+        )
+        self.impedance_controller.mock_pinocchio_utils(mock_platform)
+        self.impedance_controller.reset_policy(self.platform)
 
-        if not self.pre_traj_done():
-            print("Ending pre-trajectory step early after {} steps".format(
-                    self.step_count))
+    def grasp_object(self, obs):
+        while not self.impedance_controller.mode != TrajMode.REPOSE:
+            obs, _, _, _ = self.step(np.zeros(9))
         return obs
 
     def observation(self, observation):
-        observation_imp = self.process_observation_impedance(observation)
-        obs_dict = {'impedance': observation_imp}
-        observation_rl = self.process_observation_rl(observation)
-        obs_dict['rl'] = observation_rl
-        self._obs_dict = obs_dict
-        return obs_dict
+        obs_dict = {'impedance': observation}
+        self._obs_dict = obs_dict.copy() 
+        rl_obs = self.process_observation_rl(observation)
+        if self.goal_env:
+            observation['observation']['action'] = observation.pop('action')
+            return observation
+        else:
+            return rl_obs
 
     def process_observation_rl(self, observation):
         t = self.step_count
         robot_observation = self.platform.get_robot_observation(t)
-        object_observation = self.platform.get_object_pose(t)
-        robot_tip_positions = self.platform.forward_kinematics(
-            robot_observation.position)
-        robot_tip_positions = np.array(robot_tip_positions)
+        camera_observation = self.platform.get_camera_observation(t)
+        object_observation = camera_observation.object_pose
+        try:
+            robot_tip_positions = self.platform.forward_kinematics(
+                robot_observation.position)
+            robot_tip_positions = np.array(robot_tip_positions)
+        except:
+            if self.impedance_controller is not None:
+                robot_tip_positions = self.impedance_controller.custom_pinocchio_utils.forward_kinematics(robot_observation.position)
+            else:
+                robot_tip_positions = [0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7]
+            robot_tip_positions = np.array(robot_tip_positions)
+
         observation = {
             "robot_position": robot_observation.position,
             "robot_velocity": robot_observation.velocity,
             "robot_tip_positions": robot_tip_positions,
             "robot_tip_forces": robot_observation.tip_force,
+            "action": self._prev_action,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
-            "goal_object_position": self.goal["position"],
-            "goal_object_orientation": self.goal["orientation"],
+            "goal_object_position": np.asarray(self.goal["position"]),
+            "goal_object_orientation": np.asarray(self.goal["orientation"]),
         }
-        observation = np.concatenate([observation[k].flatten() for k in self.observation_names])
+        self._obs_dict['rl'] = observation
+        # observation = np.concatenate([observation[k].flatten() for k in self.observation_names])
         return observation
-
-    def pre_traj_done(self):
-        if self.impedance_controller.pre_traj_waypoint_i < len(self.finger_waypoints_list[0]): 
-            self.impedance_controller.pre_traj_waypoint_i = len(self.finger_waypoints_list[0])
-            return False
-        return True
 
     def process_obs_init_goal(self, observation):
         if self.goal_env:
@@ -606,13 +636,15 @@ class ResidualPolicyWrapper(ObservationWrapper):
         else:
             init_pose = {'position': self._obs_dict['rl']['object_position'],
                          'orientation': self._obs_dict['rl']['object_orientation']}
-            goal_pose = {'position': self._obs_dict['rl']['goal_position'],
-                         'orientation': self._obs_dict['rl']['goal_orientation']}
+            goal_pose = {'position': self._obs_dict['rl']['goal_object_position'],
+                         'orientation': self._obs_dict['rl']['goal_object_orientation']}
         init_pose = move_cube.Pose.from_dict(init_pose) 
         goal_pose = move_cube.Pose.from_dict(goal_pose)
         return init_pose, goal_pose
 
-    def action(self, res_torque):
-        torque = self.impedance_controller.predict(self._obs_dict['impedance'])
-        return res_torque + torque
-
+    def action(self, res_torque=None):
+        des_torque = self.impedance_controller.predict(self._obs_dict['impedance'])
+        self._prev_action = action = np.clip(res_torque + des_torque, self.action_space.low, self.action_space.high)
+        if self.env.action_type == ActionType.TORQUE_AND_POSITION:
+            return {'torque': action, 'position': np.repeat(np.nan, 9)}
+        return action
