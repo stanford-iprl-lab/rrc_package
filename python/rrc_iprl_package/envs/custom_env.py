@@ -413,6 +413,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             visualization=False,
             initial_object_pose=initial_object_pose,
         )
+        #import pdb; pdb.set_trace()
         self.policy.reset_policy(obs['impedance'])
         self.step_count = 0
         return obs
@@ -452,7 +453,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 self.unwrapped.info,
             )
 
-            print("step_count: {}, episode_length: {}".format(self.step_count, self.episode_length))
+            #print("step_count: {}, episode_length: {}".format(self.step_count, self.episode_length))
 
             if self.step_count >= self.episode_length:
                 break

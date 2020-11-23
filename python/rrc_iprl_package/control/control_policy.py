@@ -7,6 +7,7 @@ import os
 import os.path as osp
 import numpy as np
 import joblib
+import enum
 import copy
 import time
 from scipy.interpolate import interp1d
@@ -28,51 +29,37 @@ except ImportError:
     torch = None
 
 
-# Parameters for tuning gains
-if osp.exists("/output"):
+class TrajMode(enum.Enum):
+    RESET = enum.auto()
+    PRE_TRAJ_LOWER = enum.auto()
+    PRE_TRAJ_REACH = enum.auto()
+    REPOSE = enum.auto()
+
+
+class ImpedanceControllerPolicy:
+    WAIT_TIME = 1
     KP = [300, 300, 400,
           300, 300, 400,
           300, 300, 400]
     KV = [0.7, 0.7, 0.8, 
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
-else:
-    KP = [200, 200, 400,
-          200, 200, 400,
-          200, 200, 400]
-    KV = [0.5, 0.5, 0.5, 
-          0.5, 0.5, 0.5,
-          0.5, 0.5, 0.5]
 
-# Sine wave parameters
-SINE_WAVE_DIM = 1
-class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
         self.difficulty = difficulty
         self.action_space = action_space
-        self.flipping = False
         self.debug_waypoints = debug_waypoints
-        self.debug_fingertip_tracking = True
         self.set_init_goal(initial_pose, goal_pose)
-        self.finger_waypoints = None # visual object (for debugging)
-        self.done_with_primitive = True
         self.init_face = None
         self.goal_face = None
         self.platform = None
-        print("KP: {}".format(KP))
-        print("KV: {}".format(KV))
-        self.start_time = None
-        self.WAIT_TIME = 1
+        print("KP: {}".format(self.KP))
+        print("KV: {}".format(self.KV))
+        
+        self.initialize_logging()
 
-        # Counters
-        self.step_count = 0 # Number of times predict() is called
-        self.traj_waypoint_counter = 0
-
-        self.fingers_lowered = False
-        self.grasped = False
-        self.traj_to_object_computed = False
-
+    def initialize_logging(self):
         # CSV logging file path # need leading / for singularity image
         if osp.exists("/output"):
             self.csv_filepath           = "/output/control_policy_data.csv"
@@ -113,14 +100,17 @@ class ImpedanceControllerPolicy:
                  desired_torque   = np.squeeze(np.asarray(self.l_desired_torque)),
                 )
 
-    def reset_policy(self, platform=None):
-        self.step_count = 0
+    def reset_policy(self, observation, platform=None):
         if platform:
             self.platform = platform
-
         self.custom_pinocchio_utils = CustomPinocchioUtils(
                 self.platform.simfinger.finger_urdf_path,
                 self.platform.simfinger.tip_link_names)
+
+        # Define nlp for finger traj opt
+        nGrid = 40
+        dt = 0.04
+        self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
 
         init_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
         self.init_ft_pos = self.get_fingertip_pos_wf(init_position)
@@ -130,38 +120,27 @@ class ImpedanceControllerPolicy:
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
         self.x_traj = None
+        self.mode = TrajMode.RESET
+        self.plan_trajectory(observation)
 
-        # Define nlp for finger traj opt
-        nGrid = 40
-        dt = 0.04
-        self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
-
+        # Counters
+        self.step_count = 0 # Number of times predict() is called
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
-        self.done_with_primitive = False
         self.goal_pose = goal_pose
         self.x0 = np.concatenate([initial_pose.position, initial_pose.orientation])[None]
-        if not flip:
-            self.flipping = False
-        else:
-            self.flipping = True
         init_goal_dist = np.linalg.norm(goal_pose.position - initial_pose.position)
         #print(f'init position: {initial_pose.position}, goal position: {goal_pose.position}, '
         #      f'dist: {init_goal_dist}')
         #print(f'init orientation: {initial_pose.orientation}, goal orientation: {goal_pose.orientation}')
 
     """
-    Get contact point parameters for either lifting of flipping
+    Get contact point parameters for either lifting
     """
     def set_cp_params(self, observation):
         # Get object pose
         obj_pose = get_pose_from_observation(observation)
-
-        if self.flipping:
-            self.cp_params, self.init_face, self.goal_face = c_utils.get_flipping_cp_params(
-                obj_pose, self.goal_pose)
-        else:
-            self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
+        self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
 
     """
     Run trajectory optimization to move object given fixed contact points
@@ -309,7 +288,6 @@ class ImpedanceControllerPolicy:
         self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
         self.l_wf_traj = None
         self.x_traj = None
-    
 
     """
     Run trajectory optimization for fingers, given fingertip goal positions
@@ -342,6 +320,49 @@ class ImpedanceControllerPolicy:
 
         return ft_pos_traj, ft_vel_traj
 
+    def log_to_buffers(self, ft_pos_goal_list, ft_vel_goal_list, 
+                       cur_ft_pos, obj_pose, torque,
+                       ft_des_force_wf=None):
+        # LOGGING
+        self.l_step_count.append(self.step_count)       
+        self.l_timestamp.append(time.time())
+        self.l_desired_ft_pos.append(np.asarray(ft_pos_goal_list).flatten())  
+        self.l_desired_ft_vel.append(np.asarray(ft_vel_goal_list).flatten())  
+        self.l_actual_ft_pos.append(cur_ft_pos)  
+        self.l_observed_obj_pose.append(np.concatenate((obj_pose.position,obj_pose.orientation)))
+        self.l_desired_torque.append(np.asarray(torque))
+
+        if self.x_traj is None:
+            # Nan if there is no obj traj (during grasping)
+            self.l_desired_obj_pose.append(np.ones(7) * np.nan)
+        else:
+            self.l_desired_obj_pose.append(self.x_traj[self.traj_waypoint_counter, :])
+        if ft_des_force_wf is None:
+            # Nan if no desired ft forces (during grasping)
+            self.l_desired_ft_force.append(np.ones(9) * np.nan)
+        else:
+            self.l_desired_ft_force.append(ft_des_force_wf)
+        return
+
+    """
+    Replans trajectory according to TrajMode, and sets self.traj_waypoint_counter
+    """
+    def plan_trajectory(self, observation):
+        if self.mode == TrajMode.RESET: 
+            self.set_traj_lower_finger(observation)
+            self.mode = TrajMode.PRE_TRAJ_LOWER
+        elif self.mode == TrajMode.PRE_TRAJ_LOWER:
+            self.set_traj_to_object(observation)
+            self.mode = TrajMode.PRE_TRAJ_REACH
+        elif self.mode == TrajMode.PRE_TRAJ_REACH:
+            self.set_traj_lift_object(observation, nGrid=50, dt=0.08)
+            self.mode = TrajMode.REPOSE
+        elif self.mode == TrajMode.REPOSE:
+            print("ERROR: should not reach this case")
+
+        self.traj_waypoint_counter = 0
+        return 
+
     def predict(self, full_observation):
         self.step_count += 1
         observation = full_observation['observation']
@@ -354,75 +375,38 @@ class ImpedanceControllerPolicy:
         cur_ft_pos = self.get_fingertip_pos_wf(current_position)
         cur_ft_pos = np.asarray(cur_ft_pos).flatten()
 
-        if self.start_time is None:
-            self.start_time = time.time()
-            t = 0
-        else:
-            t = time.time() - self.start_time
+        if self.traj_waypoint_counter == self.ft_pos_traj.shape[0]:
+            # TODO: currently will redo the last waypoint after reaching end of trajectory
+            self.plan_trajectory(full_observation)
 
-        if not self.fingers_lowered and t > self.WAIT_TIME:
-            self.set_traj_lower_finger(full_observation)
-            self.fingers_lowered = True
-    
-        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
-            if not self.traj_to_object_computed:
-                self.set_traj_to_object(full_observation)
-                self.traj_to_object_computed = True
-            elif not self.grasped:
-                # If at end of trajectory, do fixed cp traj opt
-                self.set_traj_lift_object(full_observation, nGrid = 50, dt = 0.08)
-                self.grasped = True
-
-        if self.traj_waypoint_counter >= self.ft_pos_traj.shape[0]:
-            traj_waypoint_i = self.ft_pos_traj.shape[0] - 1
-        else:
-            traj_waypoint_i = self.traj_waypoint_counter
-
-        fingertip_pos_goal_list = []
-        fingertip_vel_goal_list = []
+        ft_pos_goal_list = []
+        ft_vel_goal_list = []
         for f_i in range(3):
-            new_pos = self.ft_pos_traj[traj_waypoint_i, f_i*3:f_i*3+3]
-            new_vel = self.ft_vel_traj[traj_waypoint_i, f_i*3:f_i*3+3]
-            fingertip_pos_goal_list.append(new_pos)
-            fingertip_vel_goal_list.append(new_vel)
+            new_pos = self.ft_pos_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
+            new_vel = self.ft_vel_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
+            ft_pos_goal_list.append(new_pos)
+            ft_vel_goal_list.append(new_vel)
 
         if self.l_wf_traj is None:
-            self.tip_forces_wf = None
+            ft_des_force_wf = None
         else:
-            self.tip_forces_wf = self.l_wf_traj[traj_waypoint_i, :]
+            ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
 
         # Compute torque with impedance controller, and clip
-        torque = c_utils.impedance_controller(fingertip_pos_goal_list,
-                                              fingertip_vel_goal_list,
+        torque = c_utils.impedance_controller(ft_pos_goal_list,
+                                              ft_vel_goal_list,
                                               current_position, current_velocity,
                                               self.custom_pinocchio_utils,
-                                              tip_forces_wf=self.tip_forces_wf,
-                                              Kp = KP, Kv = KV)
-
+                                              tip_forces_wf=ft_des_force_wf,
+                                              Kp = self.KP, Kv = self.KV)
         torque = np.clip(torque, self.action_space.low, self.action_space.high)
 
-        # LOGGING
-        self.l_step_count.append(self.step_count)       
-        self.l_timestamp.append(time.time())
-        self.l_desired_ft_pos.append(np.asarray(fingertip_pos_goal_list).flatten())  
-        self.l_desired_ft_vel.append(np.asarray(fingertip_vel_goal_list).flatten())  
-        self.l_actual_ft_pos.append(cur_ft_pos)  
-        self.l_observed_obj_pose.append(np.concatenate((obj_pose.position,obj_pose.orientation)))
-        self.l_desired_torque.append(np.asarray(torque))
-
-        if self.x_traj is None:
-            # Nan if there is no obj traj (during grasping)
-            self.l_desired_obj_pose.append(np.ones(7) * np.nan)
-        else:
-            self.l_desired_obj_pose.append(self.x_traj[traj_waypoint_i, :])
-        if self.tip_forces_wf is None:
-            # Nan if no desired ft forces (during grasping)
-            self.l_desired_ft_force.append(np.ones(9) * np.nan)
-        else:
-            self.l_desired_ft_force.append(self.tip_forces_wf)
-
-        self.traj_waypoint_counter += 1
-
+        self.log_to_buffers(ft_pos_goal_list, ft_vel_goal_list,
+                            cur_ft_pos, obj_pose, torque,
+                            ft_des_force_wf)
+        # always increment traj_waypoint_counter UNLESS in repose mode and have reached final waypoint
+        if not (self.mode == TrajMode.REPOSE and self.traj_waypoint_counter == self.ft_pos_traj.shape[0] - 1):
+            self.traj_waypoint_counter += 1
         return torque
 
     """
@@ -431,6 +415,7 @@ class ImpedanceControllerPolicy:
     def get_fingertip_pos_wf(self, current_q):
         fingertip_pos_wf = self.custom_pinocchio_utils.forward_kinematics(current_q)
         return fingertip_pos_wf
+
 
 class HierarchicalControllerPolicy:
     DIST_THRESH = 0.09
@@ -459,13 +444,13 @@ class HierarchicalControllerPolicy:
         self.rl_retries = int(self.start_mode == PolicyMode.RL_PUSH)
         self.difficulty = difficulty
 
-    def reset_policy(self, platform=None):
+    def reset_policy(self, observation, platform=None):
         self.mode = self.start_mode
         self.traj_initialized = False
         self.steps_from_reset = self.step_count = self.rl_start_step = 0
         if platform:
             self._platform = platform
-        self.impedance_controller.reset_policy(platform)
+        self.impedance_controller.reset_policy(observation, platform)
 
     @property
     def platform(self):
@@ -555,12 +540,7 @@ class HierarchicalControllerPolicy:
                 return True
         elif self.mode == PolicyMode.TRAJ_OPT:
             return True
-        else:
-            if (self.impedance_controller.flipping and 
-                self.impedance_controller.done_with_primitive):
-                self.mode = PolicyMode.RESET
-                return False
-            return True
+        return True
 
     def set_waypoints(self, observation):
         if self.mode == PolicyMode.TRAJ_OPT:
@@ -602,8 +582,6 @@ class HierarchicalControllerPolicy:
                          self.full_action_space['position'].high)
         elif self.mode == PolicyMode.IMPEDANCE:
             ac = self.impedance_controller.predict(observation['impedance'])
-            if self.impedance_controller.done_with_primitive:
-                self.traj_initialized = False
         else:
             assert False, 'use a different start mode, started with: {}'.format(self.start_mode)
         self.step_count += 1
