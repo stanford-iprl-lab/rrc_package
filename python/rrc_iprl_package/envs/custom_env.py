@@ -436,24 +436,20 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
         # ensure episode length is not exceeded due to frameskip
         step_count_after = self.step_count + num_steps
-        if step_count_after > move_cube.episode_length:
-            excess = step_count_after - move_cube.episode_length
+        if step_count_after > self.episode_length:
+            excess = step_count_after - self.episode_length
             num_steps = max(1, num_steps - excess)
 
         reward = 0.0
         for _ in range(num_steps):
-            self.step_count += 1
-            if self.step_count > move_cube.episode_length:
-                raise RuntimeError("Exceeded number of steps for one episode.")
-
             # send action to robot
             robot_action = self._gym_action_to_robot_action(action)
-            t = self.unwrapped.platform.append_desired_action(robot_action)
+            self.step_count = t = self.unwrapped.platform.append_desired_action(robot_action)
 
             # Use observations of step t + 1 to follow what would be expected
             # in a typical gym environment.  Note that on the real robot, this
             # will not be possible
-            observation = self.unwrapped._create_observation(t + 1, action)
+            observation = self.unwrapped._create_observation(t, action)
 
             reward += self.unwrapped.compute_reward(
                 observation["achieved_goal"],
@@ -461,8 +457,11 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 self.unwrapped.info,
             )
 
-        is_done = self.step_count == self.episode_length
+            if self.step_count >= self.episode_length:
+                break
 
+        is_done = self.step_count >= self.episode_length
+        self.unwrapped.write_action_log(observation, action, reward)
         return observation, reward, is_done, self.env.info
 
     def _gym_action_to_robot_action(self, gym_action):

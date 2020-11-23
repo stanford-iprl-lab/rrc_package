@@ -24,7 +24,7 @@ if __name__ == "__main__":
     goal_pose = move_cube.Pose.from_dict(goal)
 
     positions = np.array(
-        [observation.object_pose.position for observation in log_reader.data]
+        [observation.filtered_object_pose.position for observation in log_reader.data]
     )
     np.savez('positions.npz', positions=positions, goal=dict(position=goal_pose.position,
                                                              orientation=goal_pose.orientation))
