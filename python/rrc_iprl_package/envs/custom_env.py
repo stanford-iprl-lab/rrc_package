@@ -445,7 +445,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             # Use observations of step t + 1 to follow what would be expected
             # in a typical gym environment.  Note that on the real robot, this
             # will not be possible
-            observation = self.unwrapped._create_observation(t, action)
+            observation = self.unwrapped._create_observation(t+1, action)
 
             reward += self.unwrapped.compute_reward(
                 observation["achieved_goal"],
