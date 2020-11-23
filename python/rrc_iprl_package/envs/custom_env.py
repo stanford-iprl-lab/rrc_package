@@ -6,7 +6,7 @@ import pybullet
 from gym import wrappers
 from gym import ObservationWrapper
 from gym.spaces import Dict
-from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy
+from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy, TrajMode
 
 try:
     import robot_interfaces
@@ -412,14 +412,15 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
     def reset(self):
         obs = super(HierarchicalPolicyWrapper, self).reset()
-        # TODO remove hardcoded visualization object pose
-        initial_object_pose = move_cube.sample_goal(difficulty=-1)
+        initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
+        # initial_object_pose = move_cube.sample_goal(difficulty=-1)
 
         self.policy.platform = trifinger_simulation.TriFingerPlatform(
             visualization=False,
             initial_object_pose=initial_object_pose,
         )
-        self.policy.reset_policy()
+        #import pdb; pdb.set_trace()
+        self.policy.reset_policy(obs['impedance'])
         self.step_count = 0
         return obs
 
@@ -436,30 +437,34 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
         # ensure episode length is not exceeded due to frameskip
         step_count_after = self.step_count + num_steps
-        if step_count_after > move_cube.episode_length:
+        if step_count_after > self.episode_length:
             excess = step_count_after - move_cube.episode_length
             num_steps = max(1, num_steps - excess)
 
         reward = 0.0
         for _ in range(num_steps):
-            self.step_count += 1
-            if self.step_count > move_cube.episode_length:
-                raise RuntimeError("Exceeded number of steps for one episode.")
 
             # send action to robot
             robot_action = self._gym_action_to_robot_action(action)
-            t = self.unwrapped.platform.append_desired_action(robot_action)
+            self.step_count = t = self.unwrapped.platform.append_desired_action(robot_action)
 
             # Use observations of step t + 1 to follow what would be expected
             # in a typical gym environment.  Note that on the real robot, this
             # will not be possible
-            observation = self.unwrapped._create_observation(t + 1, action)
+            observation = self.unwrapped._create_observation(t, action)
 
             reward += self.unwrapped.compute_reward(
                 observation["achieved_goal"],
                 observation["desired_goal"],
                 self.unwrapped.info,
             )
+
+            #print("step_count: {}, episode_length: {}".format(self.step_count, self.episode_length))
+
+            if self.step_count >= self.episode_length:
+                break
+
+        self.unwrapped.write_action_log(observation, action, reward)
 
         is_done = self.step_count == self.episode_length
 
@@ -483,7 +488,6 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         obs, r, d, i = self._step(action)
         obs = self.observation(obs)
         return obs, r, d, i
-
 
 class ResidualPolicyWrapper(ObservationWrapper):
     def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False, 
@@ -588,7 +592,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller.reset_policy(self.platform)
 
     def grasp_object(self, obs):
-        while not self.impedance_controller.grasped:
+        while not self.impedance_controller.mode != TrajMode.REPOSE:
             obs, _, _, _ = self.step(np.zeros(9))
         return obs
 
@@ -651,4 +655,3 @@ class ResidualPolicyWrapper(ObservationWrapper):
         if self.env.action_type == ActionType.TORQUE_AND_POSITION:
             return {'torque': action, 'position': np.repeat(np.nan, 9)}
         return action
-

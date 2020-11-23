@@ -38,7 +38,7 @@ def main():
 
     user_code_start_idx = 0
 
-    plot_range = [user_code_start_idx, user_code_start_idx + STEPS_TO_PLOT*3]
+    plot_range = [user_code_start_idx, user_code_start_idx + STEPS_TO_PLOT*4]
 
     for index, row in data.iterrows():
         if index % POINT_SKIP != 0: continue

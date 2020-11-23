@@ -19,7 +19,6 @@ from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 from rrc_iprl_package import run_rrc_sb as sb_utils 
 
 FRAMESKIP = 1
-#MAX_STEPS = 3 * 1000 // FRAMESKIP
 EP_LEN = 60 * 1000 // FRAMESKIP - 150 // FRAMESKIP
 MAX_STEPS = 15 * 1000
 
@@ -44,7 +43,10 @@ def main():
     else:
         goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)
-
+    initial_pose.position = np.array([0,0,move_cube._CUBOID_SIZE[2]/2])
+    theta = 0.0
+    initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
+   
     if osp.exists('/output'):
         save_path = '/output/action_log.npz'
     else:

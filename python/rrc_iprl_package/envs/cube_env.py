@@ -253,7 +253,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
             self.step_count = t
             # make sure to not exceed the episode length
-            if self.step_count >= self.episode_length - 1:
+            if self.step_count >= self.episode_length:
                 break
 
         is_done = self.step_count == self.episode_length
@@ -299,12 +299,12 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
+
         if self.num_reset == 0:     # if this is the first (real) reset
             observation, reward, _, _ = self.step(self._initial_action)
             self._last_obs = observation
             self._last_reward = reward
             self.init_time = time.time()
-            csv_row = "{}, {}".format(self.init_time, self._last_reward)
         elif self.num_reset == self.max_resets:     # if all virtual resets are completed
             return self._last_obs
         else:
@@ -315,12 +315,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self.reset_time = time.time() - self.init_time
             self._last_obs = observation   
             self._last_reward = reward
-            csv_row = "{}, {}".format(self.reset_time, self._last_reward)
-
-        with open(self.csv_filepath, mode="a") as file:
-            writer  = csv.writer(file, delimiter=",")
-            writer.writerow(csv_row)      
-
+            
         return observation
 
     def _reset_platform_frontend(self):
@@ -352,11 +347,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         # visualize the goal
         if self.visualization:
-            self.goal_marker = trifinger_simulation.visual_objects.CubeMarker(
-                width=0.065,
+            self.goal_marker = trifinger_simulation.visual_objects.CuboidMarker(
+                size=move_cube._CUBOID_SIZE,
                 position=self.goal["position"],
                 orientation=self.goal["orientation"],
-                physicsClientId=self.platform.simfinger._pybullet_client_id,
+                pybullet_client_id=self.platform.simfinger._pybullet_client_id,
             )
             # pbutils.reset_camera()
 
