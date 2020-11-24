@@ -301,6 +301,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # TODO disable frameskip here?
 
         if self.num_reset == 0:     # if this is the first (real) reset
+            print("-----------first reset-------------")
             observation, reward, _, _ = self.step(self._initial_action)
             self._last_obs = observation
             self._last_reward = reward
@@ -308,6 +309,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         elif self.num_reset == self.max_resets:     # if all virtual resets are completed
             return self._last_obs
         else:
+            print("-----------normal reset-------------")
             observation, reward, _, _ = self.step(self._initial_action)  # try resetting fingers so we can check velocity
             # virtual reset is done only when all joints velocity are zero
             while any(vel < 0.01 for vel in observation["observation"]["velocity"]) is False:
@@ -319,6 +321,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         return observation
 
     def _reset_platform_frontend(self):
+        print("---------VIRTUAL RESET----------")
         """Reset the platform frontend."""
         # reset is not really possible
         # import pdb; pdb.set_trace()
