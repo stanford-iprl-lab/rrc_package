@@ -45,6 +45,9 @@ class ImpedanceControllerPolicy:
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
 
+    KP_OBJ = [1, 1, 1, 1, 1, 1]
+    KV_OBJ = [1, 1, 1, 1, 1, 1]
+
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
         self.difficulty = difficulty
@@ -80,7 +83,9 @@ class ImpedanceControllerPolicy:
         self.l_actual_ft_pos    = [] # fingertip positions - actual (computed from observation)
         self.l_desired_ft_vel   = [] # fingertip velocities - desired
         self.l_desired_obj_pose = [] # object position - desired  
-        self.l_observed_obj_pose = [] # object position - desired  
+        self.l_desired_obj_vel = [] # object position - desired  
+        self.l_observed_obj_pose = [] # object position - observed
+        self.l_observed_obj_vel = [] # object velocity - observed
         self.l_desired_ft_force = [] # fingerip forces - desired
         self.l_desired_torque = []
 
@@ -95,7 +100,9 @@ class ImpedanceControllerPolicy:
                  desired_ft_vel   = np.asarray(self.l_desired_ft_vel),
                  actual_ft_pos    = np.asarray(self.l_actual_ft_pos),
                  desired_obj_pose = np.squeeze(np.asarray(self.l_desired_obj_pose)),
+                 desired_obj_vel = np.squeeze(np.asarray(self.l_desired_obj_vel)),
                  observed_obj_pose = np.squeeze(np.asarray(self.l_observed_obj_pose)),
+                 observed_obj_vel = np.squeeze(np.asarray(self.l_observed_obj_vel)),
                  desired_ft_force = np.squeeze(np.asarray(self.l_desired_ft_force)),
                  desired_torque   = np.squeeze(np.asarray(self.l_desired_torque)),
                 )
@@ -120,11 +127,16 @@ class ImpedanceControllerPolicy:
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
         self.x_traj = None
+        self.dx_traj = None
         self.mode = TrajMode.RESET
         self.plan_trajectory(observation)
 
         # Counters
         self.step_count = 0 # Number of times predict() is called
+
+        # Previous object pose and time (for estimating object velocity)
+        self.prev_obj_pose = get_pose_from_observation(observation)
+        self.prev_step_time = time.time()
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.goal_pose = goal_pose
@@ -234,6 +246,7 @@ class ImpedanceControllerPolicy:
 
         # Zero-order hold for velocity waypoints
         self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
+        self.dx_traj = np.repeat(self.dx_soln, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
     """
     Run trajectory optimization to move fingers to contact points on object
@@ -265,6 +278,7 @@ class ImpedanceControllerPolicy:
         self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
         self.l_wf_traj = None
         self.x_traj = None
+        self.dx_traj = None
 
     """
     Run traj opt to lower fingers to ground level
@@ -288,6 +302,7 @@ class ImpedanceControllerPolicy:
         self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
         self.l_wf_traj = None
         self.x_traj = None
+        self.dx_traj = None
 
     """
     Run trajectory optimization for fingers, given fingertip goal positions
@@ -321,7 +336,7 @@ class ImpedanceControllerPolicy:
         return ft_pos_traj, ft_vel_traj
 
     def log_to_buffers(self, ft_pos_goal_list, ft_vel_goal_list, 
-                       cur_ft_pos, obj_pose, torque,
+                       cur_ft_pos, obj_pose, obj_vel, torque,
                        ft_des_force_wf=None):
         # LOGGING
         self.l_step_count.append(self.step_count)       
@@ -330,6 +345,7 @@ class ImpedanceControllerPolicy:
         self.l_desired_ft_vel.append(np.asarray(ft_vel_goal_list).flatten())  
         self.l_actual_ft_pos.append(cur_ft_pos)  
         self.l_observed_obj_pose.append(np.concatenate((obj_pose.position,obj_pose.orientation)))
+        self.l_observed_obj_vel.append(obj_vel)
         self.l_desired_torque.append(np.asarray(torque))
 
         if self.x_traj is None:
@@ -337,6 +353,11 @@ class ImpedanceControllerPolicy:
             self.l_desired_obj_pose.append(np.ones(7) * np.nan)
         else:
             self.l_desired_obj_pose.append(self.x_traj[self.traj_waypoint_counter, :])
+        if self.dx_traj is None:
+            # Nan if there is no obj traj (during grasping)
+            self.l_desired_obj_vel.append(np.ones(7) * np.nan)
+        else:
+            self.l_desired_obj_vel.append(self.dx_traj[self.traj_waypoint_counter, :])
         if ft_des_force_wf is None:
             # Nan if no desired ft forces (during grasping)
             self.l_desired_ft_force.append(np.ones(9) * np.nan)
@@ -363,6 +384,22 @@ class ImpedanceControllerPolicy:
         self.traj_waypoint_counter = 0
         return 
 
+    def get_obj_vel(self, cur_obj_pose):
+        cur_step_time = time.time()
+
+        dt = cur_step_time - self.prev_step_time
+        obj_vel_position = (cur_obj_pose.position - self.prev_obj_pose.position) / dt
+
+        obj_vel_quat = (cur_obj_pose.orientation - self.prev_obj_pose.orientation) / dt
+        M = c_utils.get_dquat_to_dtheta_matrix(obj_vel_quat) # from Paul Mitiguy dynamics notes
+        obj_vel_theta = 2 * M @ obj_vel_quat
+    
+        # Set previous obj_pose and step_time to current values
+        self.prev_obj_pose = cur_obj_pose
+        self.prev_step_time = cur_step_time
+           
+        return np.concatenate((obj_vel_position, obj_vel_theta))
+
     def predict(self, full_observation):
         self.step_count += 1
         observation = full_observation['observation']
@@ -370,6 +407,10 @@ class ImpedanceControllerPolicy:
 
         # Get object pose
         obj_pose = get_pose_from_observation(full_observation)
+
+        # Estimate object velocity based on previous and current object pose
+        # TODO: this might cause an issue if observed object poses are the same across steps?
+        obj_vel = self.get_obj_vel(obj_pose)
         
         # Get current fingertip position
         cur_ft_pos = self.get_fingertip_pos_wf(current_position)
@@ -387,6 +428,15 @@ class ImpedanceControllerPolicy:
             ft_pos_goal_list.append(new_pos)
             ft_vel_goal_list.append(new_vel)
 
+        print(obj_vel)
+        
+        # If in REPOSE, get fingertip forces in world frame
+        if self.mode == TrajMode.REPOSE:
+            c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
+                                  self.dx_traj[self.traj_waypoint_counter, :],
+                                  obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
+                                  self.cp_params)
+
         if self.l_wf_traj is None:
             ft_des_force_wf = None
         else:
@@ -402,7 +452,7 @@ class ImpedanceControllerPolicy:
         torque = np.clip(torque, self.action_space.low, self.action_space.high)
 
         self.log_to_buffers(ft_pos_goal_list, ft_vel_goal_list,
-                            cur_ft_pos, obj_pose, torque,
+                            cur_ft_pos, obj_pose, obj_vel, torque,
                             ft_des_force_wf)
         # always increment traj_waypoint_counter UNLESS in repose mode and have reached final waypoint
         if not (self.mode == TrajMode.REPOSE and self.traj_waypoint_counter == self.ft_pos_traj.shape[0] - 1):

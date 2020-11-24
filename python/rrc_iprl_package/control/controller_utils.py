@@ -2,6 +2,7 @@ import numpy as np
 import enum
 from scipy.spatial.transform import Rotation
 from scipy.spatial.distance import pdist, squareform
+from casadi import *
 
 from rrc_iprl_package.control.contact_point import ContactPoint
 from trifinger_simulation.tasks import move_cube
@@ -19,6 +20,7 @@ class PolicyMode(enum.Enum):
 # Object properties
 OBJ_MASS = 0.016 # 16 grams
 OBJ_SIZE = move_cube._CUBOID_SIZE + 0.012
+OBJ_MU = 1
 
 # Here, hard code the base position of the fingers (as angle on the arena)
 r = 0.15
@@ -77,37 +79,103 @@ CUBOID_LONG_FACES = [3,4,5,6]
 """
 Compute wrench that needs to be applied to boject to maintain it on desired trajectory
 """
-def track_obj_traj_PD(x_des, dx_dex, x_cur, dx_cur, Kp, Kv, mass):
+def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     g = np.array([0, 0, -9.81, 0, 0, 0]) # Gravity vector
 
-    # Force
-    f = Kp @ x_delta + Kv @ dx_delta - mass * g
+    # Force (compute position error)
+    p_delta = (x_des[0:3] - x_cur.position)
+    dp_delta = (dx_des[0:3] - dx_cur[0:3])
     
-    # TODO: Compute moment
+    # Moment (compute orientation error)
+    # Compute difference between desired and current quaternion
+    R_des = Rotation.from_quat(x_des[3:])
+    R_cur = Rotation.from_quat(x_cur.orientation)
+    o_delta = R_des.as_euler("zxy") - R_cur.as_euler("zxy")
+    do_delta = (dx_des[3:] - dx_cur[3:])
 
-    return f
+    # Compute wrench with PD feedback law
+    x_delta = np.concatenate((p_delta, o_delta))
+    dx_delta = np.concatenate((dp_delta, do_delta))
+    W = Kp @ x_delta + Kv @ dx_delta - OBJ_MASS * g
 
+    return W
 
 """
 Force optimization
 """
-def get_ft_forces(f_obj, cp_params, x_cur):
+def get_ft_forces(x_des, dx_des, x_cur, dx_cur, Kp, Kv, cp_params):
+    W = track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv)
 
-    cp_params_on_obj = []
-    for cp in cp_params:
-        if cp is not None: cp_params_on_obj.append(cp)
+    cp_list = []
+    for cp_param in cp_params:
+        if cp_param is not None:
+            cp = get_cp_of_from_cp_param(cp_param)
+            cp_list.append(cp)
 
-    fnum = len(cp_params_on_obj)
+    fnum = len(cp_list)
 
     # To compute grasp matrix
-    # TODO and friction cone consraints..? 
-    system = FixedContactPointSystem(cp_params = cp_params_on_obj, 
-                                     obj_shape = OBJ_SIZE, obj_mass = OBJ_MASS)
+    G = __get_grasp_matrix(np.concatenate((x_cur.position, x_cur.orientation)), cp_list)
     
-    # Get grasp matrix
-    # TODO: Should I just make a function here to do this? So we don't need to make a new system every time?
-    G = system.get_grasp_matrix(x_cur)
-    
+    # TODO use casadi for now, make new problem every time. If too slow, try cvxopt or scipy.minimize, 
+    # Or make a parametrized problem??
+    # Contact-surface normal vector for each contact point
+    n = np.array([1, 0, 0]) # contact point frame x axis points into object    
+    # Tangent vectors d_i for each contact point
+    d = [np.array([0, 1, 0]),
+         np.array([0, -1, 0]),
+         np.array([0, 0, 1]),
+         np.array([0, 0, -1])]
+
+    # Formulate optimization problem
+    B = SX.sym("B", len(d) * fnum) # Scaling weights for each of the cone vectors
+    B0 = np.ones(B.shape[0]) # Initial guess for weights
+
+    # Fill lambda vector
+    l_list = []
+    for j in range(fnum):
+        l = 0 # contact force
+        for i in range(len(d)):
+            v = n + OBJ_MU * d[i] 
+            l += B[j*fnum + i] * v 
+        l_list.append(l)
+    L = vertcat(*l_list)
+
+    f = G @ L - W
+
+    # Formulate constraints
+    g = f
+    g_lb = np.zeros(f.shape[0])
+    g_ub = np.zeros(f.shape[0])
+
+    # Constraints on B
+    z_lb = np.zeros(B.shape[0])
+    z_ub = np.ones(B.shape[0]) * np.inf
+
+    cost = L.T @ L
+
+    problem = {"x": B, "f": cost, "g": g}
+    options = {"ipopt.print_level":5,
+               "ipopt.max_iter":10000,
+                "ipopt.tol": 1e-4,
+                "print_time": 1
+              }
+    solver = nlpsol("S", "ipopt", problem, options)
+    r = solver(x0=B0, lbg=g_lb, ubg=g_ub, lbx=z_lb, ubx=z_ub)
+    B_soln = r["x"]
+
+    # Compute contact forces in contact point frames from B_soln
+    l_soln = []
+    for j in range(fnum):
+        l = 0 # contact force
+        for i in range(len(d)):
+            v = n + OBJ_MU * d[i] 
+            l += B_soln[j*fnum + i] * v 
+        l_soln.append(l)
+
+    # Convert forces from contact point frame to world frame
+    print(l_soln)
+    quit()
     
 
 """
@@ -709,4 +777,79 @@ def __get_distance_from_pt_2_line(a, b, p):
     d = ap - c
     
     return np.sqrt(np.dot(d,d))
+
+"""
+Get grasp matrix
+Input:
+x: object pose [px, py, pz, qw, qx, qy, qz]
+"""
+def __get_grasp_matrix(x, cp_list):
+    fnum = len(cp_list)
+    obj_dof = 6
+
+    # Contact model force selection matrix
+    l_i = 3
+    H_i = np.array([
+                  [1, 0, 0, 0, 0, 0],
+                  [0, 1, 0, 0, 0, 0],
+                  [0, 0, 1, 0, 0, 0],
+                  ])
+    H = np.zeros((l_i*fnum,obj_dof*fnum))
+    for i in range(fnum):
+      H[i*l_i:i*l_i+l_i, i*obj_dof:i*obj_dof+obj_dof] = H_i
+    
+    # Transformation matrix from object frame to world frame
+    quat_o_2_w = [x[3], x[4], x[5], x[6]]
+
+    G_list = []
+
+    # Calculate G_i (grasp matrix for each finger)
+    for c in cp_list:
+        cp_pos_of = c.pos_of # Position of contact point in object frame
+        quat_cp_2_o = c.quat_of # Orientation of contact point frame w.r.t. object frame
+
+        S = np.array([
+                     [0, -cp_pos_of[2], cp_pos_of[1]],
+                     [cp_pos_of[2], 0, -cp_pos_of[0]],
+                     [-cp_pos_of[1], cp_pos_of[0], 0]
+                     ])
+
+        P_i = np.eye(6)
+        P_i[3:6,0:3] = S
+
+        # Orientation of cp frame w.r.t. world frame
+        # quat_cp_2_w = quat_o_2_w * quat_cp_2_o
+        R_cp_2_w = Rotation.from_quat(quat_o_2_w) * Rotation.from_quat(quat_cp_2_o)
+        # R_i is rotation matrix from contact frame i to world frame
+        R_i = R_cp_2_w.as_matrix()
+        R_i_bar = np.zeros((6,6))
+        R_i_bar[0:3,0:3] = R_i
+        R_i_bar[3:6,3:6] = R_i
+
+        G_iT = R_i_bar.T @ P_i.T
+        G_list.append(G_iT)
+    
+    GT_full = np.concatenate(G_list)
+    GT = H @ GT_full
+    #print(GT.T)
+    return GT.T
+
+"""
+Get matrix to convert dquat (4x1 vector) to angular velocities (3x1 vector)
+"""
+def get_dquat_to_dtheta_matrix(quat):
+    qx = quat[0]
+    qy = quat[1]
+    qz = quat[2]
+    qw = quat[3]
+
+    M = np.array([
+                  [-qx, -qy, -qz],
+                  [qw, qz, -qy],
+                  [-qz, qw, qx],
+                  [qy, -qx, qw],
+                ])
+
+    return M.T
+
 
