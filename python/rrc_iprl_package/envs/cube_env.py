@@ -353,7 +353,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 orientation=self.goal["orientation"],
                 pybullet_client_id=self.platform.simfinger._pybullet_client_id,
             )
-            # pbutils.reset_camera()
+            pbutils.reset_camera()
 
     def seed(self, seed=None):
         """Sets the seed for this env’s random number generator.
