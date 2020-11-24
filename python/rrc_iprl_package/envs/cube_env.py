@@ -307,6 +307,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self._last_reward = reward
             self.init_time = time.time()
         elif self.num_reset == self.max_resets:     # if all virtual resets are completed
+            print("num_reset, max_resets: ", self.num_reset, self.max_resets)
             return self._last_obs
         else:
             print("-----------normal reset-------------")

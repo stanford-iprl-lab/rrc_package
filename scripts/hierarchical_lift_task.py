@@ -116,6 +116,7 @@ def main():
                 is_done = False
                 steps_so_far += 1
                 continue
+        print("total steps: ", steps_so_far)
     env.save_action_log()
 
     print("------")
