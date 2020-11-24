@@ -97,7 +97,7 @@ def main():
         while steps_so_far != EP_LEN:
             # if virtual episode is not done running and real EP_LEN hasn't been reached, keep running
             if not is_done:
-                print("--------------normal stepping-------------")    
+                # print("--------------normal stepping-------------", steps_so_far)    
                 action = policy.predict(observation)
                 observation, reward, is_done, info = env.step(action)
                 if old_mode != policy.mode:
@@ -109,7 +109,7 @@ def main():
             # if current virtual episode is done, but hasn't reached the end of real episode,
             # reset and run the next episode 
             else:
-                print("--------------resetting-------------")
+                print("--------------resetting-------------", steps_so_far)
                 observation = env.reset()
                 initial_pose = move_cube.Pose.from_dict(observation['impedance']['achieved_goal'])
                 policy.impedance_controller.set_init_goal(initial_pose, goal_pose)
