@@ -77,7 +77,7 @@ CUBOID_SHORT_FACES = [1,2]
 CUBOID_LONG_FACES = [3,4,5,6]
 
 """
-Compute wrench that needs to be applied to boject to maintain it on desired trajectory
+Compute wrench that needs to be applied to object to maintain it on desired trajectory
 """
 def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     g = np.array([0, 0, -9.81, 0, 0, 0]) # Gravity vector
@@ -90,10 +90,11 @@ def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     # Compute difference between desired and current quaternion
     R_des = Rotation.from_quat(x_des[3:])
     R_cur = Rotation.from_quat(x_cur.orientation)
-    o_delta = R_des.as_euler("zxy") - R_cur.as_euler("zxy")
+    # TODO: Fix this - follow Oussama's notes - this is wrong.
+    o_delta = R_des.as_euler("zxy") - R_cur.as_euler("zxy") # TODO rotation difference??
     do_delta = (dx_des[3:] - dx_cur[3:])
 
-    # Compute wrench with PD feedback law
+    # Compute wrench W (6x1) with PD feedback law
     x_delta = np.concatenate((p_delta, o_delta))
     dx_delta = np.concatenate((dp_delta, do_delta))
     W = Kp @ x_delta + Kv @ dx_delta - OBJ_MASS * g
@@ -101,22 +102,26 @@ def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     return W
 
 """
-Force optimization
+Compute fingertip forces necessary to keep object on desired trajectory
 """
 def get_ft_forces(x_des, dx_des, x_cur, dx_cur, Kp, Kv, cp_params):
+    # Get desired wrench for object COM to track obj traj
     W = track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv)
 
+    # Get list of contact point positions and orientations in object frame
+    # By converting cp_params to contactPoints
     cp_list = []
     for cp_param in cp_params:
         if cp_param is not None:
             cp = get_cp_of_from_cp_param(cp_param)
             cp_list.append(cp)
-
     fnum = len(cp_list)
 
     # To compute grasp matrix
     G = __get_grasp_matrix(np.concatenate((x_cur.position, x_cur.orientation)), cp_list)
     
+    
+    # Solve for fingertip forces via optimization
     # TODO use casadi for now, make new problem every time. If too slow, try cvxopt or scipy.minimize, 
     # Or make a parametrized problem??
     # Contact-surface normal vector for each contact point
@@ -139,18 +144,18 @@ def get_ft_forces(x_des, dx_des, x_cur, dx_cur, Kp, Kv, cp_params):
             v = n + OBJ_MU * d[i] 
             l += B[j*fnum + i] * v 
         l_list.append(l)
-    L = vertcat(*l_list)
+    L = vertcat(*l_list) # (9x1) lambda vector
 
-    f = G @ L - W
+    f = G @ L - W # == 0
 
     # Formulate constraints
-    g = f
-    g_lb = np.zeros(f.shape[0])
-    g_ub = np.zeros(f.shape[0])
+    g = f # contraint function
+    g_lb = np.zeros(f.shape[0]) # constraint lower bound
+    g_ub = np.zeros(f.shape[0]) # constraint upper bound
 
     # Constraints on B
-    z_lb = np.zeros(B.shape[0])
-    z_ub = np.ones(B.shape[0]) * np.inf
+    z_lb = np.zeros(B.shape[0]) # Lower bound on beta
+    z_ub = np.ones(B.shape[0]) * np.inf # Upper bound on beta
 
     cost = L.T @ L
 
@@ -165,18 +170,22 @@ def get_ft_forces(x_des, dx_des, x_cur, dx_cur, Kp, Kv, cp_params):
     B_soln = r["x"]
 
     # Compute contact forces in contact point frames from B_soln
-    l_soln = []
+    # TODO fix list length
+    l_wf_soln = []
     for j in range(fnum):
-        l = 0 # contact force
+        l_cf = 0 # contact force
         for i in range(len(d)):
             v = n + OBJ_MU * d[i] 
-            l += B_soln[j*fnum + i] * v 
-        l_soln.append(l)
+            l_cf += B_soln[j*fnum + i] * v 
 
-    # Convert forces from contact point frame to world frame
-    print(l_soln)
-    quit()
-    
+        # Convert from contact point frame to world frame
+        cp = cp_list[j]
+        R_cp_2_o = Rotation.from_quat(cp.quat_of)
+        R_o_2_w = Rotation.from_quat(x_cur.orientation)
+        l_wf = R_o_2_w.apply(R_cp_2_o.apply(np.squeeze(l_cf)))
+        l_wf_soln.append(l_wf)
+    return l_wf_soln
+
 
 """
 Compute joint torques to move fingertips to desired locations

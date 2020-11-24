@@ -45,8 +45,8 @@ class ImpedanceControllerPolicy:
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
 
-    KP_OBJ = [1, 1, 1, 1, 1, 1]
-    KV_OBJ = [1, 1, 1, 1, 1, 1]
+    KP_OBJ = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    KV_OBJ = [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
@@ -355,7 +355,7 @@ class ImpedanceControllerPolicy:
             self.l_desired_obj_pose.append(self.x_traj[self.traj_waypoint_counter, :])
         if self.dx_traj is None:
             # Nan if there is no obj traj (during grasping)
-            self.l_desired_obj_vel.append(np.ones(7) * np.nan)
+            self.l_desired_obj_vel.append(np.ones(6) * np.nan)
         else:
             self.l_desired_obj_vel.append(self.dx_traj[self.traj_waypoint_counter, :])
         if ft_des_force_wf is None:
@@ -384,12 +384,14 @@ class ImpedanceControllerPolicy:
         self.traj_waypoint_counter = 0
         return 
 
+    # TODO: What about when object observations are noisy???
     def get_obj_vel(self, cur_obj_pose):
         cur_step_time = time.time()
 
         dt = cur_step_time - self.prev_step_time
         obj_vel_position = (cur_obj_pose.position - self.prev_obj_pose.position) / dt
 
+        # TODO don't subtract quaternions directly
         obj_vel_quat = (cur_obj_pose.orientation - self.prev_obj_pose.orientation) / dt
         M = c_utils.get_dquat_to_dtheta_matrix(obj_vel_quat) # from Paul Mitiguy dynamics notes
         obj_vel_theta = 2 * M @ obj_vel_quat
@@ -428,19 +430,18 @@ class ImpedanceControllerPolicy:
             ft_pos_goal_list.append(new_pos)
             ft_vel_goal_list.append(new_vel)
 
-        print(obj_vel)
-        
         # If in REPOSE, get fingertip forces in world frame
         if self.mode == TrajMode.REPOSE:
-            c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
+            ft_des_force_wf = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
                                   self.dx_traj[self.traj_waypoint_counter, :],
                                   obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
                                   self.cp_params)
-
-        if self.l_wf_traj is None:
-            ft_des_force_wf = None
+            ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
+            #ft_des_force_wf = None
+    
         else:
-            ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
+            ft_des_force_wf = None
+        print(ft_des_force_wf)
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(ft_pos_goal_list,
@@ -669,8 +670,14 @@ class ResidualControllerPolicy(HierarchicalControllerPolicy):
         return torque
 
 
-def get_pose_from_observation(observation, goal_pose=False):
-    key = 'achieved_goal' if not goal_pose else 'desired_goal'
+def get_pose_from_observation(observation, goal_pose=False, filtered=False):
+    if goal_pose:
+        key = "desired_goal"
+    else:
+        if filtered:
+            key = "achieved_goal_filtered"
+        else:
+            key = "achieved_goal"
     return move_cube.Pose.from_dict(observation[key])
 
 def flip_needed(init_pose, goal_pose):
