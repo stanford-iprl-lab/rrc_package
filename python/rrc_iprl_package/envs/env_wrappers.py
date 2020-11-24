@@ -26,7 +26,8 @@ from collections import deque
 
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
-DIST_THRESH = move_cube._CUBE_WIDTH / 5
+_CUBE_WIDTH = 0.0325
+DIST_THRESH = _CUBE_WIDTH / 5
 ORI_THRESH = np.pi / 8
 REW_BONUS = 1
 POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
@@ -122,7 +123,7 @@ def configurable(pickleable: bool = False):
 class CurriculumInitializer:
     """Initializer that samples random initial states and goals."""
 
-    def __init__(self, difficulty=1, initial_dist=move_cube._CUBE_WIDTH,
+    def __init__(self, difficulty=1, initial_dist=_CUBE_WIDTH,
                  num_levels=4, num_episodes=5, fixed_goal=None):
         """Initialize.
 
@@ -206,9 +207,9 @@ class CurriculumInitializer:
 @configurable(pickleable=True)
 class ReorientInitializer:
     """Initializer that samples random initial states and goals."""
-    def_goal_pose = move_cube.Pose(np.array([0,0,move_cube._CUBE_WIDTH/2]), np.array([0,0,0,1]))
+    def_goal_pose = move_cube.Pose(np.array([0,0,_CUBE_WIDTH/2]), np.array([0,0,0,1]))
 
-    def __init__(self, difficulty=1, initial_dist=move_cube._CUBE_WIDTH):
+    def __init__(self, difficulty=1, initial_dist=_CUBE_WIDTH):
         self.difficulty = difficulty
         self.initial_dist = initial_dist
         self.random = np.random.RandomState()
@@ -232,7 +233,7 @@ class ReorientInitializer:
 
 
 class RandomGoalOrientationInitializer:
-    init_pose = move_cube.Pose(np.array([0,0,move_cube._CUBE_WIDTH/2]), np.array([0,0,0,1]))
+    init_pose = move_cube.Pose(np.array([0,0,_CUBE_WIDTH/2]), np.array([0,0,0,1]))
 
     def __init__(self, difficulty=1, max_dist=np.pi):
         self.difficulty = difficulty
@@ -249,7 +250,7 @@ class RandomGoalOrientationInitializer:
 
 
 class RandomOrientationInitializer:
-    goal = move_cube.Pose(np.array([0,0,move_cube._CUBE_WIDTH/2]), np.array([0,0,0,1]))
+    goal = move_cube.Pose(np.array([0,0,_CUBE_WIDTH/2]), np.array([0,0,0,1]))
 
     def __init__(self, difficulty=4):
         self.difficulty = difficulty
