@@ -262,6 +262,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self._last_obs = observation
         self._last_reward = reward
 
+        print("is_done: ", is_done)
+
         return observation, reward, is_done, self.info
 
     def write_action_log(self, observation, action, reward):
