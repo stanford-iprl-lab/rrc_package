@@ -39,9 +39,10 @@ def main():
             if d == 3 and 1 in gen_goals:
                 g.position[:2] = gen_goals[1][i].position[:2]
             goals.append(g)
-
+            g = {k: [float(x) for x in v] for k,v in g.to_dict().items()}
+            g = {'goal': g, 'difficulty': d}
             with open(goal_path, 'w') as f:
-                json.dump({k: [float(x) for x in v] for k,v in g.to_dict().items()}, f)
+                json.dump(g, f, indent=4, sort_keys=True)
 
             # only generate one level 2 goal
             if d == 2:
