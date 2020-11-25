@@ -276,7 +276,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self._reset_direct_simulation()
 
         self.step_count = 0
-        if self.num_resets * self.num_steps >= 120*1000:
+        if self.num_resets * self.episode_length >= 120*1000:
             print('Not performing full reset, reached maximum number of resets')
 
         # need to already do one step to get initial observation
