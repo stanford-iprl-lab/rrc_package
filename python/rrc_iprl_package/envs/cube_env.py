@@ -82,6 +82,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             raise ValueError("frameskip cannot be less than 1.")
         self.frameskip = frameskip
         self.episode_length = num_steps * frameskip if num_steps else move_cube.episode_length
+        self.num_resets = 0
 
         # will be initialized in reset()
         self.platform = None
@@ -275,23 +276,24 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self._reset_direct_simulation()
 
         self.step_count = 0
+        if self.num_resets * self.num_steps >= 120*1000:
+            print('Not performing full reset, reached maximum number of resets')
 
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
         observation, reward, _, _ = self.step(self._initial_action)
-        while not any(vel < 0.01 for vel in observation["observation"]["velocity"]):
-            observation, reward, _, _ = self.step(self._initial_action)
+        if self.num_resets != 0:
+            while not any(vel < 0.01 for vel in observation["observation"]["velocity"]):
+                observation, reward, _, _ = self.step(self._initial_action)
         return observation
 
     def _reset_platform_frontend(self):
         """Reset the platform frontend."""
         # reset is not really possible
         if self.platform is not None:
-            raise RuntimeError(
-                "Once started, this environment cannot be reset."
-            )
-
-        self.platform = robot_fingers.TriFingerPlatformFrontend()
+            self.num_resets += 1
+        else:
+            self.platform = robot_fingers.TriFingerPlatformFrontend()
 
     def _reset_direct_simulation(self):
         """Reset direct simulation.

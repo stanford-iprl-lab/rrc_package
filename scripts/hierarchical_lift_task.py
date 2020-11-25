@@ -11,17 +11,15 @@ import os.path as osp
 import numpy as np
 from gym.wrappers import TimeLimit
 
-from rrc_iprl_package.envs import cube_env, custom_env, env_wrappers
+from rrc_iprl_package.envs import cube_env, custom_env
 from trifinger_simulation.tasks import move_cube 
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 from rrc_iprl_package import run_rrc_sb as sb_utils 
 
 FRAMESKIP = 1
-#MAX_STEPS = 3 * 1000 // FRAMESKIP
-EP_LEN = 120 * 1000 // FRAMESKIP - 150 // FRAMESKIP
-#MAX_STEPS = 5 * 1000 // FRAMESKIP
-MAX_STEPS = None
+EP_LEN = 15 * 1000
+MAX_STEPS = 120 * 1000
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -76,6 +74,8 @@ def main():
         #print("reward:", reward)
         accumulated_reward += reward
         steps_so_far += 1
+        if steps_so_far % EP_LEN == 0:
+            obs = env.reset()
     env.save_action_log()
     # Save control_policy_log
     policy.impedance_controller.save_log()
