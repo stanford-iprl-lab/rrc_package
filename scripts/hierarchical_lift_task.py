@@ -19,7 +19,7 @@ from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 from rrc_iprl_package import run_rrc_sb as sb_utils 
 
 FRAMESKIP = 1
-EP_LEN = 60 * 1000 // FRAMESKIP - 150 // FRAMESKIP
+EP_LEN = 120 * 1000 // FRAMESKIP - 150 // FRAMESKIP
 MAX_STEPS = 15 * 1000
 
 class RandomPolicy:
