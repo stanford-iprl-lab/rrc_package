@@ -64,6 +64,7 @@ def main():
     accumulated_reward = 0
     is_done = False
     steps_so_far = 0
+    old_mode = policy.mode
     while not is_done:
         if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
         action = policy.predict(observation)
