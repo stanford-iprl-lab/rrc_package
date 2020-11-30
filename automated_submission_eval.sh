@@ -43,7 +43,7 @@ echo
 
 
 roboch_path="$2"
-branch=$(python -c "import json; print(json.load(open(${roboch_path}, 'r'))['branch'])")
+branch=$(python -c "import json; print(json.load(open('${roboch_path}', 'r'))['branch'])")
 git checkout $branch
 
 # URL to the webserver at which the recorded data can be downloaded

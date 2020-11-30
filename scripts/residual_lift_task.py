@@ -19,7 +19,7 @@ from rrc_iprl_package import run_rrc_sb as sb_utils
 
 FRAMESKIP = 1
 #MAX_STEPS = 3 * 1000 // FRAMESKIP
-EP_LEN = 120 * 1000 // FRAMESKIP - 150 // FRAMESKIP
+EP_LEN = 120 * 1000 // FRAMESKIP 
 MAX_STEPS = 120 * 1000
 
 class RandomPolicy:
