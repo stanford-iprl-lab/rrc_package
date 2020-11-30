@@ -18,7 +18,9 @@ desired_ft_pos    = data["desired_ft_pos"]
 desired_ft_vel    = data["desired_ft_vel"]
 actual_ft_pos     = data["actual_ft_pos"]
 desired_obj_pose  = data["desired_obj_pose"]
+desired_obj_vel  = data["desired_obj_vel"]
 observed_obj_pose = data["observed_obj_pose"]
+observed_obj_vel = data["observed_obj_vel"]
 desired_ft_force  = data["desired_ft_force"]
 desired_torque    = data["desired_torque"]
 
@@ -44,7 +46,18 @@ for d_i, dim in enumerate(["x","y","z"]):
     plt.title("Dimension {}".format(dim))
     plt.plot(range(steps), desired_obj_pose[:,d_i], '.', label="Desired")
     plt.plot(range(steps), observed_obj_pose[:,d_i], '.', label="Observed")
+    plt.legend()
 plt.savefig("{}/obj_pos.png".format(output_dir))
+
+plt.figure(figsize=(10,10))
+plt.suptitle("Object velocity")
+for d_i, dim in enumerate(["x","y","z", "theta_x", "theta_y", "theta_z"]):
+    plt.subplot(3,2,d_i+1)
+    plt.title("Dimension {}".format(dim))
+    plt.plot(range(steps), desired_obj_vel[:,d_i], '.', label="Desired")
+    plt.plot(range(steps), observed_obj_vel[:,d_i], '.', label="Observed")
+    plt.legend()
+plt.savefig("{}/obj_vel.png".format(output_dir))
 
 
 
