@@ -11,6 +11,7 @@ import enum
 import copy
 import time
 from scipy.interpolate import interp1d
+from scipy.spatial.transform import Rotation
 import csv
 
 from datetime import date
@@ -391,9 +392,13 @@ class ImpedanceControllerPolicy:
         dt = cur_step_time - self.prev_step_time
         obj_vel_position = (cur_obj_pose.position - self.prev_obj_pose.position) / dt
 
-        # TODO don't subtract quaternions directly
-        obj_vel_quat = (cur_obj_pose.orientation - self.prev_obj_pose.orientation) / dt
-        M = c_utils.get_dquat_to_dtheta_matrix(obj_vel_quat) # from Paul Mitiguy dynamics notes
+        # TODO: verify that we are getting angular velocities from quaternions correctly
+        cur_R = Rotation.from_quat(cur_obj_pose.orientation)
+        prev_R = Rotation.from_quat(self.prev_obj_pose.orientation)
+        delta_R = cur_R * prev_R.inv()
+        obj_vel_quat = delta_R.as_quat() / dt
+        #obj_vel_quat = (cur_obj_pose.orientation - self.prev_obj_pose.orientation) / dt
+        M = c_utils.get_dquat_to_dtheta_matrix(cur_obj_pose.orientation) # from Paul Mitiguy dynamics notes
         obj_vel_theta = 2 * M @ obj_vel_quat
     
         # Set previous obj_pose and step_time to current values
