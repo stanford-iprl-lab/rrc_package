@@ -66,7 +66,9 @@ def main():
     steps_so_far = 0
     old_mode = policy.mode
     while not is_done:
-        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: 
+            print("Terminating run after {} steps reached".format(MAX_STEPS)
+            break
         action = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
         if old_mode != policy.mode:
@@ -76,6 +78,7 @@ def main():
         accumulated_reward += reward
         steps_so_far += 1
         if steps_so_far % EP_LEN == 0:
+            print("Resetting env after {} steps reached".format(steps_so_far))
             obs = env.reset()
     env.save_action_log()
     # Save control_policy_log

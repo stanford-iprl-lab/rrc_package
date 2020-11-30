@@ -442,7 +442,6 @@ class HierarchicalControllerPolicy:
                 difficulty = difficulty)
         self.load_policy(load_dir, deterministic)
         self.start_mode = start_mode
-        self._platform = None
         self.steps_from_reset = 0
         self.step_count = self.rl_start_step = 0
         self.traj_initialized = False
@@ -453,19 +452,14 @@ class HierarchicalControllerPolicy:
         self.mode = self.start_mode
         self.traj_initialized = False
         self.steps_from_reset = self.step_count = self.rl_start_step = 0
-        if platform:
-            self._platform = platform
         self.impedance_controller.reset_policy(observation, platform)
 
     @property
     def platform(self):
-        assert self._platform is not None, 'HierarchicalControlPolicy.platform is not set'
-        return self._platform
+        return self.impedance_ccontroller.platform
 
     @platform.setter
     def platform(self, platform):
-        assert platform is not None, 'platform is not yet initialized'
-        self._platform = platform
         self.impedance_controller.platform = platform
 
     def load_policy(self, load_dir, deterministic=False):

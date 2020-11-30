@@ -377,7 +377,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             self.rl_observation_names = policy.observation_names
             self.rl_observation_space = policy.rl_observation_space
             obs_dict = {'impedance': self.env.observation_space}
-            if self.rl_observation_space:
+            if self.rl_observation_space is not None:
                 obs_dict['rl'] = self.rl_observation_space
             self.observation_space = gym.spaces.Dict(obs_dict)
 
@@ -415,12 +415,12 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
         # initial_object_pose = move_cube.sample_goal(difficulty=-1)
 
-        self.policy.platform = trifinger_simulation.TriFingerPlatform(
-            visualization=False,
-            initial_object_pose=initial_object_pose,
-        )
-        #import pdb; pdb.set_trace()
-        self.policy.reset_policy(obs['impedance'])
+        if self._platform is None:
+            self._platform = trifinger_simulation.TriFingerPlatform(
+                visualization=False,
+                initial_object_pose=initial_object_pose,
+            )
+        self.policy.reset_policy(obs['impedance'], self._platform)
         self.step_count = 0
         return obs
 
@@ -483,6 +483,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         obs, r, d, i = self._step(action)
         obs = self.observation(obs)
         return obs, r, d, i
+
 
 class ResidualPolicyWrapper(ObservationWrapper):
     def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False, 

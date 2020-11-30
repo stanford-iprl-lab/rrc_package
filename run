@@ -3,4 +3,4 @@
 # run the script via rosrun (for python scripts a simple symlink would also
 # work but using rosrun works for C++ executables as well)
 
-rosrun rrc_iprl_package hierarchical_lift_task.py "$@"
+rosrun rrc_iprl_package resudual_lift_task.py "$@"
