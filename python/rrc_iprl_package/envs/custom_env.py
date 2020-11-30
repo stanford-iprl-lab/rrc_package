@@ -339,6 +339,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         self._action_space = gym.spaces.Dict({
             'torque': spaces.robot_torque.gym, 'position': spaces.robot_position.gym})
         self.set_policy(policy)
+        self._platform = None
 
     @property
     def impedance_control_mode(self):
