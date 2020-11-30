@@ -50,7 +50,7 @@ def main():
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose.to_dict(), difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
-        num_steps=MAX_STEPS, visualization=True, save_npz=save_path
+        num_steps=EP_LEN, visualization=True, save_npz=save_path
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
     goal_pose = move_cube.Pose.from_dict(goal)
@@ -77,7 +77,7 @@ def main():
         #print("reward:", reward)
         accumulated_reward += reward
         steps_so_far = info.get('num_steps', steps_so_far + 1)
-        if steps_so_far % EP_LEN == 0:
+        if steps_so_far != 0 and steps_so_far % EP_LEN == 0:
             print("Resetting env after {} steps reached".format(steps_so_far))
             observation = env.reset()
     env.save_action_log()
