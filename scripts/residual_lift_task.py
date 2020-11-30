@@ -54,7 +54,7 @@ def main():
         cube_env.ActionType.TORQUE, frameskip=FRAMESKIP,
         num_steps=MAX_STEPS, visualization=True, save_npz=save_path
     )
-    if os.path.exists('/ws/src/usercode'):
+    if osp.exists('/ws/src/usercode'):
         rl_load_dir = '/ws/src/usercode/models/HER.zip'
     else:
         rl_load_dir = './models/HER.zip'
@@ -73,7 +73,7 @@ def main():
         action, _ = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
         accumulated_reward += reward
-        steps_so_far += 1
+        steps_so_far += FRAMESKIP
     env.save_action_log()
 
     print("------")
