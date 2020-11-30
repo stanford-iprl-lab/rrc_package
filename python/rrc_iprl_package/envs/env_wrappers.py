@@ -26,8 +26,8 @@ from collections import deque
 
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
-DIST_THRESH = max(move_cube._CUBOID_SIZE) / 5
-_CUBOID_WIDTH = max(move_cube._CUBOID_SIZE)
+DIST_THRESH = 0.08 / 5
+_CUBOID_WIDTH = 0.08
 ORI_THRESH = np.pi / 8
 REW_BONUS = 1
 POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
