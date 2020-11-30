@@ -65,7 +65,7 @@ function curl_check_if_exists()
 }
 
 
-for (( use_rl=0; use_rl<2; use_rl++ ))
+for (( use_rl=0; use_rl<1; use_rl++ ))
 do
     if (( $use_rl == 1 ))
     then
