@@ -1,5 +1,6 @@
 """Custom Gym environment for the Real Robot Challenge Phase 1 (Simulation)."""
 import numpy as np
+import os.path as osp
 import gym
 import pybullet
 
@@ -445,7 +446,13 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             # Use observations of step t + 1 to follow what would be expected
             # in a typical gym environment.  Note that on the real robot, this
             # will not be possible
-            observation = self.unwrapped._create_observation(t, action)
+
+            # If running with backend
+            if osp.exists("/output"):
+                observation = self.unwrapped._create_observation(t, action)
+            # If running without backend, to avoid twitchiness
+            else:
+                observation = self.unwrapped._create_observation(t+1, action)
 
             reward += self.unwrapped.compute_reward(
                 observation["achieved_goal"],
