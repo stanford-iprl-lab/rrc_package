@@ -94,8 +94,13 @@ def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     o_delta = R_des.as_euler("zxy") - R_cur.as_euler("zxy") # TODO rotation difference??
     do_delta = (dx_des[3:] - dx_cur[3:])
 
+    o_delta = np.zeros(3)
+    for i in range(3):
+        o_delta += -0.5 * np.cross(R_cur.as_matrix()[:,i], R_des.as_matrix()[:,i])
+    do_delta = (dx_des[3:] - dx_cur[3:]) # is this the angular velocity?
+
     # Compute wrench W (6x1) with PD feedback law
-    x_delta = np.concatenate((p_delta, o_delta))
+    x_delta = np.concatenate((p_delta, -1*o_delta))
     dx_delta = np.concatenate((dp_delta, do_delta))
     W = Kp @ x_delta + Kv @ dx_delta - OBJ_MASS * g
 
@@ -170,7 +175,8 @@ def get_ft_forces(x_des, dx_des, x_cur, dx_cur, Kp, Kv, cp_params):
     B_soln = r["x"]
 
     # Compute contact forces in contact point frames from B_soln
-    # TODO fix list length
+    # TODO fix list length when there are only 2 contact points
+    # save for later since we always have a 3 fingered grasp
     l_wf_soln = []
     for j in range(fnum):
         l_cf = 0 # contact force
