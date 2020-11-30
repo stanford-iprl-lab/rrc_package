@@ -244,6 +244,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         is_done = self.step_count == self.episode_length
         self.write_action_log(observation, action, reward)
+        self.info['num_steps'] = self.step_count
 
         return observation, reward, is_done, self.info
 

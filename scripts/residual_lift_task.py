@@ -73,7 +73,7 @@ def main():
         action, _ = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
         accumulated_reward += reward
-        steps_so_far += FRAMESKIP
+        steps_so_far = info.get('num_steps', steps_so_far + 1)
     env.save_action_log()
 
     print("------")
