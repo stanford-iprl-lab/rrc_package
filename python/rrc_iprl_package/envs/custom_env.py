@@ -580,14 +580,14 @@ class ResidualPolicyWrapper(ObservationWrapper):
         init_pose, goal_pose = self.process_obs_init_goal(self._obs_dict['impedance'])
         self.impedance_controller = ImpedanceControllerPolicy(
                 self.action_space, init_pose, goal_pose)
-        self.impedance_controller.set_init_goal(init_pose, goal_pose)
         if self._platform is None:
             self._platform = trifinger_simulation.TriFingerPlatform(
                 visualization=False,
                 initial_object_pose=init_pose,
             )
         self.impedance_controller.mock_pinocchio_utils(self._platform)
-        self.impedance_controller.reset_policy(self._platform)
+        self.impedance_controller.reset_policy(self._obs_dict['impedance'], 
+                                               self._platform)
 
     def grasp_object(self, obs):
         while not self.impedance_controller.mode != TrajMode.REPOSE:
