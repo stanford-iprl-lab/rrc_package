@@ -64,6 +64,8 @@ def main():
     accumulated_reward = 0
     is_done = False
     steps_so_far = 0
+    ep_so_far = 0
+    res = 0
     old_mode = policy.mode
     while not is_done:
         if MAX_STEPS is not None and steps_so_far == MAX_STEPS: 
@@ -76,10 +78,12 @@ def main():
             old_mode = policy.mode
         #print("reward:", reward)
         accumulated_reward += reward
-        steps_so_far = info.get('num_steps', steps_so_far + 1)
-        if steps_so_far != 0 and steps_so_far % EP_LEN == 0:
+        steps_so_far = info.get('num_steps', steps_so_far + 1) + EP_LEN * ep_so_far + res
+        if steps_so_far != 0 and steps_so_far // EP_LEN > ep_so_far:
             print("Resetting env after {} steps reached".format(steps_so_far))
+            res += steps_so_far - ep_so_far * EP_LEN
             observation = env.reset()
+            ep_so_var = steps_so_far // EP_LEN
     env.save_action_log()
     # Save control_policy_log
     policy.impedance_controller.save_log()
