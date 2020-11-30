@@ -495,6 +495,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.rl_cp_params = rl_cp_params
         self.goal_env = goal_env
         self.impedance_controller = None
+        self._platform = None
         self.observation_names = PushCubeEnv.observation_names
         self.make_obs_space()
         assert env.action_type in [ActionType.TORQUE,
@@ -580,12 +581,13 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller = ImpedanceControllerPolicy(
                 self.action_space, init_pose, goal_pose)
         self.impedance_controller.set_init_goal(init_pose, goal_pose)
-        mock_platform = trifinger_simulation.TriFingerPlatform(
-            visualization=False,
-            initial_object_pose=self.initial_pose,
-        )
-        self.impedance_controller.mock_pinocchio_utils(mock_platform)
-        self.impedance_controller.reset_policy(self.platform)
+        if self._platform is None:
+            self._platform = trifinger_simulation.TriFingerPlatform(
+                visualization=False,
+                initial_object_pose=init_pose,
+            )
+        self.impedance_controller.mock_pinocchio_utils(self._platform)
+        self.impedance_controller.reset_policy(self._platform)
 
     def grasp_object(self, obs):
         while not self.impedance_controller.mode != TrajMode.REPOSE:
