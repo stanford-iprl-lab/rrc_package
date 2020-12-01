@@ -26,8 +26,10 @@ from collections import deque
 
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
-DIST_THRESH = 0.08 / 5
-_CUBOID_WIDTH = 0.08
+DIST_THRESH = 0.02
+_CUBOID_WIDTH = max(move_cube._CUBOID_SIZE)
+_CUBOID_HEIGHT = min(move_cube._CUBOID_SIZE)
+
 ORI_THRESH = np.pi / 8
 REW_BONUS = 1
 POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
@@ -123,22 +125,22 @@ def configurable(pickleable: bool = False):
 class CurriculumInitializer:
     """Initializer that samples random initial states and goals."""
 
-    def __init__(self, difficulty=1, initial_dist=_CUBOID_WIDTH,
-                 num_levels=4, num_episodes=5, fixed_goal=None):
+    def __init__(self, difficulty=1, initial_dist=_CUBOID_HEIGHT,
+                 num_levels=4, buffer_size=5, fixed_goal=None):
         """Initialize.
 
         Args:
             initial_dist (float): Distance from center of arena
             num_levels (int): Number of steps to maximum radius
-            num_episodes (int): Number of episodes to compute mean over
+            buffer_size (int): Number of episodes to compute mean over
         """
         self.difficulty = difficulty
         self.num_levels = num_levels
         self._current_level = 0
         self.levels = np.linspace(initial_dist, MAX_DIST, num_levels)
-        self.final_dist = np.array([np.inf for _ in range(num_episodes)])
+        self.final_dist = np.array([np.inf for _ in range(buffer_size)])
         if difficulty == 4:
-            self.final_ori = np.array([np.inf for _ in range(num_episodes)])
+            self.final_ori = np.array([np.inf for _ in range(buffer_size)])
         self.fixed_goal = fixed_goal
 
     @property
@@ -184,10 +186,7 @@ class CurriculumInitializer:
         if self.fixed_goal:
             goal_dist = np.linalg.norm(self.fixed_goal.position)
             return (goal_dist, goal_dist)
-        if self._current_level == self.num_levels - 1:
-            sample_radius_min = 0.
-        else:
-            sample_radius_min = self.levels[self.current_level]
+        sample_radius_min = 0.
         sample_radius_max = self.levels[min(self.num_levels - 1, self._current_level + 1)]
         return (sample_radius_min, sample_radius_max)
 
@@ -207,9 +206,9 @@ class CurriculumInitializer:
 @configurable(pickleable=True)
 class ReorientInitializer:
     """Initializer that samples random initial states and goals."""
-    def_goal_pose = move_cube.Pose(np.array([0,0,_CUBOID_WIDTH/2]), np.array([0,0,0,1]))
+    def_goal_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
 
-    def __init__(self, difficulty=1, initial_dist=_CUBOID_WIDTH):
+    def __init__(self, difficulty=1, initial_dist=_CUBOID_HEIGHT):
         self.difficulty = difficulty
         self.initial_dist = initial_dist
         self.random = np.random.RandomState()
@@ -233,7 +232,7 @@ class ReorientInitializer:
 
 
 class RandomGoalOrientationInitializer:
-    init_pose = move_cube.Pose(np.array([0,0,_CUBOID_WIDTH/2]), np.array([0,0,0,1]))
+    init_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
 
     def __init__(self, difficulty=1, max_dist=np.pi):
         self.difficulty = difficulty
@@ -250,7 +249,7 @@ class RandomGoalOrientationInitializer:
 
 
 class RandomOrientationInitializer:
-    goal = move_cube.Pose(np.array([0,0,_CUBOID_WIDTH/2]), np.array([0,0,0,1]))
+    goal = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
 
     def __init__(self, difficulty=4):
         self.difficulty = difficulty

@@ -41,7 +41,6 @@ class PushCubeEnv(gym.Env):
         self,
         initializer=None,
         cube_goal_pose=None,
-        goal_difficulty=1,
         action_type=ActionType.POSITION,
         frameskip=1,
         num_steps=None,
@@ -68,7 +67,7 @@ class PushCubeEnv(gym.Env):
             self.goal = initializer.get_goal()
         else:
             self.goal = cube_goal_pose
-        self.info = {'difficulty': goal_difficulty}
+        self.info = {'difficulty': initializer.difficulty}
         self.visualization = visualization
 
         if frameskip < 1:
@@ -414,8 +413,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
     def reset(self):
         obs = super(HierarchicalPolicyWrapper, self).reset()
         initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
-        # initial_object_pose = move_cube.sample_goal(difficulty=-1)
-
+        # initial_object_pose = move_cube.sample_goal(difficulty=-1) 
         if self._platform is None:
             self._platform = trifinger_simulation.TriFingerPlatform(
                 visualization=False,
