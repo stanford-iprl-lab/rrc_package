@@ -74,7 +74,7 @@ def main():
             print('mode changed: {} to {}'.format(old_mode, policy.mode))
             old_mode = policy.mode
         if is_done:
-            assert steps_so_far // EP_LEN, 'ep_so_far should have been '
+            assert steps_so_far // EP_LEN, 'ep_so_far should have been ' \
                 'incremented. Instead got: total_steps: {}, ep_so_far: {}'.format(
                     total_steps, ep_so_far)
             print("Resetting env after {} steps reached".format(steps_so_far))
