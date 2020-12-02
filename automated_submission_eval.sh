@@ -91,9 +91,9 @@ do
                 git commit -m "Goal: $gc, Difficulty: $d" && git push
             fi
 
-            for (( nr==0; nr<${num_runs}; nr++ ))
+            for (( nr=0; nr<${num_runs}; nr++ ))
             do 
-                echo "Submit job, run $nr"
+                echo "Submit job, run ${nr}"
                 submit_result=$(ssh -T ${username}@robots.real-robot-challenge.com <<<submit)
                 job_id=$(echo ${submit_result} | grep -oP 'job\(s\) submitted to cluster \K[0-9]+')
                 if [ $? -ne 0 ]
@@ -179,7 +179,7 @@ do
                 # can be submitted after the previous one finished.  So depending how long
                 # your data processing code above (if existent) takes, you may need to add
                 # a sleep here.
-                sleep 60
+                sleep 120
 
                 echo
                 echo "============================================================"
