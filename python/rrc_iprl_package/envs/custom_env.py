@@ -2,7 +2,6 @@
 import numpy as np
 import gym
 import pybullet
-import os.path as osp
 
 from gym import wrappers
 from gym import ObservationWrapper
@@ -447,7 +446,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             # in a typical gym environment.  Note that on the real robot, this
             # will not be possible
             if osp.exists("/output"):
-                observation = self.unwrapped._create_observation(t+1, action)
+                observation = self.unwrapped._create_observation(t, action)
             else:
                 observation = self.unwrapped._create_observation(t+1, action)
 
