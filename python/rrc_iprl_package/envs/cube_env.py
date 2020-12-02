@@ -46,6 +46,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         cube_initial_pose: dict = None,
         goal_difficulty: int = 1,
         action_type: ActionType = ActionType.POSITION,
+        default_position: np.ndarray = np.array([0.0, 0.75, -1.6] * 3),
         visualization: bool = True,
         frameskip: int = 1,
         num_steps: int = None,
@@ -122,12 +123,15 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if not object_state_space.contains(self.goal):
             raise ValueError("Invalid goal pose.")
 
+        self.default_position = default_position
         if self.action_type == ActionType.TORQUE:
+            assert self.action_type in [ActionType.POSITION,
+                    ActionType.TORQUE_AND_POSITION]
             self.action_space = robot_torque_space
             self._initial_action = trifingerpro_limits.robot_torque.default
         elif self.action_type == ActionType.POSITION:
             self.action_space = robot_position_space
-            self._initial_action = trifingerpro_limits.robot_position.default
+            self._initial_action = default_position
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
             self.action_space = gym.spaces.Dict(
                 {
@@ -137,7 +141,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             )
             self._initial_action = {
                 "torque": trifingerpro_limits.robot_torque.default,
-                "position": trifingerpro_limits.robot_position.default,
+                "position": default_position,
             }
         else:
             raise ValueError("Invalid action_type")
@@ -283,9 +287,15 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # need to already do one step to get initial observation
         # TODO disable frameskip here?
         observation, reward, _, _ = self.step(self._initial_action)
-        if self.num_resets != 0:
-            while not any(vel < 0.01 for vel in observation["observation"]["velocity"]):
+        cur_vel = observation["observation"]["velocity"]
+        cur_pos = observation["observation"]["position"]
+        if self.num_resets != -1:
+            # import pdb; pdb.set_trace()
+            while not all(vel < 0.01 for vel in cur_vel) or \
+                    np.abs(cur_pos - self.default_position).max() >= .02:
                 observation, reward, _, _ = self.step(self._initial_action)
+                cur_vel = observation["observation"]["velocity"]
+                cur_pos = observation["observation"]["position"]
         return observation
 
     def _reset_platform_frontend(self):

@@ -68,13 +68,15 @@ def main():
     while total_steps < MAX_STEPS:
         action = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
-        steps_so_far = info.get('num_steps', steps_so_far + 1)
+        steps_so_far = env.step_count
         accumulated_reward += reward
         if old_mode != policy.mode:
             print('mode changed: {} to {}'.format(old_mode, policy.mode))
             old_mode = policy.mode
         if is_done:
-            assert steps_so_far // EP_LEN, 'ep_so_far should have been ' \
+            if not steps_so_far // EP_LEN:
+                import pdb; pdb.set_trace()
+            assert steps_so_far // EP_LEN, 'steps_so_far should have been ' \
                 'incremented. Instead got: total_steps: {}, ep_so_far: {}'.format(
                     total_steps, ep_so_far)
             print("Resetting env after {} steps reached".format(steps_so_far))
