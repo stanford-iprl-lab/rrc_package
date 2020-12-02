@@ -288,6 +288,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 observation, reward, _, _ = self.step(self._initial_action)
                 cur_vel = observation["observation"]["velocity"]
                 cur_pos = observation["observation"]["position"]
+
+                print("cur vel: {}".format(cur_vel))
+                print("cur pos: {}".format(cur_pos))
+                print("default pos: {}".format(default_position))
         return observation
 
     def _reset_platform_frontend(self):
