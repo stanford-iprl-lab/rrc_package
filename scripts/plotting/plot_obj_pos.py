@@ -22,9 +22,17 @@ if __name__ == "__main__":
         [observation.object_pose.position for observation in log_reader.data]
     )
 
+    filtered_positions = np.array(
+        [observation.filtered_object_pose.position for observation in log_reader.data]
+    )
+
     plt.plot(positions[:, 0], c="r", label="x position - observed")
     plt.plot(positions[:, 1], c="g", label="y position - observed")
     plt.plot(positions[:, 2], c="b", label="z position - observed")
+
+    #plt.plot(filtered_positions[:, 0],"--", c="r", label="x position - filtered")
+    #plt.plot(filtered_positions[:, 1],"--", c="g", label="y position - filtered")
+    #plt.plot(filtered_positions[:, 2],"--", c="b", label="z position - filtered")
 
     goal_x = goal_pose.position[0]
     goal_y = goal_pose.position[1]
