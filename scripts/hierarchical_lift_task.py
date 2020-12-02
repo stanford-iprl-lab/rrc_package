@@ -18,8 +18,8 @@ from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 from rrc_iprl_package import run_rrc_sb as sb_utils 
 
 FRAMESKIP = 1
-EP_LEN = 15 * 1000
 MAX_STEPS = 120 * 1000
+EP_LEN = MAX_STEPS # 15 * 1000
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -73,7 +73,7 @@ def main():
         if old_mode != policy.mode:
             print('mode changed: {} to {}'.format(old_mode, policy.mode))
             old_mode = policy.mode
-        if is_done:
+        if is_done and steps_so_far + EP_LEN * ep_so_far < MAX_STEPS:
             if not steps_so_far // EP_LEN:
                 import pdb; pdb.set_trace()
             assert steps_so_far // EP_LEN, 'steps_so_far should have been ' \
