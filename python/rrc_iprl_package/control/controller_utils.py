@@ -81,10 +81,10 @@ CUBOID_LONG_FACES = [3,4,5,6]
 Compute wrench that needs to be applied to object to maintain it on desired trajectory
 """
 def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
-    print(x_des)
-    print(x_cur.position, x_cur.orientation)
-    print(dx_des)
-    print(dx_cur)
+    #print(x_des)
+    #print(x_cur.position, x_cur.orientation)
+    #print(dx_des)
+    #print(dx_cur)
     g = np.array([0, 0, -9.81, 0, 0, 0]) # Gravity vector
 
     # Force (compute position error)
@@ -100,20 +100,20 @@ def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
         o_delta += -0.5 * np.cross(R_cur.as_matrix()[:,i], R_des.as_matrix()[:,i])
     do_delta = (dx_des[3:] - dx_cur[3:]) # is this the angular velocity?
 
-    print(p_delta)
-    print(dp_delta)
-    print(o_delta)
-    print(do_delta)
+    #print("p_delta: {}".format(p_delta))
+    #print("dp_delta: {}".format(dp_delta))
+    #print("o_delta: {}".format(o_delta))
+    #print("do_delta: {}".format(do_delta))
 
     # Compute wrench W (6x1) with PD feedback law
     x_delta = np.concatenate((p_delta, -1*o_delta))
     dx_delta = np.concatenate((dp_delta, do_delta))
     W = Kp @ x_delta + Kv @ dx_delta - OBJ_MASS * g
     
-    print(x_delta)
-    print(dx_delta)
+    #print("x_delta: {}".format(x_delta))
+    #print("dx_delta: {}".format(dx_delta))
 
-    print(W)
+    #print(W)
 
     return W
 
@@ -206,7 +206,7 @@ def get_ft_forces(x_des, dx_des, x_cur, dx_cur, Kp, Kv, cp_params):
         R_o_2_w = Rotation.from_quat(x_cur.orientation)
         l_wf = R_o_2_w.apply(R_cp_2_o.apply(np.squeeze(l_cf)))
         l_wf_soln.append(l_wf)
-    return l_wf_soln
+    return l_wf_soln, W
 
 
 """

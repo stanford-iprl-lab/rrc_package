@@ -46,8 +46,26 @@ class ImpedanceControllerPolicy:
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
 
-    KP_OBJ = [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
-    KV_OBJ = [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
+    KP_REPOSE = [200, 200, 200,
+                 200, 200, 200,
+                 200, 200, 200]
+    KV_REPOSE = [0.7, 0.7, 0.7, 
+                 0.7, 0.7, 0.7,
+                 0.7, 0.7, 0.7]
+
+    KP_OBJ = [0.1, 
+              0.1,
+              0.1,
+              0.1,
+              0.1,
+              0.1,]
+
+    KV_OBJ = [0.001, 
+              0.001,
+              0.001,
+              0.001,
+              0.001,
+              0.001,]
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
@@ -93,6 +111,11 @@ class ImpedanceControllerPolicy:
         self.l_desired_ft_force = [] # fingerip forces - desired
         self.l_desired_torque = []
 
+        # Logs for debugging object pose feedback controller
+        self.DEBUG = True
+        self.l_dquat = [] # quaternion derivatives
+        self.l_desired_obj_w = []
+
     """
     Store logs in npz file
     """
@@ -109,6 +132,8 @@ class ImpedanceControllerPolicy:
                  observed_obj_vel = np.squeeze(np.asarray(self.l_observed_obj_vel)),
                  desired_ft_force = np.squeeze(np.asarray(self.l_desired_ft_force)),
                  desired_torque   = np.squeeze(np.asarray(self.l_desired_torque)),
+                 dquat            = np.squeeze(np.asarray(self.l_dquat)),
+                 desired_obj_w    = np.squeeze(np.asarray(self.l_desired_obj_w)),
                 )
 
     def reset_policy(self, observation, platform=None):
@@ -141,6 +166,7 @@ class ImpedanceControllerPolicy:
         # Previous object pose and time (for estimating object velocity)
         self.prev_obj_pose = get_pose_from_observation(observation)
         self.prev_step_time = observation["cam0_timestamp"] / 1000
+        self.prev_vel = np.zeros(6)
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.goal_pose = goal_pose
@@ -393,6 +419,7 @@ class ImpedanceControllerPolicy:
         dt = cur_step_time - self.prev_step_time
 
         if dt == 0:
+            return self.prev_vel
             return np.zeros(6)
 
         obj_vel_position = (cur_obj_pose.position - self.prev_obj_pose.position) / dt
@@ -406,12 +433,19 @@ class ImpedanceControllerPolicy:
         M = c_utils.get_dquat_to_dtheta_matrix(self.prev_obj_pose.orientation) # from Paul Mitiguy dynamics notes
         obj_vel_theta = 2 * M @ obj_vel_quat
         #obj_vel_theta = np.zeros(obj_vel_theta.shape)
+        
+        cur_vel = np.concatenate((obj_vel_position, obj_vel_theta))
     
         # Set previous obj_pose and step_time to current values
         self.prev_obj_pose = cur_obj_pose
         self.prev_step_time = cur_step_time
+        self.prev_vel = cur_vel
+
+        # Log obj_vel_quat for debugging
+        if self.DEBUG:
+            self.l_dquat.append(obj_vel_quat)
            
-        return np.concatenate((obj_vel_position, obj_vel_theta))
+        return cur_vel
 
     def predict(self, full_observation):
         self.step_count += 1
@@ -444,23 +478,33 @@ class ImpedanceControllerPolicy:
 
         # If in REPOSE, get fingertip forces in world frame
         if self.mode == TrajMode.REPOSE:
-            ft_des_force_wf = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
+            ft_des_force_wf, W = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
                                   self.dx_traj[self.traj_waypoint_counter, :],
                                   obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
                                   self.cp_params)
             ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
             #ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
+
+            if self.DEBUG:
+                self.l_desired_obj_w.append(W.flatten())
     
         else:
             ft_des_force_wf = None
 
         # Compute torque with impedance controller, and clip
+        if self.mode == TrajMode.REPOSE:
+            KP = self.KP_REPOSE
+            KV = self.KV_REPOSE
+        else:
+            KP = self.KP
+            KV = self.KV
+    
         torque = c_utils.impedance_controller(ft_pos_goal_list,
                                               ft_vel_goal_list,
                                               current_position, current_velocity,
                                               self.custom_pinocchio_utils,
                                               tip_forces_wf=ft_des_force_wf,
-                                              Kp = self.KP, Kv = self.KV)
+                                              Kp = KP, Kv = KV)
         torque = np.clip(torque, self.action_space.low, self.action_space.high)
 
         self.log_to_buffers(ft_pos_goal_list, ft_vel_goal_list,
