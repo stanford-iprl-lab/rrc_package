@@ -2,6 +2,7 @@
 import numpy as np
 import gym
 import pybullet
+import os.path as osp
 
 from gym import wrappers
 from gym import ObservationWrapper
