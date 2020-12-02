@@ -291,7 +291,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
                 print("cur vel: {}".format(cur_vel))
                 print("cur pos: {}".format(cur_pos))
-                print("default pos: {}".format(default_position))
+                print("default pos: {}".format(self.default_position))
         return observation
 
     def _reset_platform_frontend(self):
