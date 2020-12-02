@@ -153,6 +153,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "action": self.action_space,
                 "desired_goal": object_state_space,
                 "achieved_goal": object_state_space,
+                "cam0_timestamp": gym.spaces.Box(low=0., high=np.inf, shape=())
+                #"achieved_goal_filtered": object_state_space,
             }
         )
         self.save_npz = save_npz
@@ -338,7 +340,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def _create_observation(self, t, action):
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
-
+         
         observation = {
             "observation": {
                 "position": robot_observation.position,
@@ -351,6 +353,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "position": camera_observation.object_pose.position,
                 "orientation": camera_observation.object_pose.orientation,
             },
+            "cam0_timestamp": camera_observation.cameras[0].timestamp,
+            #"achieved_goal_filtered": {
+            #    "position": camera_observation.filtered_object_pose.position,
+            #    "orientation": camera_observation.filtered_object_pose.orientation,
+            #},
         }
         return observation
 

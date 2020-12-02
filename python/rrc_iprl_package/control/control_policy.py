@@ -14,7 +14,7 @@ from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation
 import csv
 
-from datetime import date
+import datetime
 from trifinger_simulation import TriFingerPlatform
 from trifinger_simulation.tasks import move_cube
 from trifinger_simulation import pinocchio_utils
@@ -39,14 +39,14 @@ class TrajMode(enum.Enum):
 
 class ImpedanceControllerPolicy:
     WAIT_TIME = 1
-    KP = [300, 300, 400,
-          300, 300, 400,
-          300, 300, 400]
+    KP = [200, 200, 200,
+          200, 200, 200,
+          200, 200, 200]
     KV = [0.7, 0.7, 0.8, 
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
 
-    KP_OBJ = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    KP_OBJ = [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
     KV_OBJ = [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
@@ -71,10 +71,13 @@ class ImpedanceControllerPolicy:
             self.lift_trajopt_filepath  = "/output/lift_trajopt_data"
             self.control_policy_log_filepath = "/output/control_policy_log"
         else:
-            self.csv_filepath           = "./output/control_policy_data.csv"
-            self.grasp_trajopt_filepath = "./output/grasp_trajopt_data"
-            self.lift_trajopt_filepath  = "./output/lift_trajopt_data"
-            self.control_policy_log_filepath = "./output/control_policy_log"
+            time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            if not osp.exists("./output/{}".format(time_str)):
+                os.makedirs("./output/{}".format(time_str))
+            self.csv_filepath           = "./output/{}/control_policy_data.csv".format(time_str)
+            self.grasp_trajopt_filepath = "./output/{}/grasp_trajopt_data".format(time_str)
+            self.lift_trajopt_filepath  = "./output/{}/lift_trajopt_data".format(time_str)
+            self.control_policy_log_filepath = "./output/{}/control_policy_log".format(time_str)
 
         # Lists for logging data
         # Rows correspond to step_count / timestamp
@@ -137,7 +140,7 @@ class ImpedanceControllerPolicy:
 
         # Previous object pose and time (for estimating object velocity)
         self.prev_obj_pose = get_pose_from_observation(observation)
-        self.prev_step_time = time.time()
+        self.prev_step_time = observation["cam0_timestamp"] / 1000
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.goal_pose = goal_pose
@@ -386,20 +389,23 @@ class ImpedanceControllerPolicy:
         return 
 
     # TODO: What about when object observations are noisy???
-    def get_obj_vel(self, cur_obj_pose):
-        cur_step_time = time.time()
-
+    def get_obj_vel(self, cur_obj_pose, cur_step_time):
         dt = cur_step_time - self.prev_step_time
+
+        if dt == 0:
+            return np.zeros(6)
+
         obj_vel_position = (cur_obj_pose.position - self.prev_obj_pose.position) / dt
 
         # TODO: verify that we are getting angular velocities from quaternions correctly
-        cur_R = Rotation.from_quat(cur_obj_pose.orientation)
-        prev_R = Rotation.from_quat(self.prev_obj_pose.orientation)
-        delta_R = cur_R * prev_R.inv()
-        obj_vel_quat = delta_R.as_quat() / dt
-        #obj_vel_quat = (cur_obj_pose.orientation - self.prev_obj_pose.orientation) / dt
-        M = c_utils.get_dquat_to_dtheta_matrix(cur_obj_pose.orientation) # from Paul Mitiguy dynamics notes
+        #cur_R = Rotation.from_quat(cur_obj_pose.orientation)
+        #prev_R = Rotation.from_quat(self.prev_obj_pose.orientation)
+        #delta_R = cur_R * prev_R.inv()
+        #obj_vel_quat = delta_R.as_quat() / dt
+        obj_vel_quat = (cur_obj_pose.orientation - self.prev_obj_pose.orientation) / dt
+        M = c_utils.get_dquat_to_dtheta_matrix(self.prev_obj_pose.orientation) # from Paul Mitiguy dynamics notes
         obj_vel_theta = 2 * M @ obj_vel_quat
+        #obj_vel_theta = np.zeros(obj_vel_theta.shape)
     
         # Set previous obj_pose and step_time to current values
         self.prev_obj_pose = cur_obj_pose
@@ -417,7 +423,8 @@ class ImpedanceControllerPolicy:
 
         # Estimate object velocity based on previous and current object pose
         # TODO: this might cause an issue if observed object poses are the same across steps?
-        obj_vel = self.get_obj_vel(obj_pose)
+        timestamp = full_observation["cam0_timestamp"] / 1000
+        obj_vel = self.get_obj_vel(obj_pose, timestamp)
         
         # Get current fingertip position
         cur_ft_pos = self.get_fingertip_pos_wf(current_position)
@@ -442,11 +449,10 @@ class ImpedanceControllerPolicy:
                                   obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
                                   self.cp_params)
             ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
-            #ft_des_force_wf = None
+            #ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
     
         else:
             ft_des_force_wf = None
-        print(ft_des_force_wf)
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(ft_pos_goal_list,
