@@ -447,7 +447,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             # in a typical gym environment.  Note that on the real robot, this
             # will not be possible
             if osp.exists("/output"):
-                observation = self.unwrapped._create_observation(t, action)
+                observation = self.unwrapped._create_observation(t+1, action)
             else:
                 observation = self.unwrapped._create_observation(t+1, action)
 
