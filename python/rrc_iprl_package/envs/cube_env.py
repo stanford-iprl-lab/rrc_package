@@ -284,7 +284,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if self.num_resets != -1:
             # import pdb; pdb.set_trace()
             while not all(vel < 0.01 for vel in cur_vel) or \
-                    np.abs(cur_pos - self.default_position).max() >= .02:
+                    np.abs(cur_pos - self.default_position).max() >= .05:
                 observation, reward, _, _ = self.step(self._initial_action)
                 cur_vel = observation["observation"]["velocity"]
                 cur_pos = observation["observation"]["position"]
