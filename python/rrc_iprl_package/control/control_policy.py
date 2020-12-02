@@ -299,8 +299,9 @@ class ImpedanceControllerPolicy:
 
         ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
 
+        print("FT init pos: {}".format(ft_pos[0,:]))
+        print("FT final pos: {}".format(ft_pos[-1,:]))
         print("FT_GOAL: {}".format(ft_goal))
-        print(ft_pos[-1,:])
     
         # Number of interpolation points
         interp_n = 26
