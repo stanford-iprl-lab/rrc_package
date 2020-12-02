@@ -3,6 +3,7 @@ import enum
 from scipy.spatial.transform import Rotation
 from scipy.spatial.distance import pdist, squareform
 from casadi import *
+from scipy.optimize import nnls
 
 from rrc_iprl_package.control.contact_point import ContactPoint
 from trifinger_simulation.tasks import move_cube
@@ -80,6 +81,10 @@ CUBOID_LONG_FACES = [3,4,5,6]
 Compute wrench that needs to be applied to object to maintain it on desired trajectory
 """
 def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
+    print(x_des)
+    print(x_cur.position, x_cur.orientation)
+    print(dx_des)
+    print(dx_cur)
     g = np.array([0, 0, -9.81, 0, 0, 0]) # Gravity vector
 
     # Force (compute position error)
@@ -90,19 +95,25 @@ def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     # Compute difference between desired and current quaternion
     R_des = Rotation.from_quat(x_des[3:])
     R_cur = Rotation.from_quat(x_cur.orientation)
-    # TODO: Fix this - follow Oussama's notes - this is wrong.
-    o_delta = R_des.as_euler("zxy") - R_cur.as_euler("zxy") # TODO rotation difference??
-    do_delta = (dx_des[3:] - dx_cur[3:])
-
     o_delta = np.zeros(3)
     for i in range(3):
         o_delta += -0.5 * np.cross(R_cur.as_matrix()[:,i], R_des.as_matrix()[:,i])
     do_delta = (dx_des[3:] - dx_cur[3:]) # is this the angular velocity?
 
+    print(p_delta)
+    print(dp_delta)
+    print(o_delta)
+    print(do_delta)
+
     # Compute wrench W (6x1) with PD feedback law
     x_delta = np.concatenate((p_delta, -1*o_delta))
     dx_delta = np.concatenate((dp_delta, do_delta))
     W = Kp @ x_delta + Kv @ dx_delta - OBJ_MASS * g
+    
+    print(x_delta)
+    print(dx_delta)
+
+    print(W)
 
     return W
 
@@ -125,7 +136,6 @@ def get_ft_forces(x_des, dx_des, x_cur, dx_cur, Kp, Kv, cp_params):
     # To compute grasp matrix
     G = __get_grasp_matrix(np.concatenate((x_cur.position, x_cur.orientation)), cp_list)
     
-    
     # Solve for fingertip forces via optimization
     # TODO use casadi for now, make new problem every time. If too slow, try cvxopt or scipy.minimize, 
     # Or make a parametrized problem??
@@ -136,43 +146,49 @@ def get_ft_forces(x_des, dx_des, x_cur, dx_cur, Kp, Kv, cp_params):
          np.array([0, -1, 0]),
          np.array([0, 0, 1]),
          np.array([0, 0, -1])]
+    V = np.zeros((9,12));
+    for i in range(3):
+        for j in range(4):
+            V[i*3:(i+1)*3,i*4+j] = n + OBJ_MU * d[j]
+    B_soln = nnls(G@V,W)[0]
+    L = V@B_soln
 
     # Formulate optimization problem
-    B = SX.sym("B", len(d) * fnum) # Scaling weights for each of the cone vectors
-    B0 = np.ones(B.shape[0]) # Initial guess for weights
+    #B = SX.sym("B", len(d) * fnum) # Scaling weights for each of the cone vectors
+    #B0 = np.zeros(B.shape[0]) # Initial guess for weights
 
-    # Fill lambda vector
-    l_list = []
-    for j in range(fnum):
-        l = 0 # contact force
-        for i in range(len(d)):
-            v = n + OBJ_MU * d[i] 
-            l += B[j*fnum + i] * v 
-        l_list.append(l)
-    L = vertcat(*l_list) # (9x1) lambda vector
+    ## Fill lambda vector
+    #l_list = []
+    #for j in range(fnum):
+    #    l = 0 # contact force
+    #    for i in range(len(d)):
+    #        v = n + OBJ_MU * d[i] 
+    #        l += B[j*fnum + i] * v 
+    #    l_list.append(l)
+    #L = vertcat(*l_list) # (9x1) lambda vector
 
-    f = G @ L - W # == 0
+    #f = G @ L - W # == 0
 
-    # Formulate constraints
-    g = f # contraint function
-    g_lb = np.zeros(f.shape[0]) # constraint lower bound
-    g_ub = np.zeros(f.shape[0]) # constraint upper bound
+    ## Formulate constraints
+    #g = f # contraint function
+    #g_lb = np.zeros(f.shape[0]) # constraint lower bound
+    #g_ub = np.zeros(f.shape[0]) # constraint upper bound
 
-    # Constraints on B
-    z_lb = np.zeros(B.shape[0]) # Lower bound on beta
-    z_ub = np.ones(B.shape[0]) * np.inf # Upper bound on beta
+    ## Constraints on B
+    #z_lb = np.zeros(B.shape[0]) # Lower bound on beta
+    #z_ub = np.ones(B.shape[0]) * np.inf # Upper bound on beta
 
-    cost = L.T @ L
+    #cost = L.T @ L
 
-    problem = {"x": B, "f": cost, "g": g}
-    options = {"ipopt.print_level":5,
-               "ipopt.max_iter":10000,
-                "ipopt.tol": 1e-4,
-                "print_time": 1
-              }
-    solver = nlpsol("S", "ipopt", problem, options)
-    r = solver(x0=B0, lbg=g_lb, ubg=g_ub, lbx=z_lb, ubx=z_ub)
-    B_soln = r["x"]
+    #problem = {"x": B, "f": cost, "g": g}
+    #options = {"ipopt.print_level":5,
+    #           "ipopt.max_iter":10000,
+    #            "ipopt.tol": 1e-4,
+    #            "print_time": 1
+    #          }
+    #solver = nlpsol("S", "ipopt", problem, options)
+    #r = solver(x0=B0, lbg=g_lb, ubg=g_ub, lbx=z_lb, ubx=z_ub)
+    #B_soln = r["x"]
 
     # Compute contact forces in contact point frames from B_soln
     # TODO fix list length when there are only 2 contact points
