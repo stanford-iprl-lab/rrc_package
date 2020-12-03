@@ -4,22 +4,21 @@ from gym import wrappers
 import functools
 from gym.envs.registration import register
 
-from rrc_iprl_package.envs import cube_env as cube_env_rp
-from rrc_iprl_package.envs import custom_env as custom_env_rp
-from rrc_iprl_package.envs import env_wrappers
-
 phase = 2
 
 if phase == 1:
     from rrc_simulation.gym_wrapper.envs import cube_env, custom_env
-    from rrc_simulation.tasks import move_cube
+elif phase == 2:
+    from rrc_iprl_package.envs import cube_env
+    from rrc_iprl_package.envs import custom_env
+    from rrc_iprl_package.envs import env_wrappers
 
 
 registered_envs = [spec.id for spec in gym.envs.registry.all()]
 
 FRAMESKIP = 10
 EPLEN = 120 * 1000 // FRAMESKIP  # 15 seconds
-EPLEN_SHORT = 15 * 1000 // FRAMESKIP  # 5 seconds, 500 total timesteps
+EPLEN_SHORT = 5 * 1000 // FRAMESKIP  # 5 seconds, 500 total timesteps
 
 if phase == 1:
     if "real_robot_challenge_phase_1-v2" not in registered_envs:
@@ -41,12 +40,12 @@ elif phase == 2:
     if "real_robot_challenge_phase_2-v1" not in registered_envs:
         register(
             id="real_robot_challenge_phase_2-v1",
-            entry_point=cube_env_rp.RealRobotCubeEnv
+            entry_point=cube_env.RealRobotCubeEnv
             )
     if "real_robot_challenge_phase_2-v2" not in registered_envs:
         register(
             id="real_robot_challenge_phase_2-v2",
-            entry_point=cube_env_rp.PushCubeEnv
+            entry_point=cube_env.PushCubeEnv
             )
 
 
@@ -212,21 +211,21 @@ if phase == 1:
     abs_task_env_fn = make_env_fn(reorient_env_str, abs_task_wrappers,
                                   initializer=reorient_initializer,
                                   action_type=cube_env.ActionType.TORQUE,
-                                  frameskip=5)
+                                  frameskip=FRAMESKIP)
     rel_task_env_fn = make_env_fn(reorient_env_str, rel_task_wrappers,
                                   initializer=reorient_initializer,
                                   action_type=cube_env.ActionType.TORQUE,
-                                  frameskip=5)
+                                  frameskip=FRAMESKIP)
 
 
     abs_task_step_env_fn = make_env_fn(reorient_env_str, abs_task_step_wrappers,
                                   initializer=reorient_initializer,
                                   action_type=cube_env.ActionType.TORQUE,
-                                  frameskip=5)
+                                  frameskip=FRAMESKIP)
     rel_task_step_env_fn = make_env_fn(reorient_env_str, rel_task_step_wrappers,
                                   initializer=reorient_initializer,
                                   action_type=cube_env.ActionType.TORQUE,
-                                  frameskip=5)
+                                  frameskip=FRAMESKIP)
 
     recenter_rel_env_fn = make_env_fn(reorient_env_str, recenter_wrappers_rel,
                                   initializer=recenter_initializer,
@@ -246,7 +245,7 @@ if phase == 1:
     reorient_task_env_fn = make_env_fn(reorient_env_str, reorient_wrappers_relgoaltask,
                                   initializer=fixed_reorient_initializer,
                                   action_type=cube_env.ActionType.TORQUE,
-                                  frameskip=5)
+                                  frameskip=FRAMESKIP)
 
     eval_keys = ['is_success', 'is_success_ori', 'final_ori_dist', 'final_dist',
                  'final_score']
@@ -309,8 +308,8 @@ p2_rrc_wrappers = [p2_rel_scaled_wrapper] + p2_final_wrappers_relgoal
 
 p2_reorient_env_fn = make_env_fn(
         p2_env_str,
-        [p2_rel_scaled_wrapper] + p2_final_wrappers_relgoal,
+        p2_rrc_wrappers,
         initializer=p2_fixed_reorient,
-        action_type=cube_env_rp.ActionType.TORQUE,
-        frameskip=5)
+        action_type=cube_env.ActionType.POSITION,
+        frameskip=FRAMESKIP)
 

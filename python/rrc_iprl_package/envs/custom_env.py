@@ -136,12 +136,15 @@ class PushCubeEnv(gym.Env):
             }
         else:
             raise ValueError("Invalid action_type")
+
+        p_low = np.concatenate([object_state_space.spaces['position'].low for _ in range(3)])
+        p_high = np.concatenate([object_state_space.spaces['position'].high for _ in range(3)])
+
         obs_spaces = {
                 "robot_position": robot_position_space,
                 "robot_velocity": robot_velocity_space,
                 "robot_torque": robot_torque_space,
-                "robot_tip_positions": np.concatenate(
-                    [object_state_space.spaces['position'] for _ in range(3)]),
+                "robot_tip_positions": gym.spaces.Box(low=p_low, high=p_high),
                 "robot_tip_forces": gym.spaces.Box(low=np.zeros(3), high=np.ones(3)),
                 "action": self.action_space,
                 "goal_object_position": object_state_space.spaces['position'],
@@ -150,7 +153,8 @@ class PushCubeEnv(gym.Env):
                 "object_orientation": object_state_space.spaces['orientation'],
             }
 
-        self.observation_space = gym.spaces.Dict({k:obs_spaces[k] for k in observation_names})
+        self.observation_space = gym.spaces.Dict({k:obs_spaces[k]
+                                                  for k in self.observation_names})
 
     def seed(self, seed=None):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
