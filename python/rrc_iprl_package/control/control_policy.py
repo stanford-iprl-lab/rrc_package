@@ -23,6 +23,7 @@ from trifinger_simulation import visual_objects
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
+import rrc_iprl_package.traj_opt.kinematics_utils as k_utils
 
 try:
     import torch
@@ -47,12 +48,15 @@ class ImpedanceControllerPolicy:
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
 
-    KP_REPOSE = [140, 140, 140,
-                 140, 140, 140,
-                 140, 140, 140]
-    KV_REPOSE = [0.7, 0.7, 0.7, 
-                 0.7, 0.7, 0.7,
-                 0.7, 0.7, 0.7]
+    #KP_REPOSE = [140, 140, 140,
+    #             140, 140, 140,
+    #             140, 140, 140]
+    #KV_REPOSE = [0.7, 0.7, 0.7, 
+    #             0.7, 0.7, 0.7,
+    #             0.7, 0.7, 0.7]
+
+    KP_REPOSE = KP
+    KV_REPOSE = KV
 
     KP_OBJ = [0.2, 
               0.2,
@@ -79,6 +83,10 @@ class ImpedanceControllerPolicy:
         self.platform = None
         print("KP: {}".format(self.KP))
         print("KV: {}".format(self.KV))
+        print("KP_REPOSE: {}".format(self.KP_REPOSE))
+        print("KV_REPOSE: {}".format(self.KV_REPOSE))
+        print("KP_OBJ: {}".format(self.KP_OBJ))
+        print("KV_OBJ: {}".format(self.KV_OBJ))
         
         self.initialize_logging()
 
@@ -312,7 +320,7 @@ class ImpedanceControllerPolicy:
         current_ft_pos = self.get_fingertip_pos_wf(current_position)
 
         # Get list of desired fingertip positions
-        cp_wf_list = c_utils.get_cp_pos_wf_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation)
+        cp_wf_list = c_utils.get_cp_pos_wf_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation, use_obj_size_offset = True)
 
         # Deal with None fingertip_goal here
         # If cp_wf is None, set ft_goal to be  current ft position
@@ -497,23 +505,41 @@ class ImpedanceControllerPolicy:
 
         ft_pos_goal_list = []
         ft_vel_goal_list = []
+        # If object is grasped, transform cp_wf to ft_wf
+        if self.mode == TrajMode.REPOSE:
+            H_list = k_utils.get_ft_R(current_position)
+            #H_list = k_utils.get_H_5_wrt_0(current_position)
+    
         for f_i in range(3):
             new_pos = self.ft_pos_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
             new_vel = self.ft_vel_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
+            #print(f_i)
+
+            #print(new_pos)
+            if self.mode == TrajMode.REPOSE:
+                H = H_list[f_i]
+                temp = H @ np.array([0, 0, 0.0095])
+                #print("temp: {}".format(temp))
+                new_pos = np.array(new_pos) + temp[:3]
+                new_pos = new_pos.tolist()
+            #print(new_pos)
+
             ft_pos_goal_list.append(new_pos)
             ft_vel_goal_list.append(new_vel)
+        #if self.mode == TrajMode.REPOSE:
+        #    quit()
 
         # If in REPOSE, get fingertip forces in world frame
         if self.mode == TrajMode.REPOSE:
-            ft_des_force_wf, W = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
-                                  self.dx_traj[self.traj_waypoint_counter, :],
-                                  obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
-                                  self.cp_params)
-            ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
-            #ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
+            #ft_des_force_wf, W = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
+            #                      self.dx_traj[self.traj_waypoint_counter, :],
+            #                      obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
+            #                      self.cp_params)
+            #ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
+            ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
 
-            if self.DEBUG:
-                self.l_desired_obj_w.append(W.flatten())
+            #if self.DEBUG:
+            #    self.l_desired_obj_w.append(W.flatten())
     
         else:
             ft_des_force_wf = None

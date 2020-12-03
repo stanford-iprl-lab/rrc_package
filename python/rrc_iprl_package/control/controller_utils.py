@@ -20,7 +20,8 @@ class PolicyMode(enum.Enum):
 
 # Object properties
 OBJ_MASS = 0.016 # 16 grams
-OBJ_SIZE = move_cube._CUBOID_SIZE + 0.012
+OBJ_SIZE = move_cube._CUBOID_SIZE
+OBJ_SIZE_OFFSET = 0.012
 OBJ_MU = 1
 
 # Here, hard code the base position of the fingers (as angle on the arena)
@@ -110,8 +111,8 @@ def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     dx_delta = np.concatenate((dp_delta, do_delta))
     W = Kp @ x_delta + Kv @ dx_delta - OBJ_MASS * g
     
-    #print("x_delta: {}".format(x_delta))
-    #print("dx_delta: {}".format(dx_delta))
+    print("x_delta: {}".format(x_delta))
+    print("dx_delta: {}".format(dx_delta))
 
     #print(W)
 
@@ -320,8 +321,8 @@ Inputs:
 cp_param: Contact point param [px, py, pz]
 cube: Block object, which contains object shape info
 """
-def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf):
-    cp = get_cp_of_from_cp_param(cp_param)
+def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf, use_obj_size_offset = False):
+    cp = get_cp_of_from_cp_param(cp_param, use_obj_size_offset = use_obj_size_offset)
 
     rotation = Rotation.from_quat(cube_quat_wf)
     translation = np.asarray(cube_pos_wf)
@@ -331,14 +332,14 @@ def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf):
 """
 Get contact point positions in world frame from cp_params
 """
-def get_cp_pos_wf_from_cp_params(cp_params, cube_pos, cube_quat):
+def get_cp_pos_wf_from_cp_params(cp_params, cube_pos, cube_quat, use_obj_size_offset = False):
     # Get contact points in wf
     fingertip_goal_list = []
     for i in range(len(cp_params)):
         if cp_params[i] is None:
             fingertip_goal_list.append(None)
         else:
-            fingertip_goal_list.append(get_cp_pos_wf_from_cp_param(cp_params[i], cube_pos, cube_quat))
+            fingertip_goal_list.append(get_cp_pos_wf_from_cp_param(cp_params[i], cube_pos, cube_quat, use_obj_size_offset = use_obj_size_offset))
     return fingertip_goal_list
 
 """
@@ -346,11 +347,14 @@ Compute contact point position in object frame
 Inputs:
 cp_param: Contact point param [px, py, pz]
 """
-def get_cp_of_from_cp_param(cp_param):
+def get_cp_of_from_cp_param(cp_param, use_obj_size_offset = False):
     cp_of = []
     # Get cp position in OF
     for i in range(3):
-        cp_of.append(-OBJ_SIZE[i]/2 + (cp_param[i]+1)*OBJ_SIZE[i]/2)
+        if use_obj_size_offset:
+            cp_of.append(-(OBJ_SIZE[i] + OBJ_SIZE_OFFSET)/2 + (cp_param[i]+1)*(OBJ_SIZE[i] + OBJ_SIZE_OFFSET)/2)
+        else:
+            cp_of.append(-OBJ_SIZE[i]/2 + (cp_param[i]+1)*OBJ_SIZE[i]/2)
 
     cp_of = np.asarray(cp_of)
 
@@ -631,7 +635,7 @@ def get_pre_grasp_ft_goal(obj_pose, fingertips_current_wf, cp_params):
     incr = 0.03
 
     # Get list of desired fingertip positions
-    cp_wf_list = get_cp_pos_wf_from_cp_params(cp_params, obj_pose.position, obj_pose.orientation)
+    cp_wf_list = get_cp_pos_wf_from_cp_params(cp_params, obj_pose.position, obj_pose.orientation, use_obj_size_offset = True)
 
     for f_i in range(3):
         f_wf = cp_wf_list[f_i]
