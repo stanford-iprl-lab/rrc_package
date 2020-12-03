@@ -20,6 +20,7 @@ actual_ft_pos     = data["actual_ft_pos"]
 desired_obj_pose  = data["desired_obj_pose"]
 desired_obj_vel  = data["desired_obj_vel"]
 observed_obj_pose = data["observed_obj_pose"]
+observed_filt_obj_pose = data["observed_filt_obj_pose"]
 observed_obj_vel = data["observed_obj_vel"]
 desired_ft_force  = data["desired_ft_force"]
 desired_torque    = data["desired_torque"]
@@ -50,6 +51,7 @@ for d_i, dim in enumerate(["x","y","z", "qx", "qy", "qz", "qw"]):
     plt.title("Dimension {}".format(dim))
     plt.plot(range(steps), desired_obj_pose[:,d_i], '.', label="Desired")
     plt.plot(range(steps), observed_obj_pose[:,d_i], '.', label="Observed")
+    plt.plot(range(steps), observed_filt_obj_pose[:,d_i], '.', label="Filtered")
     plt.legend()
 plt.savefig("{}/obj_pos.png".format(output_dir))
 
