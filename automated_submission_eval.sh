@@ -173,6 +173,21 @@ do
                     curl --user ${username}:${password} -o "${job_dir}/stderr.txt" ${base_url}/../stderr.txt
 
                     exit 1
+                else
+                    echo "Downloading all files"
+                    curl --user ${username}:${password} -o "${job_dir}/user_stdout.txt" ${base_url}/${job_id}/user_stdout.txt
+                    curl --user ${username}:${password} -o "${job_dir}/user_stdout.txt" ${base_url}/${job_id}/user_stdout.txt
+                    mkdir ${job_dir}/user/
+                    curl --user ${username}:${password} -o "${job_dir}/user/action_log.npz" ${base_url}/${job_id}/user/action_log.npz
+                    curl --user ${username}:${password} -o "${job_dir}/user/control_policy_log.npz" ${base_url}/${job_id}/user/control_policy_log.npz
+                    curl --user ${username}:${password} -o "${job_dir}/user/grasp_trajopt_data.npz" ${base_url}/${job_id}/user/grasp_trajopt_data.npz
+                    curl --user ${username}:${password} -o "${job_dir}/user/lift_trajopt_data.npz" ${base_url}/${job_id}/user/lift_trajopt_data.npz
+                    curl --user ${username}:${password} -o "${job_dir}/camera_data.dat" ${base_url}/${job_id}/user/camera_data.dat
+                    curl --user ${username}:${password} -o "${job_dir}/user/robot_data.dat" ${base_url}/${job_id}/robot_data.dat
+                    curl --user ${username}:${password} -o "${job_dir}/camera60.yml" ${base_url}/${job_id}/camera60.yml
+                    curl --user ${username}:${password} -o "${job_dir}/camera180.yml" ${base_url}/${job_id}/camera180.yml
+                    curl --user ${username}:${password} -o "${job_dir}/camera300.yml" ${base_url}/${job_id}/camera300.yml
+
                 fi
 
                 # NOTE: The robot cluster system needs up to 60 seconds until the next job
