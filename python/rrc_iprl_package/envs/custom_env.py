@@ -66,7 +66,7 @@ class PushCubeEnv(gym.Env):
 
         self.initializer = initializer
         if initializer:
-            self.goal = initializer.get_goal()
+            self.goal = initializer.get_goal().to_dict()
         else:
             self.goal = cube_goal_pose
         self.info = {'difficulty': initializer.difficulty}
@@ -207,11 +207,14 @@ class PushCubeEnv(gym.Env):
 
         # visualize the goal
         if self.visualization:
-            self.goal_marker = trifinger_simulation.visual_objects.CubeMarker(
-                width=0.065,
-                position=self.goal["position"],
-                orientation=self.goal["orientation"],
-                physicsClientId=self.platform.simfinger._pybullet_client_id,
+            goal_pose = self.goal
+            if not isinstance(goal_pose, dict):
+                goal_pose = self.goal.to_dict()
+            self.goal_marker = trifinger_simulation.visual_objects.CuboidMarker(
+                size=move_cube._CUBOID_SIZE,
+                position=goal_pose["position"]+np.array([0,0,.01]),
+                orientation=goal_pose["orientation"],
+                pybullet_client_id=self.platform.simfinger._pybullet_client_id,
             )
             pbutils.reset_camera()
 
@@ -221,6 +224,9 @@ class PushCubeEnv(gym.Env):
             self._reset_platform_frontend()
         else:
             self._reset_direct_simulation()
+
+        if self.initializer:
+            self.goal = self.initializer.get_goal().to_dict()
 
         self.info = {"difficulty": self.initializer.difficulty}
         self.step_count = 0
@@ -418,6 +424,9 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             robot_observation.position
         )
         robot_tip_positions = np.array(robot_tip_positions)
+        goal_pose = self.goal
+        if not isinstance(goal_pose, dict):
+            goal_pose = goal_pose.to_dict()
 
         observation = {
             "robot_position": robot_observation.position,
@@ -425,8 +434,8 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             "robot_tip_positions": robot_tip_positions,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
-            "goal_object_position": np.asarray(self.goal["position"]),
-            "goal_object_orientation": np.asarray(self.goal["orientation"]),
+            "goal_object_position": np.asarray(goal_pose["position"]),
+            "goal_object_orientation": np.asarray(goal_pose["orientation"]),
         }
         observation = np.concatenate([observation[k].flatten() for k in self.rl_observation_names])
         return observation
@@ -643,6 +652,9 @@ class ResidualPolicyWrapper(ObservationWrapper):
             else:
                 robot_tip_positions = [0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7]
             robot_tip_positions = np.array(robot_tip_positions)
+        goal_pose = self.goal
+        if not isinstance(goal_pose, dict):
+            goal_pose = goal_pose.to_dict()
 
         observation = {
             "robot_position": robot_observation.position,
@@ -652,8 +664,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
             "action": self._prev_action,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
-            "goal_object_position": np.asarray(self.goal["position"]),
-            "goal_object_orientation": np.asarray(self.goal["orientation"]),
+            "goal_object_position": np.asarray(goal_pose["position"]),
+            "goal_object_orientation": np.asarray(goal_pose["orientation"]),
         }
         self._obs_dict['rl'] = observation
         # observation = np.concatenate([observation[k].flatten() for k in self.observation_names])

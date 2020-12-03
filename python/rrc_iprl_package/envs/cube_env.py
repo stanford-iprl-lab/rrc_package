@@ -71,7 +71,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if not isinstance(cube_goal_pose, dict):
             self.goal = cube_goal_pose.as_dict()
         self.info = {"difficulty": goal_difficulty}
-        self.initial_pose = move_cube.Pose.from_dict(cube_initial_pose) if cube_initial_pose else move_cube.sample_goal(-1)
+        if cube_initial_pose:
+            self.initial_pose = move_cube.Pose.from_dict(cube_initial_pose)
+        else:
+            self.initial_pose = move_cube.sample_goal(-1)
 
         self.action_type = action_type
 
@@ -260,10 +263,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
     def save_action_log(self):
         if self.save_npz and self.action_log:
-            self.action_log.append(dict(initial_pose=self.initial_pose.to_dict(),
-                                   goal_pose=self.goal))
-
-            np.savez(self.save_npz, action_log=self.action_log, allow_pickle=True)
+            np.savez(self.save_npz, initial_pose=self.initial_pose.to_dict(),
+                     goal_pose=self.goal, action_log=self.action_log, 
+                     allow_pickle=True)
             del self.action_log
         self.action_log = []
 
@@ -285,17 +287,32 @@ class RealRobotCubeEnv(gym.GoalEnv):
             print('Not performing full reset, reached maximum number of resets')
 
         # need to already do one step to get initial observation
-        # TODO disable frameskip here?
+        if self.frameskip != 1:
+            temp_frameskip = self.frameskip
+            self.frameskip = 1
+        else:
+            temp_frameskip = None
+
         observation, reward, _, _ = self.step(self._initial_action)
+
+        # set the initial pose to what is returned from first call to 
+        # create_observation
+        if robot_fingers is not None:
+            self.initial_pose = move_cube.Pose.from_dict(observation['achieved_goal'])
+
         cur_vel = observation["observation"]["velocity"]
         cur_pos = observation["observation"]["position"]
         if self.num_resets != -1:
             # import pdb; pdb.set_trace()
             while not all(vel < 0.01 for vel in cur_vel) or \
-                    np.abs(cur_pos - self.default_position).max() >= .02:
+                    np.abs(cur_pos - self.default_position).max() >= .05:
                 observation, reward, _, _ = self.step(self._initial_action)
                 cur_vel = observation["observation"]["velocity"]
                 cur_pos = observation["observation"]["position"]
+
+        if temp_frameskip is not None:
+            self.frameskip = temp_frameskip
+ 
         return observation
 
     def _reset_platform_frontend(self):

@@ -82,8 +82,8 @@ def main():
             print("Resetting env after {} steps reached".format(steps_so_far))
             is_done = False
             observation = env.reset()
-            ep_so_far += steps_so_far // EP_LEN
-            steps_so_far = env.step_count
+        ep_so_far += steps_so_far // EP_LEN
+        steps_so_far = env.step_count
         total_steps = steps_so_far + EP_LEN * ep_so_far
     print("Terminating run after {} steps reached".format(total_steps))
     env.save_action_log()
