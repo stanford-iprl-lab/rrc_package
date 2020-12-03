@@ -38,7 +38,8 @@ class TrajMode(enum.Enum):
 
 
 class ImpedanceControllerPolicy:
-    WAIT_TIME = 1
+    USE_FILTERED_POSE = True
+
     KP = [200, 200, 200,
           200, 200, 200,
           200, 200, 200]
@@ -46,19 +47,19 @@ class ImpedanceControllerPolicy:
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
 
-    KP_REPOSE = [200, 200, 200,
-                 200, 200, 200,
-                 200, 200, 200]
+    KP_REPOSE = [140, 140, 140,
+                 140, 140, 140,
+                 140, 140, 140]
     KV_REPOSE = [0.7, 0.7, 0.7, 
                  0.7, 0.7, 0.7,
                  0.7, 0.7, 0.7]
 
-    KP_OBJ = [0.1, 
-              0.1,
-              0.1,
-              0.1,
-              0.1,
-              0.1,]
+    KP_OBJ = [0.2, 
+              0.2,
+              0.2,
+              0.2,
+              0.2,
+              0.2,]
 
     KV_OBJ = [0.001, 
               0.001,
@@ -107,6 +108,7 @@ class ImpedanceControllerPolicy:
         self.l_desired_obj_pose = [] # object position - desired  
         self.l_desired_obj_vel = [] # object position - desired  
         self.l_observed_obj_pose = [] # object position - observed
+        self.l_observed_filt_obj_pose = [] # object position - observed
         self.l_observed_obj_vel = [] # object velocity - observed
         self.l_desired_ft_force = [] # fingerip forces - desired
         self.l_desired_torque = []
@@ -129,6 +131,7 @@ class ImpedanceControllerPolicy:
                  desired_obj_pose = np.squeeze(np.asarray(self.l_desired_obj_pose)),
                  desired_obj_vel = np.squeeze(np.asarray(self.l_desired_obj_vel)),
                  observed_obj_pose = np.squeeze(np.asarray(self.l_observed_obj_pose)),
+                 observed_filt_obj_pose = np.squeeze(np.asarray(self.l_observed_filt_obj_pose)),
                  observed_obj_vel = np.squeeze(np.asarray(self.l_observed_obj_vel)),
                  desired_ft_force = np.squeeze(np.asarray(self.l_desired_ft_force)),
                  desired_torque   = np.squeeze(np.asarray(self.l_desired_torque)),
@@ -152,6 +155,14 @@ class ImpedanceControllerPolicy:
         self.init_ft_pos = self.get_fingertip_pos_wf(init_position)
         self.init_ft_pos = np.asarray(self.init_ft_pos).flatten()
 
+        # Previous object pose and time (for estimating object velocity)
+        self.prev_obj_pose = get_pose_from_observation(observation)
+        self.prev_step_time = observation["cam0_timestamp"] / 1000
+        self.prev_vel = np.zeros(6)
+        self.filt_vel = np.zeros(6)
+
+        self.filtered_obj_pose = get_pose_from_observation(observation)
+
         self.ft_pos_traj = np.tile(self.init_ft_pos, (10000,1))
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
@@ -162,11 +173,6 @@ class ImpedanceControllerPolicy:
 
         # Counters
         self.step_count = 0 # Number of times predict() is called
-
-        # Previous object pose and time (for estimating object velocity)
-        self.prev_obj_pose = get_pose_from_observation(observation)
-        self.prev_step_time = observation["cam0_timestamp"] / 1000
-        self.prev_vel = np.zeros(6)
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.goal_pose = goal_pose
@@ -181,7 +187,11 @@ class ImpedanceControllerPolicy:
     """
     def set_cp_params(self, observation):
         # Get object pose
-        obj_pose = get_pose_from_observation(observation)
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
+
         self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
 
     """
@@ -192,7 +202,10 @@ class ImpedanceControllerPolicy:
         qnum = 3
 
         # Get object pose
-        obj_pose = get_pose_from_observation(observation)
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
             
         # Clip obj z coord to half width of cube
         clipped_pos = obj_pose.position.copy()
@@ -287,7 +300,10 @@ class ImpedanceControllerPolicy:
         self.set_cp_params(observation)
 
         # Get object pose
-        obj_pose = get_pose_from_observation(observation)
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
@@ -319,7 +335,10 @@ class ImpedanceControllerPolicy:
         self.set_cp_params(observation)
 
         # Get object pose
-        obj_pose = get_pose_from_observation(observation)
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
@@ -375,6 +394,7 @@ class ImpedanceControllerPolicy:
         self.l_desired_ft_vel.append(np.asarray(ft_vel_goal_list).flatten())  
         self.l_actual_ft_pos.append(cur_ft_pos)  
         self.l_observed_obj_pose.append(np.concatenate((obj_pose.position,obj_pose.orientation)))
+        self.l_observed_filt_obj_pose.append(np.concatenate((self.filtered_obj_pose.position,self.filtered_obj_pose.orientation)))
         self.l_observed_obj_vel.append(obj_vel)
         self.l_desired_torque.append(np.asarray(torque))
 
@@ -419,8 +439,7 @@ class ImpedanceControllerPolicy:
         dt = cur_step_time - self.prev_step_time
 
         if dt == 0:
-            return self.prev_vel
-            return np.zeros(6)
+            return self.filt_vel
 
         obj_vel_position = (cur_obj_pose.position - self.prev_obj_pose.position) / dt
 
@@ -441,10 +460,16 @@ class ImpedanceControllerPolicy:
         self.prev_step_time = cur_step_time
         self.prev_vel = cur_vel
 
+        # filter the velocity
+        theta = 0.1
+        filt_vel = (1-theta) * self.filt_vel + theta * cur_vel
+        self.filt_vel = filt_vel.copy()
+
         # Log obj_vel_quat for debugging
         if self.DEBUG:
             self.l_dquat.append(obj_vel_quat)
            
+        return filt_vel
         return cur_vel
 
     def predict(self, full_observation):
@@ -454,11 +479,13 @@ class ImpedanceControllerPolicy:
 
         # Get object pose
         obj_pose = get_pose_from_observation(full_observation)
+        # Filter object pose
+        self.set_filtered_pose_from_observation(full_observation)
 
         # Estimate object velocity based on previous and current object pose
         # TODO: this might cause an issue if observed object poses are the same across steps?
         timestamp = full_observation["cam0_timestamp"] / 1000
-        obj_vel = self.get_obj_vel(obj_pose, timestamp)
+        obj_vel = self.get_obj_vel(self.filtered_obj_pose, timestamp)
         
         # Get current fingertip position
         cur_ft_pos = self.get_fingertip_pos_wf(current_position)
@@ -522,6 +549,20 @@ class ImpedanceControllerPolicy:
         fingertip_pos_wf = self.custom_pinocchio_utils.forward_kinematics(current_q)
         return fingertip_pos_wf
 
+    """
+    """
+    def set_filtered_pose_from_observation(self, observation, theta=0.3):
+        new_pose = get_pose_from_observation(observation)
+
+        f_p = (1-theta) * self.filtered_obj_pose.position + theta * new_pose.position
+        f_o = (1-theta) * self.filtered_obj_pose.orientation + theta * new_pose.orientation
+        
+        filt_pose = move_cube.Pose(position=f_p, orientation=f_o)
+        self.filtered_obj_pose = filt_pose
+        
+        return filt_pose
+        
+        
 
 class HierarchicalControllerPolicy:
     DIST_THRESH = 0.09
