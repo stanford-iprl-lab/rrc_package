@@ -266,13 +266,13 @@ p2_recenter = env_wrappers.ReorientInitializer(1, 0.09)
 
 p2_push = p2_push_fixed
 
-p2_goalenv_str = "real_robot_challenge_phase_2-v2"
+p2_goalenv_str = "real_robot_challenge_phase_2-v0"
 p2_env_str = "real_robot_challenge_phase_2-v2"
 p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',
-                          'final_ori_dist', 'final_ori_scaled']
+                'final_ori_dist', 'final_ori_scaled']
 
 p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
-                                              info_keys=p2_info_keys)
+                                        info_keys=p2_info_keys)
 
 p2_final_wrappers = [functools.partial(wrappers.TimeLimit, max_episode_steps=EPLEN),
                   p2_log_info_wrapper,

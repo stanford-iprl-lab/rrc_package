@@ -18,8 +18,8 @@ from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 from rrc_iprl_package import run_rrc_sb as sb_utils 
 
 FRAMESKIP = 1
-EP_LEN = 15 * 1000
 MAX_STEPS = 120 * 1000
+EP_LEN = MAX_STEPS # 15 * 1000
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -63,27 +63,29 @@ def main():
 
     accumulated_reward = 0
     is_done = False
-    steps_so_far = 0
-    ep_so_far = 0
-    res = 0
+    total_steps = steps_so_far = ep_so_far = 0
     old_mode = policy.mode
-    while not is_done:
-        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: 
-            print("Terminating run after {} steps reached".format(MAX_STEPS))
-            break
+    while total_steps < MAX_STEPS:
         action = policy.predict(observation)
         observation, reward, is_done, info = env.step(action)
-        if old_mode != policy.mode:
-            #print('mode changed: {} to {}'.format(old_mode, policy.mode))
-            old_mode = policy.mode
-        #print("reward:", reward)
+        steps_so_far = env.step_count
         accumulated_reward += reward
-        steps_so_far = info.get('num_steps', steps_so_far + 1) + EP_LEN * ep_so_far + res
-        if steps_so_far != 0 and steps_so_far // EP_LEN > ep_so_far:
+        if old_mode != policy.mode:
+            print('mode changed: {} to {}'.format(old_mode, policy.mode))
+            old_mode = policy.mode
+        if is_done and steps_so_far + EP_LEN * ep_so_far < MAX_STEPS:
+            if not steps_so_far // EP_LEN:
+                import pdb; pdb.set_trace()
+            assert steps_so_far // EP_LEN, 'steps_so_far should have been ' \
+                'incremented. Instead got: total_steps: {}, ep_so_far: {}'.format(
+                    total_steps, ep_so_far)
             print("Resetting env after {} steps reached".format(steps_so_far))
-            res += steps_so_far - ep_so_far * EP_LEN
+            is_done = False
             observation = env.reset()
-            ep_so_var = steps_so_far // EP_LEN
+            ep_so_far += steps_so_far // EP_LEN
+            steps_so_far = env.step_count
+        total_steps = steps_so_far + EP_LEN * ep_so_far
+    print("Terminating run after {} steps reached".format(total_steps))
     env.save_action_log()
     # Save control_policy_log
     policy.impedance_controller.save_log()

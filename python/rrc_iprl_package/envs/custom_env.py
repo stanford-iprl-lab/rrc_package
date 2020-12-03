@@ -2,6 +2,7 @@
 import numpy as np
 import gym
 import pybullet
+import os.path as osp
 
 from gym import wrappers
 from gym import ObservationWrapper
@@ -41,7 +42,6 @@ class PushCubeEnv(gym.Env):
         self,
         initializer=None,
         cube_goal_pose=None,
-        goal_difficulty=1,
         action_type=ActionType.POSITION,
         frameskip=1,
         num_steps=None,
@@ -68,7 +68,7 @@ class PushCubeEnv(gym.Env):
             self.goal = initializer.get_goal()
         else:
             self.goal = cube_goal_pose
-        self.info = {'difficulty': goal_difficulty}
+        self.info = {'difficulty': initializer.difficulty}
         self.visualization = visualization
 
         if frameskip < 1:
@@ -335,7 +335,8 @@ class PushCubeEnv(gym.Env):
 
 class HierarchicalPolicyWrapper(ObservationWrapper):
     def __init__(self, env, policy):
-        assert isinstance(env.unwrapped, cube_env.RealRobotCubeEnv), 'env expects type CubeEnv'
+        assert isinstance(env.unwrapped, cube_env.RealRobotCubeEnv), \
+                'env expects type CubeEnv'
         self.env = env
         self.reward_range = self.env.reward_range
         # set observation_space and action_space below
@@ -375,6 +376,14 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         if self.mode == PolicyMode.RL_PUSH:
             return self.policy.rl_frameskip
         return 4
+
+    @property
+    def step_count(self):
+        return self.env.step_count
+
+    @step_count.setter
+    def step_count(self, v):
+        self.env.step_count = v
 
     def set_policy(self, policy):
         self.policy = policy
@@ -418,15 +427,13 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
     def reset(self):
         obs = super(HierarchicalPolicyWrapper, self).reset()
         initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
-        # initial_object_pose = move_cube.sample_goal(difficulty=-1)
-
+        # initial_object_pose = move_cube.sample_goal(difficulty=-1) 
         if self._platform is None:
             self._platform = trifinger_simulation.TriFingerPlatform(
                 visualization=False,
                 initial_object_pose=initial_object_pose,
             )
         self.policy.reset_policy(obs['impedance'], self._platform)
-        self.step_count = 0
         return obs
 
     def _step(self, action):
@@ -455,7 +462,10 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             # Use observations of step t + 1 to follow what would be expected
             # in a typical gym environment.  Note that on the real robot, this
             # will not be possible
-            observation = self.unwrapped._create_observation(t, action)
+            if osp.exists('/output'):
+                observation = self.unwrapped._create_observation(t, action)
+            else:
+                observation = self.unwrapped._create_observation(t+1, action)
 
             reward += self.unwrapped.compute_reward(
                 observation["achieved_goal"],
@@ -468,7 +478,9 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
         is_done = self.step_count == self.episode_length
         self.unwrapped.write_action_log(observation, action, reward)
-        return observation, reward, is_done, self.env.info
+        info = self.env.info
+        info['num_steps'] = self.step_count
+        return observation, reward, is_done, info
 
     def _gym_action_to_robot_action(self, gym_action):
         if self.action_type == ActionType.TORQUE:
