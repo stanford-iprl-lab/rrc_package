@@ -4,6 +4,7 @@ from gym import wrappers
 import functools
 from gym.envs.registration import register
 
+# SET THIS TO DETERMINE RRC_UTILS IMPORTS
 phase = 2
 
 if phase == 1:
@@ -19,6 +20,9 @@ registered_envs = [spec.id for spec in gym.envs.registry.all()]
 FRAMESKIP = 10
 EPLEN = 120 * 1000 // FRAMESKIP  # 15 seconds
 EPLEN_SHORT = 5 * 1000 // FRAMESKIP  # 5 seconds, 500 total timesteps
+
+total_steps = 5e6
+step_rates = np.linspace(0, 0.6, 10)
 
 if phase == 1:
     if "real_robot_challenge_phase_1-v2" not in registered_envs:
@@ -49,16 +53,14 @@ elif phase == 2:
             )
 
 
-total_steps = 5e6
-step_rates = np.linspace(0, 0.6, 10)
-
 def success_rate_early_stopping(steps, success_rate):
     return step_rates[min(9, int(steps/total_steps * 10))] > success_rate
 
 def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
     """Returns env_fn to pass to spinningup alg"""
 
-    def env_fn(visualization=False):
+    def env_fn(visualization=False, **mod_kwargs):
+        make_kwargs.update(mod_kwargs)
         env = gym.make(env_str, visualization=visualization, **make_kwargs)
         for w in wrapper_params:
             if isinstance(w, dict):
@@ -250,66 +252,72 @@ if phase == 1:
     eval_keys = ['is_success', 'is_success_ori', 'final_ori_dist', 'final_dist',
                  'final_score']
 
+
 # PHASE 2
+if phase == 2:
+    # ENV STR
+    p2_goalenv_str = "real_robot_challenge_phase_2-v0"
+    p2_env_str = "real_robot_challenge_phase_2-v2"
 
-p2_fixed_reorient = env_wrappers.RandomGoalOrientationInitializer(difficulty=1)
+    # INITIALIZERS
+    p2_fixed_reorient = env_wrappers.RandomGoalOrientationInitializer(difficulty=1)
+    p2_push_curr = env_wrappers.CurriculumInitializer(initial_dist=0.,
+                                                      num_levels=5)
+    p2_push_fixed = env_wrappers.CurriculumInitializer(initial_dist=0.,
+                                                       num_levels=2)
+    p2_reorient_curr = env_wrappers.CurriculumInitializer(
+            initial_dist=0.06, num_levels=3, difficulty=4,
+            fixed_goal=env_wrappers.RandomOrientationInitializer.goal)
+    p2_recenter = env_wrappers.ReorientInitializer(1, 0.09)
 
-p2_push_curr = env_wrappers.CurriculumInitializer(initial_dist=0.,
-                                                            num_levels=5)
-p2_push_fixed = env_wrappers.CurriculumInitializer(initial_dist=0.,
-                                                             num_levels=2)
-
-p2_reorient_curr = env_wrappers.CurriculumInitializer(
-        initial_dist=0.06, num_levels=3, difficulty=4,
-        fixed_goal=env_wrappers.RandomOrientationInitializer.goal)
-p2_recenter = env_wrappers.ReorientInitializer(1, 0.09)
-
-p2_push = p2_push_fixed
-
-p2_goalenv_str = "real_robot_challenge_phase_2-v0"
-p2_env_str = "real_robot_challenge_phase_2-v2"
-p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',
-                'final_ori_dist', 'final_ori_scaled']
-
-p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
-                                        info_keys=p2_info_keys)
-
-p2_final_wrappers = [functools.partial(wrappers.TimeLimit, max_episode_steps=EPLEN),
-                  p2_log_info_wrapper,
-                  wrappers.ClipAction, wrappers.FlattenObservation]
-p2_final_wrappers_reorient = [
-        functools.partial(wrappers.TimeLimit, max_episode_steps=EPLEN_SHORT),
-        p2_log_info_wrapper,
-        wrappers.FlattenObservation]
-
-p2_final_wrappers_relgoal = [functools.partial(env_wrappers.RelativeGoalWrapper,
-            keep_goal=False)] + p2_final_wrappers_reorient
+    p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',
+                    'final_ori_dist', 'final_ori_scaled']
+    p2_info_kwargs = {'is_success': 'SuccessRateVal',
+            'is_success_ori': 'OriSuccessRateVal',
+            'final_dist': 'FinalDist', 'final_ori_dist': 'FinalOriDist',
+            'final_ori_scaled': 'FinalOriScaledDist'}
 
 
-p2_rew_wrappers = [functools.partial(env_wrappers.CubeRewardWrapper,
-                                  pos_coef=.1, ori_coef=.1,
-                                  ac_norm_pen=.1, fingertip_coef=.1,
-                                  rew_fn='exp', augment_reward=True),
-                functools.partial(env_wrappers.ReorientWrapper,
-                                  goal_env=False, dist_thresh=0.075,
-                                  ori_thresh=np.pi)]
+    p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
+                                            info_keys=p2_info_keys)
 
-p2_rel_scaled_wrapper = functools.partial(env_wrappers.ScaledActionWrapper,
-                                       goal_env=False, relative=True)
+    p2_final_wrappers = [functools.partial(wrappers.TimeLimit, max_episode_steps=EPLEN),
+                      p2_log_info_wrapper,
+                      wrappers.ClipAction, wrappers.FlattenObservation]
+    p2_final_wrappers_reorient = [
+            functools.partial(wrappers.TimeLimit, max_episode_steps=EPLEN_SHORT),
+            p2_log_info_wrapper,
+            wrappers.FlattenObservation]
 
-p2_recenter_rew_wrappers = [functools.partial(env_wrappers.CubeRewardWrapper, pos_coef=1.,
-                             ori_coef=.5, ac_norm_pen=0., augment_reward=True, rew_fn='exp'),
-                            functools.partial(env_wrappers.ReorientWrapper, goal_env=False,
-                                 dist_thresh=0.05,
-                                 ori_thresh=np.pi),
-                            p2_rel_scaled_wrapper]
+    p2_final_wrappers_relgoal = [functools.partial(env_wrappers.RelativeGoalWrapper,
+                keep_goal=False)] + p2_final_wrappers_reorient
 
-p2_rrc_wrappers = [p2_rel_scaled_wrapper] + p2_final_wrappers_relgoal
 
-p2_reorient_env_fn = make_env_fn(
-        p2_env_str,
-        p2_rrc_wrappers,
-        initializer=p2_fixed_reorient,
-        action_type=cube_env.ActionType.POSITION,
-        frameskip=FRAMESKIP)
+    p2_rew_wrappers = [functools.partial(env_wrappers.CubeRewardWrapper,
+                                      pos_coef=.1, ori_coef=.1,
+                                      ac_norm_pen=.1, fingertip_coef=.1,
+                                      rew_fn='exp', augment_reward=True),
+                    functools.partial(env_wrappers.ReorientWrapper,
+                                      goal_env=False, dist_thresh=0.075,
+                                      ori_thresh=np.pi)]
+
+    p2_rel_scaled_wrapper = functools.partial(env_wrappers.ScaledActionWrapper,
+                                           goal_env=False, relative=True)
+
+    p2_recenter_rew_wrappers = [functools.partial(env_wrappers.CubeRewardWrapper,
+                                    pos_coef=1.,  ori_coef=.5, ac_norm_pen=0.,
+                                    augment_reward=True, rew_fn='exp'),
+                                functools.partial(env_wrappers.ReorientWrapper,
+                                     goal_env=False, dist_thresh=0.05,
+                                     ori_thresh=0.2),
+                                p2_rel_scaled_wrapper]
+
+    p2_rrc_wrappers = [p2_rel_scaled_wrapper] + p2_final_wrappers_relgoal
+
+    p2_reorient_env_fn = make_env_fn(
+            p2_env_str,
+            p2_rrc_wrappers,
+            initializer=p2_fixed_reorient,
+            action_type=cube_env.ActionType.POSITION,
+            frameskip=FRAMESKIP)
 

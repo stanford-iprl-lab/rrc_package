@@ -208,11 +208,14 @@ class ReorientInitializer:
     """Initializer that samples random initial states and goals."""
     def_goal_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
 
-    def __init__(self, difficulty=1, initial_dist=_CUBOID_HEIGHT):
+    def __init__(self, difficulty=1, initial_dist=_CUBOID_HEIGHT, seed=None):
         self.difficulty = difficulty
         self.initial_dist = initial_dist
-        self.random = np.random.RandomState()
         self.goal_pose = self.def_goal_pose
+        self.set_seed(seed)
+
+    def set_seed(self, seed):
+        self.random = np.random.RandomState(seed=seed)
 
     def get_initial_state(self):
         """Get a random initial object pose (always on the ground)."""
@@ -220,13 +223,11 @@ class ReorientInitializer:
         self.initial_pose = move_cube.sample_goal(difficulty=-1)
         z = self.initial_pose.position[-1]
         self.initial_pose.position = np.array((x, y, z))
-        if self.difficulty == 4:
-            self.initial_pose.orientation = Rotation.random(random_state=self.random).as_quat()
         return self.initial_pose
 
     def get_goal(self):
         """Get a random goal depending on the difficulty."""
-        if self.difficulty > 2:
+        if self.difficulty >= 2:
             self.goal_pose = move_cube.sample_goal(self.difficulty)
         return self.goal_pose
 

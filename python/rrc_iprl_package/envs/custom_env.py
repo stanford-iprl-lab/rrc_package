@@ -3,6 +3,7 @@ import numpy as np
 import gym
 import pybullet
 import os.path as osp
+import logging
 
 from gym import wrappers
 from gym import ObservationWrapper
@@ -166,7 +167,7 @@ class PushCubeEnv(gym.Env):
         if self.action_type == ActionType.TORQUE:
             robot_action = Action(torque=gym_action)
         elif self.action_type == ActionType.POSITION:
-            robot_action = Action(position=gym_action)
+            robot_action = Action(position=gym_action, torque=np.zeros(9))
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
             robot_action = Action(
                 torque=gym_action["torque"], position=gym_action["position"]
@@ -178,21 +179,21 @@ class PushCubeEnv(gym.Env):
 
     def _reset_platform_frontend(self):
         """Reset the platform frontend."""
-        # reset is not really possible
-        if self.platform is not None:
-            raise RuntimeError(
-                "Once started, this environment cannot be reset."
-            )
+        logging.debug("Resetting simulation with robot_fingers (frontend-only)")
 
-        self.platform = robot_fingers.TriFingerPlatformFrontend()
+        # full reset is not possible is platform instantiated
+        if self.platform is not None:
+            logging.debug("Virtually resetting after %d resets", self.num_resets+1)
+            self.num_resets += 1
+        else:
+            self.platform = robot_fingers.TriFingerPlatformFrontend()
 
     def _reset_direct_simulation(self):
         """Reset direct simulation.
 
         With this the env can be used without backend.
         """
-        # set this to false to disable pyBullet's simulation
-        visualization = True
+        logging.debug("Resetting simulation with trifinger_simulation (pybullet-sim backend)")
 
         # reset simulation
         del self.platform
@@ -200,7 +201,7 @@ class PushCubeEnv(gym.Env):
         # initialize simulation
         initial_object_pose = move_cube.sample_goal(difficulty=-1)
         self.platform = trifinger_simulation.TriFingerPlatform(
-            visualization=visualization,
+            visualization=self.visualization,
             initial_object_pose=initial_object_pose,
         )
 
@@ -218,7 +219,7 @@ class PushCubeEnv(gym.Env):
         # reset simulation
         if robot_fingers:
             self._reset_platform_frontend()
-        else: 
+        else:
             self._reset_direct_simulation()
 
         self.info = {"difficulty": self.initializer.difficulty}
@@ -238,6 +239,11 @@ class PushCubeEnv(gym.Env):
         except:
             robot_tip_positions = np.zeros(9)
 
+        # verify that the given goal pose is contained in the cube state space
+        goal_pose = self.goal
+        if not isinstance(goal_pose, dict):
+            goal_pose = goal_pose.to_dict()
+
         self._obs_dict = observation = {
             "robot_position": robot_observation.position,
             "robot_velocity": robot_observation.velocity,
@@ -246,7 +252,8 @@ class PushCubeEnv(gym.Env):
             "robot_tip_forces": robot_observation.tip_force,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
-            "goal_object_position": np.asarray(self.goal["position"]),
+            "goal_object_position": np.asarray(goal_pose["position"]),
+            "goal_object_orientation": np.asarray(goal_pose["orientation"]),
             "action": action
         }
         return {k: observation[k] for k in self.observation_names}
