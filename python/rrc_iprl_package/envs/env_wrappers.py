@@ -158,8 +158,7 @@ class CurriculumInitializer:
         self.final_dist[0] = final_dist
         if self.difficulty == 4:
             self.final_ori = np.roll(self.final_ori, 1)
-            self.final_ori[0] = compute_orientation_error(goal_pose, final_pose,
-                                                          scale=False)
+            self.final_ori[0] = compute_orientation_error(goal_pose, final_pose)
 
         update_level = np.mean(self.final_dist) < DIST_THRESH
         if self.difficulty == 4:
@@ -281,7 +280,7 @@ class SparseCubeEnv(CubeEnv):
         goal_pose = move_cube.Pose.from_dict(desired_goal)
         obj_pose = move_cube.Pose.from_dict(achieved_goal)
         pos_error = np.linalg.norm(goal_pose.position - obj_pose.position)
-        ori_error = compute_orientation_error(goal_pose, obj_pose, scale=False)
+        ori_error = compute_orientation_error(goal_pose, obj_pose)
         return float(pos_error < self.pos_thresh and ori_error < self.ori_thresh)
 
 
@@ -597,10 +596,9 @@ class DistRewardWrapper(gym.RewardWrapper):
                 np.asarray(cube_state[1]).flatten())
         return goal_pose, object_pose
 
-    def compute_orientation_error(self, scale=True):
+    def compute_orientation_error(self):
         goal_pose, object_pose = self.get_goal_object_pose()
-        orientation_error = compute_orientation_error(goal_pose, object_pose,
-                                                      scale=scale)
+        orientation_error = compute_orientation_error(goal_pose, object_pose)
         return orientation_error
 
     def compute_goal_dist(self, info):
@@ -612,11 +610,11 @@ class DistRewardWrapper(gym.RewardWrapper):
 
 
 class CubeRewardWrapper(gym.Wrapper):
-    def __init__(self, env, target_dist=0.195, pos_coef=1., ori_coef=0.,
+    def __init__(self, env, target_dist=0.156, pos_coef=1., ori_coef=0.,
                  fingertip_coef=0., ac_norm_pen=0.2, goal_env=False, rew_fn='exp',
                  augment_reward=False):
         super(CubeRewardWrapper, self).__init__(env)
-        self._target_dist = 0.156
+        self._target_dist = target_dist
         self._pos_coef = pos_coef
         self._ori_coef = ori_coef
         self._fingertip_coef = fingertip_coef
@@ -712,9 +710,10 @@ class CubeRewardWrapper(gym.Wrapper):
         return self._compute_reward(goal_pose, object_pose, info=info)
 
     def _compute_reward(self, goal_pose, object_pose, prev_object_pose=None, info=None):
-        info = self.unwrapped.info
+        info = info or self.unwrapped.info
         pos_error = self.compute_position_error(goal_pose, object_pose)
 
+        # compute previous object pose error
         if prev_object_pose is not None:
             prev_pos_error = self.compute_position_error(goal_pose, prev_object_pose)
             step_rew = step_pos_rew = prev_pos_error - pos_error
@@ -722,9 +721,9 @@ class CubeRewardWrapper(gym.Wrapper):
             step_rew = 0
 
         if self.difficulty == 4 or self._ori_coef:
-            ori_error = compute_orientation_error(goal_pose, object_pose, scale=True)
+            ori_error = compute_orientation_error(goal_pose, object_pose)
             if prev_object_pose is not None:
-                prev_ori_error = compute_orientation_error(goal_pose, prev_object_pose, scale=True)
+                prev_ori_error = compute_orientation_error(goal_pose, prev_object_pose)
                 step_ori_rew = prev_ori_error - ori_error
                 step_rew = (step_pos_rew * self._pos_coef +
                             step_ori_rew * self._ori_coef)
@@ -737,7 +736,11 @@ class CubeRewardWrapper(gym.Wrapper):
             if self.difficulty == 4 or self._ori_coef:
                 rew += self._ori_coef * (1 - ori_error)
         elif self.rew_fn == 'exp':
-            rew = self._pos_coef * np.exp(-pos_error/self.target_dist)
+            # pos error penalty
+            if pos_error >= self.target_dist:
+                rew = -1
+            else:
+                rew = self._pos_coef * np.exp(-pos_error/self.target_dist)
             if self.difficulty == 4 or self._ori_coef:
                 rew += self._ori_coef * np.exp(-ori_error)
 
@@ -751,7 +754,8 @@ class CubeRewardWrapper(gym.Wrapper):
         info['pos_error'] = pos_error
         if self.difficulty == 4 or self._ori_coef:
             info['ori_error'] = ori_error
-        total_rew = step_rew * 3 + rew + ac_penalty
+        total_rew = step_rew + rew + ac_penalty
+        # if pos and ori error are below threshold 
         if pos_error < DIST_THRESH or ori_error < ORI_THRESH:
             return 2.5 * ((pos_error < DIST_THRESH) + (ori_error < ORI_THRESH))
         return total_rew
@@ -821,9 +825,9 @@ class LogInfoWrapper(gym.Wrapper):
         return np.linalg.norm(object_pose.position[:pos_idx] -
                               goal_pose.position[:pos_idx])
 
-    def compute_orientation_error(self, info, scale=False):
+    def compute_orientation_error(self, info):
         goal_pose, object_pose = self.get_goal_object_pose()
-        return compute_orientation_error(goal_pose, object_pose, scale=scale)
+        return compute_orientation_error(goal_pose, object_pose)
 
     def step(self, action):
         o, r, d, i = super(LogInfoWrapper, self).step(action)
@@ -836,9 +840,9 @@ class LogInfoWrapper(gym.Wrapper):
                 elif shortened_k == 'dist' and final == d:
                     i[k] = self.compute_position_error(i, score=False)
                 elif shortened_k == 'ori_dist' and final == d:
-                    i[k] = self.compute_orientation_error(i, scale=False)
+                    i[k] = self.compute_orientation_error(i)
                 elif shortened_k == 'ori_scaled' and final ==  d:
-                    i[k] = self.compute_orientation_error(i, scale=True)
+                    i[k] = self.compute_orientation_error(i)
                 elif k == 'is_success' and d:
                     i[k] = self.compute_position_error(i) < DIST_THRESH
                 elif k == 'is_success_ori' and d:
@@ -878,7 +882,7 @@ class StepRewardWrapper(gym.RewardWrapper):
 
 
 # Phase 3 orientation error
-def compute_orientation_error(goal_pose, actual_pose, scale=False, **kwargs):
+def compute_orientation_error(goal_pose, actual_pose):
     goal_rot = Rotation.from_quat(goal_pose.orientation)
     actual_rot = Rotation.from_quat(actual_pose.orientation)
 

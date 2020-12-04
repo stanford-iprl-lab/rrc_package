@@ -65,26 +65,34 @@ def main():
     is_done = False
     total_steps = steps_so_far = ep_so_far = 0
     old_mode = policy.mode
-    while total_steps < MAX_STEPS:
-        action = policy.predict(observation)
-        observation, reward, is_done, info = env.step(action)
-        steps_so_far = env.step_count
-        accumulated_reward += reward
-        if old_mode != policy.mode:
-            print('mode changed: {} to {}'.format(old_mode, policy.mode))
-            old_mode = policy.mode
-        if is_done and steps_so_far + EP_LEN * ep_so_far < MAX_STEPS:
-            if not steps_so_far // EP_LEN:
-                import pdb; pdb.set_trace()
-            assert steps_so_far // EP_LEN, 'steps_so_far should have been ' \
-                'incremented. Instead got: total_steps: {}, ep_so_far: {}'.format(
-                    total_steps, ep_so_far)
-            print("Resetting env after {} steps reached".format(steps_so_far))
-            is_done = False
-            observation = env.reset()
-        ep_so_far += steps_so_far // EP_LEN
-        steps_so_far = env.step_count
-        total_steps = steps_so_far + EP_LEN * ep_so_far
+    try:
+        while total_steps < MAX_STEPS:
+            action = policy.predict(observation)
+            observation, reward, is_done, info = env.step(action)
+            steps_so_far = env.step_count
+            accumulated_reward += reward
+            if old_mode != policy.mode:
+                print('mode changed: {} to {}'.format(old_mode, policy.mode))
+                old_mode = policy.mode
+            if is_done and steps_so_far + EP_LEN * ep_so_far < MAX_STEPS:
+                if not steps_so_far // EP_LEN:
+                    import pdb; pdb.set_trace()
+                assert steps_so_far // EP_LEN, 'steps_so_far should have been ' \
+                    'incremented. Instead got: total_steps: {}, ep_so_far: {}'.format(
+                        total_steps, ep_so_far)
+                print("Resetting env after {} steps reached".format(steps_so_far))
+                is_done = False
+                observation = env.reset()
+            ep_so_far += steps_so_far // EP_LEN
+            steps_so_far = env.step_count
+            total_steps = steps_so_far + EP_LEN * ep_so_far
+    except Exception as e:
+        print("Error encounted: {}. Saving logs and exiting".format(e))
+        env.save_action_log()
+        policy.impedance_controller.save_log()
+        raise e
+
+
     print("Terminating run after {} steps reached".format(total_steps))
     env.save_action_log()
     # Save control_policy_log
