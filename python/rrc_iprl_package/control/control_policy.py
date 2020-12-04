@@ -47,15 +47,15 @@ class ImpedanceControllerPolicy:
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
 
-    KP_REPOSE = [130, 130, 130,
-                 130, 130, 130,
-                 130, 130, 130]
-    KV_REPOSE = [0.7, 0.7, 0.7, 
-                 0.7, 0.7, 0.7,
-                 0.7, 0.7, 0.7]
+    #KP_REPOSE = [130, 130, 130,
+    #             130, 130, 130,
+    #             130, 130, 130]
+    #KV_REPOSE = [0.7, 0.7, 0.7, 
+    #             0.7, 0.7, 0.7,
+    #             0.7, 0.7, 0.7]
 
-    #KP_REPOSE = KP
-    #KV_REPOSE = KV
+    KP_REPOSE = KP
+    KV_REPOSE = KV
 
     KP_OBJ = [0.01, 
               0.01,
@@ -538,12 +538,12 @@ class ImpedanceControllerPolicy:
 
         # If in REPOSE, get fingertip forces in world frame
         if self.mode == TrajMode.REPOSE:
-            ft_des_force_wf, W = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
-                                  self.dx_traj[self.traj_waypoint_counter, :],
-                                  obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
-                                  self.cp_params)
-            ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
-            #ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
+            #ft_des_force_wf, W = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
+            #                      self.dx_traj[self.traj_waypoint_counter, :],
+            #                      obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
+            #                      self.cp_params)
+            #ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
+            ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
 
             #if self.DEBUG:
             #    self.l_desired_obj_w.append(W.flatten())
