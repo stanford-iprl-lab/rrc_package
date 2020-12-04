@@ -340,6 +340,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def _create_observation(self, t, action):
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
+        print(camera_observation.cameras[0])
+        print(camera_observation.cameras[0].timestamp)
          
         observation = {
             "observation": {
@@ -353,12 +355,13 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "position": camera_observation.object_pose.position,
                 "orientation": camera_observation.object_pose.orientation,
             },
-            "cam0_timestamp": camera_observation.cameras[0].timestamp,
+            "cam0_timestamp": float(camera_observation.cameras[0].timestamp),
             #"achieved_goal_filtered": {
             #    "position": camera_observation.filtered_object_pose.position,
             #    "orientation": camera_observation.filtered_object_pose.orientation,
             #},
         }
+
         return observation
 
     def _gym_action_to_robot_action(self, gym_action):
