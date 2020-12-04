@@ -16,8 +16,8 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 FRAMESKIP = 1
-MAX_STEPS = 20 * 1000 // FRAMESKIP
-#MAX_STEPS = None # For running on real robot
+#MAX_STEPS = 20 * 1000 // FRAMESKIP
+MAX_STEPS = None # For running on real robot
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
