@@ -383,9 +383,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if osp.exists("/output"):
             filtered_quat = np.asarray(camera_observation.filtered_object_pose.orientation)
             filtered_quat_norm = np.linalg.norm(filtered_quat)
+            print("filtered pose:")
             print(camera_observation.filtered_object_pose.position)
             print(camera_observation.filtered_object_pose.orientation)
-            print(filtered_quat_norm)
+            print("quat norm: {}".format(filtered_quat_norm))
             if filtered_quat_norm == 0:
                 renorm_quat = camera_observation.object_pose.orientation
             else:
