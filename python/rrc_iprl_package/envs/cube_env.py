@@ -6,9 +6,10 @@ import numpy as np
 try:
     import robot_interfaces
     import robot_fingers
+    import trifinger_cameras
     from robot_interfaces.py_trifinger_types import Action 
 except ImportError:
-    robot_interfaces = robot_fingers = None
+    robot_interfaces = robot_fingers = trifinger_cameras = None
     from trifinger_simulation.action import Action
 
 import trifinger_simulation
@@ -157,6 +158,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "action": self.action_space,
                 "desired_goal": object_state_space,
                 "achieved_goal": object_state_space,
+                "cam0_timestamp": gym.spaces.Box(low=0., high=np.inf, shape=()),
             }
         )
         self.save_npz = save_npz
@@ -356,6 +358,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "position": camera_observation.object_pose.position,
                 "orientation": camera_observation.object_pose.orientation,
             },
+            "cam0_timestamp": camera_observation.cameras[0].timestamp,
         }
         return observation
 
