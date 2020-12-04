@@ -23,7 +23,6 @@ from trifinger_simulation import visual_objects
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
-import rrc_iprl_package.traj_opt.kinematics_utils as k_utils
 
 try:
     import torch
@@ -508,8 +507,7 @@ class ImpedanceControllerPolicy:
         ft_vel_goal_list = []
         # If object is grasped, transform cp_wf to ft_wf
         if self.mode == TrajMode.REPOSE:
-            H_list = k_utils.get_ft_R(current_position)
-            #H_list = k_utils.get_H_5_wrt_0(current_position)
+            H_list = c_utils.get_ft_R(current_position)
     
         for f_i in range(3):
             new_pos = self.ft_pos_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]

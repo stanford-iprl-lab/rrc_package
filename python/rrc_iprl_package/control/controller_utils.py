@@ -34,6 +34,7 @@ FINGER_BASE_POSITIONS = [
            np.array([[np.cos(theta_1*(np.pi/180))*r, np.sin(theta_1*(np.pi/180))*r, 0]]),
            np.array([[np.cos(theta_2*(np.pi/180))*r, np.sin(theta_2*(np.pi/180))*r, 0]]),
            ]
+BASE_ANGLE_DEGREES = [0, -120, -240]
 
 # Information about object faces given face_id
 OBJ_FACES_INFO = {
@@ -887,4 +888,13 @@ def get_dquat_to_dtheta_matrix(quat):
 
     return M.T
 
-
+def get_ft_R(q):
+    R_list = []
+    for f_i, angle in enumerate(BASE_ANGLE_DEGREES):
+        theta = angle * (np.pi/180)
+        q1 = q[3*f_i + 0]
+        q2 = q[3*f_i + 1]
+        q3 = q[3*f_i + 2]
+        R = np.array([[np.cos(q1)*np.cos(theta), (np.sin(q1)*np.sin(q2)*np.cos(theta) - np.sin(theta)*np.cos(q2))*np.cos(q3) + (np.sin(q1)*np.cos(q2)*np.cos(theta) + np.sin(q2)*np.sin(theta))*np.sin(q3), -(np.sin(q1)*np.sin(q2)*np.cos(theta) - np.sin(theta)*np.cos(q2))*np.sin(q3) + (np.sin(q1)*np.cos(q2)*np.cos(theta) + np.sin(q2)*np.sin(theta))*np.cos(q3)], [np.sin(theta)*np.cos(q1), (np.sin(q1)*np.sin(q2)*np.sin(theta) + np.cos(q2)*np.cos(theta))*np.cos(q3) + (np.sin(q1)*np.sin(theta)*np.cos(q2) - np.sin(q2)*np.cos(theta))*np.sin(q3), -(np.sin(q1)*np.sin(q2)*np.sin(theta) + np.cos(q2)*np.cos(theta))*np.sin(q3) + (np.sin(q1)*np.sin(theta)*np.cos(q2) - np.sin(q2)*np.cos(theta))*np.cos(q3)], [-np.sin(q1), np.sin(q2)*np.cos(q1)*np.cos(q3) + np.sin(q3)*np.cos(q1)*np.cos(q2), -np.sin(q2)*np.sin(q3)*np.cos(q1) + np.cos(q1)*np.cos(q2)*np.cos(q3)]])
+        R_list.append(R)
+    return R_list

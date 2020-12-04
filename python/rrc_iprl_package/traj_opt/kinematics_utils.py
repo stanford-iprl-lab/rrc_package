@@ -94,7 +94,8 @@ Compute forward kinematics for all fingers given joint positions q
 """
 def FK(q):
     ft_pos = []
-    for f_i, angle in enumerate(BASE_ANGLE_DEGREES):
+    for fplit
+i, angle in enumerate(BASE_ANGLE_DEGREES):
         theta = angle * (np.pi/180)
         q1_val = q[3*f_i + 0]
         q2_val = q[3*f_i + 1]
@@ -115,17 +116,6 @@ def get_H_5_wrt_0(q):
         H = H_5_wrt_0.subs({"q1": q1_val, "q2": q2_val, "q3": q3_val, "theta_base": theta})
         H_list.append(H)
     return H_list
-
-def get_ft_R(q):
-    R_list = []
-    for f_i, angle in enumerate(BASE_ANGLE_DEGREES):
-        theta = angle * (np.pi/180)
-        q1 = q[3*f_i + 0]
-        q2 = q[3*f_i + 1]
-        q3 = q[3*f_i + 2]
-        R = np.array([[np.cos(q1)*np.cos(theta), (np.sin(q1)*np.sin(q2)*np.cos(theta) - np.sin(theta)*np.cos(q2))*np.cos(q3) + (np.sin(q1)*np.cos(q2)*np.cos(theta) + np.sin(q2)*np.sin(theta))*np.sin(q3), -(np.sin(q1)*np.sin(q2)*np.cos(theta) - np.sin(theta)*np.cos(q2))*np.sin(q3) + (np.sin(q1)*np.cos(q2)*np.cos(theta) + np.sin(q2)*np.sin(theta))*np.cos(q3)], [np.sin(theta)*np.cos(q1), (np.sin(q1)*np.sin(q2)*np.sin(theta) + np.cos(q2)*np.cos(theta))*np.cos(q3) + (np.sin(q1)*np.sin(theta)*np.cos(q2) - np.sin(q2)*np.cos(theta))*np.sin(q3), -(np.sin(q1)*np.sin(q2)*np.sin(theta) + np.cos(q2)*np.cos(theta))*np.sin(q3) + (np.sin(q1)*np.sin(theta)*np.cos(q2) - np.sin(q2)*np.cos(theta))*np.cos(q3)], [-np.sin(q1), np.sin(q2)*np.cos(q1)*np.cos(q3) + np.sin(q3)*np.cos(q1)*np.cos(q2), -np.sin(q2)*np.sin(q3)*np.cos(q1) + np.cos(q1)*np.cos(q2)*np.cos(q3)]])
-        R_list.append(R)
-    return R_list
 
 """
 Get fingertip reference frame orientation for all fingers
