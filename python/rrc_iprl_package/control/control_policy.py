@@ -165,7 +165,10 @@ class ImpedanceControllerPolicy:
 
         # Previous object pose and time (for estimating object velocity)
         self.prev_obj_pose = get_pose_from_observation(observation)
-        self.prev_step_time = observation["cam0_timestamp"] / 1000
+        if osp.exists("/output"):
+            self.prev_step_time = observation["cam0_timestamp"]
+        else:
+            self.prev_step_time = observation["cam0_timestamp"] / 1000
         self.prev_vel = np.zeros(6)
         self.filt_vel = np.zeros(6)
 
@@ -493,7 +496,10 @@ class ImpedanceControllerPolicy:
 
         # Estimate object velocity based on previous and current object pose
         # TODO: this might cause an issue if observed object poses are the same across steps?
-        timestamp = full_observation["cam0_timestamp"] / 1000
+        if osp.exists("/output"):
+            timestamp = full_observation["cam0_timestamp"]
+        else:
+            timestamp = full_observation["cam0_timestamp"] / 1000
         print("Cam0_timestamp: {}".format(timestamp))
         obj_vel = self.get_obj_vel(self.filtered_obj_pose, timestamp)
         
@@ -578,7 +584,7 @@ class ImpedanceControllerPolicy:
 
     """
     """
-    def set_filtered_pose_from_observation(self, observation, theta=0.3):
+    def set_filtered_pose_from_observation(self, observation, theta=0.1):
         new_pose = get_pose_from_observation(observation)
 
         f_p = (1-theta) * self.filtered_obj_pose.position + theta * new_pose.position
