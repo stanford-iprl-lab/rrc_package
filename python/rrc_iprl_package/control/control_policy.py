@@ -165,8 +165,7 @@ class ImpedanceControllerPolicy:
 
         # Previous object pose and time (for estimating object velocity)
         self.prev_obj_pose = get_pose_from_observation(observation)
-        self.prev_step_time = time.time()
-        #self.prev_step_time = observation["cam0_timestamp"] / 1000
+        self.prev_step_time = observation["cam0_timestamp"] / 1000
         self.prev_vel = np.zeros(6)
         self.filt_vel = np.zeros(6)
 
@@ -494,8 +493,8 @@ class ImpedanceControllerPolicy:
 
         # Estimate object velocity based on previous and current object pose
         # TODO: this might cause an issue if observed object poses are the same across steps?
-        #timestamp = full_observation["cam0_timestamp"] / 1000
-        timestamp = time.time()
+        timestamp = full_observation["cam0_timestamp"] / 1000
+        print("Cam0_timestamp: {}".format(timestamp))
         obj_vel = self.get_obj_vel(self.filtered_obj_pose, timestamp)
         
         # Get current fingertip position
@@ -794,12 +793,14 @@ class ResidualControllerPolicy(HierarchicalControllerPolicy):
         return torque
 
 
-def get_pose_from_observation(observation, goal_pose=False, filtered=False):
+def get_pose_from_observation(observation, goal_pose=False):
+    use_filtered = osp.exists("/output") # If using backend, use filtered object pose
+ 
     if goal_pose:
         key = "desired_goal"
     else:
-        if filtered:
-            key = "achieved_goal_filtered"
+        if use_filtered:
+            key = "filtered_achieved_goal"
         else:
             key = "achieved_goal"
     return move_cube.Pose.from_dict(observation[key])

@@ -2,6 +2,7 @@
 import enum
 import gym
 import numpy as np
+import os.path as osp
 
 try:
     import robot_interfaces
@@ -146,22 +147,39 @@ class RealRobotCubeEnv(gym.GoalEnv):
         else:
             raise ValueError("Invalid action_type")
 
-        self.observation_space = gym.spaces.Dict(
-            {
-                "observation": gym.spaces.Dict(
-                    {
-                        "position": robot_position_space,
-                        "velocity": robot_velocity_space,
-                        "torque": robot_torque_space,
-                    }
-                ),
-                "action": self.action_space,
-                "desired_goal": object_state_space,
-                "achieved_goal": object_state_space,
-                "filtered_achieved_goal": object_state_space,
-                "cam0_timestamp": gym.spaces.Box(low=0., high=np.inf, shape=()),
-            }
-        )
+        if osp.exists("/output"):
+            self.observation_space = gym.spaces.Dict(
+                {
+                    "observation": gym.spaces.Dict(
+                        {
+                            "position": robot_position_space,
+                            "velocity": robot_velocity_space,
+                            "torque": robot_torque_space,
+                        }
+                    ),
+                    "action": self.action_space,
+                    "desired_goal": object_state_space,
+                    "achieved_goal": object_state_space,
+                    "filtered_achieved_goal": object_state_space,
+                    "cam0_timestamp": gym.spaces.Box(low=0., high=np.inf, shape=()),
+                }
+            )
+        else:
+            self.observation_space = gym.spaces.Dict(
+                {
+                    "observation": gym.spaces.Dict(
+                        {
+                            "position": robot_position_space,
+                            "velocity": robot_velocity_space,
+                            "torque": robot_torque_space,
+                        }
+                    ),
+                    "action": self.action_space,
+                    "desired_goal": object_state_space,
+                    "achieved_goal": object_state_space,
+                    "cam0_timestamp": gym.spaces.Box(low=0., high=np.inf, shape=()),
+                }
+            )
         self.save_npz = save_npz
         self.action_log = []
 
@@ -359,12 +377,14 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "position": camera_observation.object_pose.position,
                 "orientation": camera_observation.object_pose.orientation,
             },
-            "filtered_achieved_goal": {
-                "position": camera_observation.filtered_object_pose.position,
-                "orientation": camera_observation.filtered_object_pose.orientation,
-            },
             "cam0_timestamp": camera_observation.cameras[0].timestamp,
         }
+
+        if osp.exists("/output"):
+            observation["filtered_achieved_goal"] = {
+                "position": camera_observation.filtered_object_pose.position,
+                "orientation": camera_observation.filtered_object_pose.orientation}
+
         return observation
 
     def _gym_action_to_robot_action(self, gym_action):
