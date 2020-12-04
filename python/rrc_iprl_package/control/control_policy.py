@@ -40,9 +40,9 @@ class TrajMode(enum.Enum):
 class ImpedanceControllerPolicy:
     USE_FILTERED_POSE = True
 
-    KP = [200, 200, 400,
-          200, 200, 400,
-          200, 200, 400]
+    KP = [300, 300, 400,
+          300, 300, 400,
+          300, 300, 400]
     KV = [0.7, 0.7, 0.8, 
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
