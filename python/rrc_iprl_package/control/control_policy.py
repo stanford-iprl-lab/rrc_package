@@ -81,6 +81,7 @@ class ImpedanceControllerPolicy:
         self.init_face = None
         self.goal_face = None
         self.platform = None
+        print("USE_FILTERED_POSE: {}".format(self.USE_FILTERED_POSE))
         print("KP: {}".format(self.KP))
         print("KV: {}".format(self.KV))
         print("KP_REPOSE: {}".format(self.KP_REPOSE))
