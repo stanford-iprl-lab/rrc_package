@@ -16,8 +16,8 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 FRAMESKIP = 1
-#MAX_STEPS = 5 * 1000 // FRAMESKIP
-MAX_STEPS = None # For running on real robot
+MAX_STEPS = 20 * 1000 // FRAMESKIP
+#MAX_STEPS = None # For running on real robot
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -40,8 +40,8 @@ def main():
     else:
         goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)
-    initial_pose.position = np.array([0.01,-0.02,move_cube._CUBOID_SIZE[2]/2])
-    theta = np.pi/4
+    initial_pose.position = np.array([0.0,0.0,move_cube._CUBOID_SIZE[2]/2])
+    theta = 0
     initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
    
     if osp.exists('/output'):
@@ -66,19 +66,24 @@ def main():
     is_done = False
     old_mode = policy.mode
     steps_so_far = 0
-    while not is_done:
-        if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
-        action = policy.predict(observation)
-        observation, reward, is_done, info = env.step(action)
-        if old_mode != policy.mode:
-            #print('mode changed: {} to {}'.format(old_mode, policy.mode))
-            old_mode = policy.mode
-        #print("reward:", reward)
-        accumulated_reward += reward
-        steps_so_far += 1
+    try:
+        while not is_done:
+            if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
+            action = policy.predict(observation)
+            observation, reward, is_done, info = env.step(action)
+            if old_mode != policy.mode:
+                #print('mode changed: {} to {}'.format(old_mode, policy.mode))
+                old_mode = policy.mode
+            #print("reward:", reward)
+            accumulated_reward += reward
+            steps_so_far += 1
+    except Exception as e:
+        print("Error encounted: {}. Saving logs and exiting".format(e))
+        env.save_action_log()
+        policy.impedance_controller.save_log()
+        raise e
 
     env.save_action_log()
-
     # Save control_policy_log
     policy.impedance_controller.save_log()
 
