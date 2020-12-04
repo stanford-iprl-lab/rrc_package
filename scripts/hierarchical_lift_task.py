@@ -16,8 +16,8 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 FRAMESKIP = 1
-#MAX_STEPS = 20 * 1000 // FRAMESKIP
-MAX_STEPS = None # For running on real robot
+MAX_STEPS = 5 * 1000 // FRAMESKIP
+#MAX_STEPS = None # For running on real robot
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -40,9 +40,9 @@ def main():
     else:
         goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)
-    #initial_pose.position = np.array([0.01,-0.02,move_cube._CUBOID_SIZE[2]/2])
-    #theta = np.pi/4
-    #initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
+    initial_pose.position = np.array([0.01,-0.02,move_cube._CUBOID_SIZE[2]/2])
+    theta = np.pi/4
+    initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
    
     if osp.exists('/output'):
         save_path = '/output/action_log.npz'
@@ -51,7 +51,7 @@ def main():
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose.to_dict(), difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
-        num_steps=MAX_STEPS, visualization=False, save_npz=save_path
+        num_steps=MAX_STEPS, visualization=True, save_npz=save_path
     )
     rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
     goal_pose = move_cube.Pose.from_dict(goal)
