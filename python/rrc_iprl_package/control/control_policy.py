@@ -584,7 +584,7 @@ class ImpedanceControllerPolicy:
 
     """
     """
-    def set_filtered_pose_from_observation(self, observation, theta=0.1):
+    def set_filtered_pose_from_observation(self, observation, theta=0.01):
         new_pose = get_pose_from_observation(observation)
 
         f_p = (1-theta) * self.filtered_obj_pose.position + theta * new_pose.position
