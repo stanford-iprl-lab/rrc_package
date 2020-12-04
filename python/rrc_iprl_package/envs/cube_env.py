@@ -158,6 +158,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "action": self.action_space,
                 "desired_goal": object_state_space,
                 "achieved_goal": object_state_space,
+                "filtered_achieved_goal": object_state_space,
                 "cam0_timestamp": gym.spaces.Box(low=0., high=np.inf, shape=()),
             }
         )
@@ -357,6 +358,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
             "achieved_goal": {
                 "position": camera_observation.object_pose.position,
                 "orientation": camera_observation.object_pose.orientation,
+            },
+            "filtered_achieved_goal": {
+                "position": camera_observation.filtered_object_pose.position,
+                "orientation": camera_observation.filtered_object_pose.orientation,
             },
             "cam0_timestamp": camera_observation.cameras[0].timestamp,
         }
