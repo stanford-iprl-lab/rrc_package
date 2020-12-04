@@ -879,8 +879,8 @@ class StepRewardWrapper(gym.RewardWrapper):
 
 # Phase 3 orientation error
 def compute_orientation_error(goal_pose, actual_pose, scale=False, **kwargs):
-    goal_rot = Rotation.from_euler('xyz', goal_pose.orientation)
-    actual_rot = Rotation.from_euler('xyz', actual_pose.orientation)
+    goal_rot = Rotation.from_quat(goal_pose.orientation)
+    actual_rot = Rotation.from_quat(actual_pose.orientation)
 
     y_axis = [0, 1, 0]
     goal_direction_vector = goal_rot.apply(y_axis)
@@ -893,8 +893,6 @@ def compute_orientation_error(goal_pose, actual_pose, scale=False, **kwargs):
     # scale both position and orientation error to be within [0, 1] for
     # their expected ranges
     error = orientation_error / np.pi
-    if scale:
-        error = (scaled_position_error + scaled_orientation_error) / 2
     return error
 
 
