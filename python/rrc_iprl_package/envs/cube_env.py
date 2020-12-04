@@ -381,9 +381,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         }
 
         if osp.exists("/output"):
+            filtered_quat_norm = np.linalg.norm(camera_observation.filtered_object_pose.orientation)
             observation["filtered_achieved_goal"] = {
                 "position": camera_observation.filtered_object_pose.position,
-                "orientation": camera_observation.filtered_object_pose.orientation}
+                "orientation": camera_observation.filtered_object_pose.orientation / filtered_quat_norm}
 
         return observation
 
