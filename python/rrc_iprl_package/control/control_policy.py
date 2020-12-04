@@ -397,6 +397,10 @@ class ImpedanceControllerPolicy:
         else:
             ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
 
+        if full_observation.get('residual_ft_force'):
+            ft_des_force_wf += full_observation.get('residual_ft_force')
+
+
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(ft_pos_goal_list,
                                               ft_vel_goal_list,

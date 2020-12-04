@@ -21,9 +21,6 @@ FRAMESKIP = 10
 EPLEN = 120 * 1000 // FRAMESKIP  # 15 seconds
 EPLEN_SHORT = 5 * 1000 // FRAMESKIP  # 5 seconds, 500 total timesteps
 
-total_steps = 5e6
-step_rates = np.linspace(0, 0.6, 10)
-
 if phase == 1:
     if "real_robot_challenge_phase_1-v2" not in registered_envs:
         register(
@@ -52,6 +49,8 @@ elif phase == 2:
             entry_point=cube_env.PushCubeEnv
             )
 
+total_steps = 5e6
+step_rates = np.linspace(0, 0.6, 10)
 
 def success_rate_early_stopping(steps, success_rate):
     return step_rates[min(9, int(steps/total_steps * 10))] > success_rate

@@ -37,6 +37,7 @@ class PushCubeEnv(gym.Env):
             "object_position",
             "object_orientation",
             "goal_object_position",
+            "goal_object_orientation",
             "action"]
 
     def __init__(
@@ -165,7 +166,7 @@ class PushCubeEnv(gym.Env):
     def _gym_action_to_robot_action(self, gym_action):
         # construct robot action depending on action type
         if self.action_type == ActionType.TORQUE:
-            robot_action = Action(torque=gym_action)
+            robot_action = Action(torque=gym_action, position=np.repeat(np.nan, 9))
         elif self.action_type == ActionType.POSITION:
             robot_action = Action(position=gym_action, torque=np.zeros(9))
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
@@ -519,8 +520,8 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
 
 class ResidualPolicyWrapper(ObservationWrapper):
-    def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False, 
-                 rl_cp_params=False, 
+    def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False,
+                 rl_cp_params=False,
                  observation_names=PushCubeEnv.observation_names):
         super(ResidualPolicyWrapper, self).__init__(env)
         self.rl_torque = rl_torque
@@ -534,8 +535,13 @@ class ResidualPolicyWrapper(ObservationWrapper):
         assert env.action_type in [ActionType.TORQUE,
                                    ActionType.TORQUE_AND_POSITION]
         if isinstance(env.action_space, gym.spaces.Dict):
-            self.action_space = env.action_space.spaces['torque']
-        self._prev_action = np.zeros(9)
+            if self.rl_torque:
+                self.action_space = env.action_space.spaces['torque']
+                self._prev_action = np.zeros(9)
+            else:
+                self.action_space = gym.spaces.Box(low=-np.ones(9), high=np.ones(9))
+                self._prev_action = np.zeros(9)
+
 
     def make_obs_space(self):
         robot_torque_space = gym.spaces.Box(
@@ -650,6 +656,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
             if self.impedance_controller is not None:
                 robot_tip_positions = self.impedance_controller.custom_pinocchio_utils.forward_kinematics(robot_observation.position)
             else:
+                print("using wrong tip pos")
                 robot_tip_positions = [0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7]
             robot_tip_positions = np.array(robot_tip_positions)
         goal_pose = self.goal
@@ -684,8 +691,14 @@ class ResidualPolicyWrapper(ObservationWrapper):
         return init_pose, goal_pose
 
     def action(self, res_torque=None):
-        des_torque = self.impedance_controller.predict(self._obs_dict['impedance'])
-        self._prev_action = action = np.clip(res_torque + des_torque, self.action_space.low, self.action_space.high)
+        obs = self._obs_dict['impedance'].copy()
+        if not self.rl_torque:
+            obs['residual_ft_force'] = res_torque
+        des_torque = self.impedance_controller.predict(obs)
+        if self.rl_torque:
+            self._prev_action = action = np.clip(res_torque + des_torque, self.action_space.low, self.action_space.high)
+        else:
+            self._prev_action = action = np.clip(des_torque, self.action_space.low, self.action_space.high)
         if self.env.action_type == ActionType.TORQUE_AND_POSITION:
             return {'torque': action, 'position': np.repeat(np.nan, 9)}
         return action

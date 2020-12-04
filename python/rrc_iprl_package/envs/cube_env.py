@@ -244,7 +244,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 self.info,
             )
 
-            self.step_count = t
+            self.step_count += t - self.t_prev
+            self.t_prev = t
             # make sure to not exceed the episode length
             if self.step_count >= self.episode_length:
                 break
@@ -285,6 +286,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.step_count = 0
         if self.num_resets * self.episode_length >= 120*1000:
             print('Not performing full reset, reached maximum number of resets')
+            return self.action_log[-1]['observation']
+
+        return self.reset_fingers()
 
         # need to already do one step to get initial observation
         if self.frameskip != 1:
@@ -312,7 +316,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         if temp_frameskip is not None:
             self.frameskip = temp_frameskip
- 
+
         return observation
 
     def _reset_platform_frontend(self):
@@ -322,6 +326,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self.num_resets += 1
         else:
             self.platform = robot_fingers.TriFingerPlatformFrontend()
+            self.t_prev = 0
 
     def _reset_direct_simulation(self):
         """Reset direct simulation.
@@ -336,6 +341,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             visualization=self.visualization,
             initial_object_pose=self.initial_pose,
         )
+        self.t_prev = 0
 
         # visualize the goal
         if self.visualization:
