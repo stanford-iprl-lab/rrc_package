@@ -218,7 +218,8 @@ class ImpedanceControllerPolicy:
             
         # Clip obj z coord to half width of cube
         clipped_pos = obj_pose.position.copy()
-        clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2) 
+        clipped_pos[2] = 0.01
+        #clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2) 
         x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
