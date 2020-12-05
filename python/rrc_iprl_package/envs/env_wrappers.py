@@ -354,9 +354,9 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             dt = self.frameskip * .001
             desired_velocity = self.scale * action.reshape((3,3)) / dt
             # TODO: use tip_forces_wf to indicate desired contact with object on fingertip
-            torque, goal_reached = c_utils.impedance_controller(
+            torque = c_utils.impedance_controller(
                     tip_pos_desired_list=fingertip_goals, tip_vel_desired_list=desired_velocity,
-                    q_current=current_position, dw_current=current_velocity,
+                    q_current=current_position, dq_current=current_velocity,
                     custom_pinocchio_utils=self.pinocchio_utils, tip_forces_wf=None)
             ac = np.clip(torque, self.unwrapped.action_space.low,
                              self.unwrapped.action_space.high)
