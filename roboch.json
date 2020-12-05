@@ -1,0 +1,7 @@
+{
+  "repository": "git@github.com:stanford-iprl-lab/rrc_package.git",
+  "branch": "jeff_phase_3",
+  "email": "jefzhangxy@hotmail.com",
+  "git_deploy_key": "id_rsa",
+  "singularity_image": "user_image.sif"
+}
