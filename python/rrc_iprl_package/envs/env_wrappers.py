@@ -301,6 +301,12 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         self.scale = scale
         self.pinocchio_utils = None
         self.ac_pen = ac_pen
+        if self.goal_env:
+            obs_space = self.observation_space.spaces['observation']
+            obs_dict = obs_space.spaces
+        else:
+            obs_dict = self.observation_space.spaces
+        obs_dict['last_action'] = self.action_space
 
     def reset(self):
         obs = super(TaskSpaceWrapper, self).reset()
@@ -311,6 +317,10 @@ class TaskSpaceWrapper(gym.ActionWrapper):
                     platform.simfinger.tip_link_names)
         self._prev_obs = obs
         self._last_action = np.zeros_like(self.action_space.sample())
+        obs_dict = obs
+        if self.goal_env:
+            obs_dict = obs['observation']
+        obs_dict['last_action'] = self._last_action
         return obs
 
     def step(self, action):
@@ -321,6 +331,10 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         else:
             r -= self.ac_pen * np.linalg.norm(self._last_action - action)
         self._last_action =  action
+        obs_dict = o
+        if self.goal_env:
+            obs_dict = obs_dict['observation']
+        obs_dict['last_action'] = self._last_action
         return o, r, d, i
 
     def action(self, action):
@@ -337,13 +351,17 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         else:
             fingertip_goals = action
         if self.unwrapped.action_type == ActionType.TORQUE:
+            dt = self.frameskip * .001
+            desired_velocity = self.scale * action.reshape((3,3)) / dt
+            # TODO: use tip_forces_wf to indicate desired contact with object on fingertip
             torque, goal_reached = c_utils.impedance_controller(
-                    fingertip_goals, current_position, current_velocity,
-                    self.pinocchio_utils, None, 0.007)
+                    tip_pos_desired_list=fingertip_goals, tip_vel_desired_list=desired_velocity,
+                    q_current=current_position, dw_current=current_velocity,
+                    custom_pinocchio_utils=self.pinocchio_utils, tip_forces_wf=None)
             ac = np.clip(torque, self.unwrapped.action_space.low,
                              self.unwrapped.action_space.high)
         else:
-            ac, ft_err = self.pinocchio_utils.inverse_kinematics(ft_desired,
+            ac, ft_err = self.pinocchio_utils.inverse_kinematics(fingertip_goals,
                                                                  current_position)
         return ac
 

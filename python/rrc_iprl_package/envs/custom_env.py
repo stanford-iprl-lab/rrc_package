@@ -48,6 +48,7 @@ class PushCubeEnv(gym.Env):
         frameskip=1,
         num_steps=None,
         visualization=False,
+        alpha=0.01
         ):
         """Initialize.
 
@@ -157,6 +158,8 @@ class PushCubeEnv(gym.Env):
 
         self.observation_space = gym.spaces.Dict({k:obs_spaces[k]
                                                   for k in self.observation_names})
+        self.alpha = alpha
+        self.filtered_position = self.filtered_orientation = None
 
     def seed(self, seed=None):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
@@ -234,10 +237,34 @@ class PushCubeEnv(gym.Env):
         observation, _, _, _ = self.step(self._initial_action)
         return observation
 
+    def get_camera_pose(self, camera_observation):
+        if osp.exists('/output'):
+            cam_pose = camera_observation.filtered_object_pose
+            if np.linalg.norm(cam_pose.orientation) == 0.:
+                return camera_observation.object_pose
+            else:
+                return cam_pose
+        else:
+            return camera_observation.object_pose
+
     def _create_observation(self, t, action):
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
-        object_observation = camera_observation.object_pose
+        cam_pose = self.get_camera_pose(camera_observation)
+
+        # use exponential smoothing filter camera observation pose 
+        # filter orientation
+        if self.filtered_orientation is None:
+            self.filtered_orientation = cam_pose.orientation
+        self.filtered_orientation = ((1-self.alpha)*self.filtered_orientation + 
+                          self.alpha*cam_pose.orientation)
+
+        # filter position
+        if self.filtered_position is None:
+            self.filtered_position = cam_pose.position
+        self.filtered_position = ((1-self.alpha)*self.filtered_position +
+                          self.alpha*cam_pose.position)
+
         try:
             robot_tip_positions = self.platform.forward_kinematics(
                 robot_observation.position
@@ -257,12 +284,15 @@ class PushCubeEnv(gym.Env):
             "robot_torque": robot_observation.torque,
             "robot_tip_positions": robot_tip_positions,
             "robot_tip_forces": robot_observation.tip_force,
-            "object_position": object_observation.position,
-            "object_orientation": object_observation.orientation,
+            "object_position": self.filtered_position,
+            "object_orientation": self.filtered_orientation,
             "goal_object_position": np.asarray(goal_pose["position"]),
             "goal_object_orientation": np.asarray(goal_pose["orientation"]),
             "action": action
         }
+        if not osp.exists('/output'):
+            self.filtered_position = self.filtered_orientation = None
+
         return {k: observation[k] for k in self.observation_names}
 
     @staticmethod
@@ -420,6 +450,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         t = self.step_count
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
+
         object_observation = camera_observation.object_pose
         robot_tip_positions = self.platform.forward_kinematics(
             robot_observation.position

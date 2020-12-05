@@ -2,6 +2,7 @@
 import enum
 import gym
 import numpy as np
+import os.path as osp
 
 try:
     import robot_interfaces
@@ -51,6 +52,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         frameskip: int = 1,
         num_steps: int = None,
         save_npz: str = None,
+        alpha: float = 0.01
     ):
         """Initialize.
 
@@ -165,6 +167,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
         )
         self.save_npz = save_npz
         self.action_log = []
+        self.filtered_position = None
+        self.filtered_orientation = None
+        self.alpha = alpha
 
     def compute_reward(self, achieved_goal, desired_goal, info):
         """Compute the reward for the given achieved and desired goal.
@@ -288,8 +293,6 @@ class RealRobotCubeEnv(gym.GoalEnv):
             print('Not performing full reset, reached maximum number of resets')
             return self.action_log[-1]['observation']
 
-        return self.reset_fingers()
-
         # need to already do one step to get initial observation
         if self.frameskip != 1:
             temp_frameskip = self.frameskip
@@ -317,6 +320,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if temp_frameskip is not None:
             self.frameskip = temp_frameskip
 
+        self.filtered_position = self.filtered_orientation = None
         return observation
 
     def _reset_platform_frontend(self):
@@ -371,9 +375,33 @@ class RealRobotCubeEnv(gym.GoalEnv):
         move_cube.random = self.np_random
         return [seed]
 
+    def get_camera_pose(self, camera_observation):
+        if osp.exists('/output'):
+            cam_pose = camera_observation.filtered_object_pose
+            if np.linalg.norm(cam_pose.orientation) == 0.:
+                return camera_observation.object_pose
+            else:
+                return cam_pose
+        else:
+            return camera_observation.object_pose
+
     def _create_observation(self, t, action):
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
+        cam_pose = self.get_camera_pose(camera_observation)
+
+        # use exponential smoothing filter camera observation pose 
+        # filter orientation
+        if self.filtered_orientation is None:
+            self.filtered_orientation = cam_pose.orientation
+        self.filtered_orientation = ((1-self.alpha)*self.filtered_orientation + 
+                          self.alpha*cam_pose.orientation)
+
+        # filter position
+        if self.filtered_position is None:
+            self.filtered_position = cam_pose.position
+        self.filtered_position = ((1-self.alpha)*self.filtered_position +
+                          self.alpha*cam_pose.position)
 
         observation = {
             "observation": {
@@ -384,10 +412,13 @@ class RealRobotCubeEnv(gym.GoalEnv):
             "action": action,
             "desired_goal": self.goal,
             "achieved_goal": {
-                "position": camera_observation.object_pose.position,
-                "orientation": camera_observation.object_pose.orientation,
+                "position": self.filtered_position,
+                "orientation": self.filtered_orientation,
             },
         }
+
+        if not osp.exists('/output'):
+            self.filtered_position = self.filtered_orientation = None
         return observation
 
     def _gym_action_to_robot_action(self, gym_action):
@@ -412,6 +443,7 @@ class CubeEnv(RealRobotCubeEnv):
         initializer,
         goal_difficulty: int,
         action_type: ActionType = ActionType.POSITION,
+        default_position: np.ndarray = np.array([0.0, 0.75, -1.6] * 3),
         visualization: bool = False,
         frameskip: int = 1,
         num_steps: int = None,
@@ -433,7 +465,8 @@ class CubeEnv(RealRobotCubeEnv):
         initial_pose = self.initializer.get_initial_state().to_dict()
         goal_pose = self.initializer.get_goal().to_dict()
         super().__init__(goal_pose, initial_pose, goal_difficulty,
-            action_type, visualization, frameskip, num_steps, save_npz)
+            action_type=action_type, default_position=default_position, visualization=visualization,
+            frameskip=frameskip, num_steps=num_steps, save_npz=save_npz)
 
     def reset(self): 
         self.initial_pose = self.initializer.get_initial_state()
