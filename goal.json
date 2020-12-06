@@ -3,14 +3,14 @@
         "orientation": [
             0,
             0,
-            0,
-            1
+            0.3829,
+            0.9239
         ],
         "position": [
             0.0,
             0.0,
-            0.0825
+            0.01
         ]
     },
-    "difficulty": 2
+    "difficulty": 4
 }
