@@ -79,23 +79,20 @@ plt.savefig("{}/ft_force.png".format(output_dir))
 
 # DEBUGGING PLOTS
 
-plt.figure(figsize=(10,10))
-plt.suptitle("dquat")
-plt.subplots_adjust(hspace=0.3)
-for d_i, dim in enumerate(["dqx", "dqy", "dqz", "dqw"]):
-    plt.subplot(2,2,d_i+1)
-    plt.title("Dimension {}".format(dim))
-    plt.plot(range(steps-1), dquat[:,d_i], '.')
-plt.savefig("{}/dquat.png".format(output_dir))
-
-plt.figure(figsize=(10,10))
-plt.suptitle("Desired object wrench")
-plt.subplots_adjust(hspace=0.3)
-for d_i, dim in enumerate(["fx", "fy", "fz", "mx", "my", "mz"]):
-    plt.subplot(2,3,d_i+1)
-    plt.title("Dimension {}".format(dim))
-    plt.plot(range(desired_obj_w.shape[0]), desired_obj_w[:,d_i], '.')
-plt.savefig("{}/desired_obj_w.png".format(output_dir))
-
-
-
+# plt.figure(figsize=(10,10))
+# plt.suptitle("dquat")
+# plt.subplots_adjust(hspace=0.3)
+# for d_i, dim in enumerate(["dqx", "dqy", "dqz", "dqw"]):
+#     plt.subplot(2,2,d_i+1)
+#     plt.title("Dimension {}".format(dim))
+#     plt.plot(range(steps-1), dquat[:,d_i], '.')
+# plt.savefig("{}/dquat.png".format(output_dir))
+#
+# plt.figure(figsize=(10,10))
+# plt.suptitle("Desired object wrench")
+# plt.subplots_adjust(hspace=0.3)
+# for d_i, dim in enumerate(["fx", "fy", "fz", "mx", "my", "mz"]):
+#     plt.subplot(2,3,d_i+1)
+#     plt.title("Dimension {}".format(dim))
+#     plt.plot(range(desired_obj_w.shape[0]), desired_obj_w[:,d_i], '.')
+# plt.savefig("{}/desired_obj_w.png".format(output_dir))

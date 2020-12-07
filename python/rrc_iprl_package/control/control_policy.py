@@ -43,33 +43,35 @@ class ImpedanceControllerPolicy:
     KP = [300, 300, 400,
           300, 300, 400,
           300, 300, 400]
-    KV = [0.7, 0.7, 0.8, 
+    KV = [0.7, 0.7, 0.8,
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
 
     #KP_REPOSE = [130, 130, 130,
     #             130, 130, 130,
     #             130, 130, 130]
-    #KV_REPOSE = [0.7, 0.7, 0.7, 
+    #KV_REPOSE = [0.7, 0.7, 0.7,
     #             0.7, 0.7, 0.7,
     #             0.7, 0.7, 0.7]
 
     KP_REPOSE = KP
     KV_REPOSE = KV
 
-    KP_OBJ = [0.01, 
-              0.01,
-              0.01,
-              0.01,
-              0.01,
-              0.01,]
+    kp_obj = 0.05
+    KP_OBJ = [kp_obj,
+              kp_obj,
+              kp_obj,
+              kp_obj,
+              kp_obj,
+              kp_obj,]
 
-    KV_OBJ = [0.001, 
-              0.001,
-              0.001,
-              0.001,
-              0.001,
-              0.001,]
+    kv_obj = 0.001
+    KV_OBJ = [kv_obj,
+              kv_obj,
+              kv_obj,
+              kv_obj,
+              kv_obj,
+              kv_obj,]
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
@@ -87,7 +89,7 @@ class ImpedanceControllerPolicy:
         print("KV_REPOSE: {}".format(self.KV_REPOSE))
         print("KP_OBJ: {}".format(self.KP_OBJ))
         print("KV_OBJ: {}".format(self.KV_OBJ))
-        
+
         self.initialize_logging()
 
     def initialize_logging(self):
@@ -113,8 +115,8 @@ class ImpedanceControllerPolicy:
         self.l_desired_ft_pos   = [] # fingertip positions - desired
         self.l_actual_ft_pos    = [] # fingertip positions - actual (computed from observation)
         self.l_desired_ft_vel   = [] # fingertip velocities - desired
-        self.l_desired_obj_pose = [] # object position - desired  
-        self.l_desired_obj_vel = [] # object position - desired  
+        self.l_desired_obj_pose = [] # object position - desired
+        self.l_desired_obj_vel = [] # object position - desired
         self.l_observed_obj_pose = [] # object position - observed
         self.l_observed_filt_obj_pose = [] # object position - observed
         self.l_observed_obj_vel = [] # object velocity - observed
@@ -217,11 +219,11 @@ class ImpedanceControllerPolicy:
             obj_pose = self.filtered_obj_pose
         else:
             obj_pose = get_pose_from_observation(observation)
-            
+
         # Clip obj z coord to half width of cube
         clipped_pos = obj_pose.position.copy()
         clipped_pos[2] = 0.01
-        #clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2) 
+        #clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2)
         x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
@@ -232,12 +234,12 @@ class ImpedanceControllerPolicy:
         print("Object pose orientation: {}".format(obj_pose.orientation))
         print("Traj lift x0: {}".format(repr(x0)))
         print("Traj lift x_goal: {}".format(repr(x_goal)))
-    
+
         # Get current joint positions
         current_position, _ = get_robot_position_velocity(observation)
         # Get current fingertip positions
         current_ft_pos = self.get_fingertip_pos_wf(current_position)
-        
+
         self.x_soln, self.dx_soln, l_wf_soln = c_utils.run_fixed_cp_traj_opt(
                 obj_pose, self.cp_params, current_position, self.custom_pinocchio_utils,
                 x0, x_goal, nGrid, dt, npz_filepath = self.lift_trajopt_filepath)
@@ -377,7 +379,7 @@ class ImpedanceControllerPolicy:
 
         print("FT_GOAL: {}".format(ft_goal))
         print(ft_pos[-1,:])
-    
+
         # Number of interpolation points
         interp_n = 26
 
@@ -396,15 +398,15 @@ class ImpedanceControllerPolicy:
 
         return ft_pos_traj, ft_vel_traj
 
-    def log_to_buffers(self, ft_pos_goal_list, ft_vel_goal_list, 
+    def log_to_buffers(self, ft_pos_goal_list, ft_vel_goal_list,
                        cur_ft_pos, obj_pose, obj_vel, torque,
                        ft_des_force_wf=None):
         # LOGGING
-        self.l_step_count.append(self.step_count)       
+        self.l_step_count.append(self.step_count)
         self.l_timestamp.append(time.time())
-        self.l_desired_ft_pos.append(np.asarray(ft_pos_goal_list).flatten())  
-        self.l_desired_ft_vel.append(np.asarray(ft_vel_goal_list).flatten())  
-        self.l_actual_ft_pos.append(cur_ft_pos)  
+        self.l_desired_ft_pos.append(np.asarray(ft_pos_goal_list).flatten())
+        self.l_desired_ft_vel.append(np.asarray(ft_vel_goal_list).flatten())
+        self.l_actual_ft_pos.append(cur_ft_pos)
         self.l_observed_obj_pose.append(np.concatenate((obj_pose.position,obj_pose.orientation)))
         self.l_observed_filt_obj_pose.append(np.concatenate((self.filtered_obj_pose.position,self.filtered_obj_pose.orientation)))
         self.l_observed_obj_vel.append(obj_vel)
@@ -431,7 +433,7 @@ class ImpedanceControllerPolicy:
     Replans trajectory according to TrajMode, and sets self.traj_waypoint_counter
     """
     def plan_trajectory(self, observation):
-        if self.mode == TrajMode.RESET: 
+        if self.mode == TrajMode.RESET:
             self.set_traj_lower_finger(observation)
             self.mode = TrajMode.PRE_TRAJ_LOWER
         elif self.mode == TrajMode.PRE_TRAJ_LOWER:
@@ -444,7 +446,7 @@ class ImpedanceControllerPolicy:
             print("ERROR: should not reach this case")
 
         self.traj_waypoint_counter = 0
-        return 
+        return
 
     # TODO: What about when object observations are noisy???
     def get_obj_vel(self, cur_obj_pose, cur_step_time):
@@ -464,9 +466,9 @@ class ImpedanceControllerPolicy:
         M = c_utils.get_dquat_to_dtheta_matrix(self.prev_obj_pose.orientation) # from Paul Mitiguy dynamics notes
         obj_vel_theta = 2 * M @ obj_vel_quat
         #obj_vel_theta = np.zeros(obj_vel_theta.shape)
-        
+
         cur_vel = np.concatenate((obj_vel_position, obj_vel_theta))
-    
+
         # Set previous obj_pose and step_time to current values
         self.prev_obj_pose = cur_obj_pose
         self.prev_step_time = cur_step_time
@@ -480,7 +482,7 @@ class ImpedanceControllerPolicy:
         # Log obj_vel_quat for debugging
         if self.DEBUG:
             self.l_dquat.append(obj_vel_quat)
-           
+
         return filt_vel
         return cur_vel
 
@@ -502,7 +504,7 @@ class ImpedanceControllerPolicy:
             timestamp = full_observation["cam0_timestamp"] / 1000
         print("Cam0_timestamp: {}".format(timestamp))
         obj_vel = self.get_obj_vel(self.filtered_obj_pose, timestamp)
-        
+
         # Get current fingertip position
         cur_ft_pos = self.get_fingertip_pos_wf(current_position)
         cur_ft_pos = np.asarray(cur_ft_pos).flatten()
@@ -516,7 +518,7 @@ class ImpedanceControllerPolicy:
         # If object is grasped, transform cp_wf to ft_wf
         if self.mode == TrajMode.REPOSE:
             H_list = c_utils.get_ft_R(current_position)
-    
+
         for f_i in range(3):
             new_pos = self.ft_pos_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
             new_vel = self.ft_vel_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
@@ -533,21 +535,21 @@ class ImpedanceControllerPolicy:
 
             ft_pos_goal_list.append(new_pos)
             ft_vel_goal_list.append(new_vel)
-        #if self.mode == TrajMode.REPOSE:
-        #    quit()
+        # if self.mode == TrajMode.REPOSE:
+           # quit()
 
         # If in REPOSE, get fingertip forces in world frame
         if self.mode == TrajMode.REPOSE:
-            #ft_des_force_wf, W = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
-            #                      self.dx_traj[self.traj_waypoint_counter, :],
-            #                      obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
-            #                      self.cp_params)
-            #ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
-            ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
+            ft_des_force_wf, W = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
+                                 self.dx_traj[self.traj_waypoint_counter, :],
+                                 obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
+                                 self.cp_params)
+            ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
+            # ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
 
             #if self.DEBUG:
             #    self.l_desired_obj_w.append(W.flatten())
-    
+
         else:
             ft_des_force_wf = None
 
@@ -558,7 +560,7 @@ class ImpedanceControllerPolicy:
         else:
             KP = self.KP
             KV = self.KV
-    
+
         torque = c_utils.impedance_controller(ft_pos_goal_list,
                                               ft_vel_goal_list,
                                               current_position, current_velocity,
@@ -589,13 +591,13 @@ class ImpedanceControllerPolicy:
 
         f_p = (1-theta) * self.filtered_obj_pose.position + theta * new_pose.position
         f_o = (1-theta) * self.filtered_obj_pose.orientation + theta * new_pose.orientation
-        
+
         filt_pose = move_cube.Pose(position=f_p, orientation=f_o)
         self.filtered_obj_pose = filt_pose
-        
+
         return filt_pose
-        
-        
+
+
 
 class HierarchicalControllerPolicy:
     DIST_THRESH = 0.09
@@ -608,7 +610,7 @@ class HierarchicalControllerPolicy:
     default_robot_position = TriFingerPlatform.spaces.robot_position.default
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
-                 npz_file=None, load_dir='', start_mode=PolicyMode.RL_PUSH, 
+                 npz_file=None, load_dir='', start_mode=PolicyMode.RL_PUSH,
                  difficulty=1, deterministic=True, debug_waypoints=False):
         self.full_action_space = action_space
         action_space = action_space['torque']
@@ -766,7 +768,7 @@ class HierarchicalControllerPolicy:
             assert False, 'use a different start mode, started with: {}'.format(self.start_mode)
         self.step_count += 1
         return ac
-    
+
 
 class ResidualControllerPolicy(HierarchicalControllerPolicy):
     DIST_THRESH = 0.09
@@ -774,7 +776,7 @@ class ResidualControllerPolicy(HierarchicalControllerPolicy):
     default_robot_position = TriFingerPlatform.spaces.robot_position.default
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
-                 npz_file=None, start_mode=PolicyMode.RL_PUSH, difficulty=1, 
+                 npz_file=None, start_mode=PolicyMode.RL_PUSH, difficulty=1,
                  rl_torque=True, rl_tip_pos=False, rl_cp_params=False,
                  debug_waypoints=False):
         super(action_space, initial_pose, goal_pose, npz_file, load_dir='',
@@ -801,7 +803,7 @@ class ResidualControllerPolicy(HierarchicalControllerPolicy):
 
 def get_pose_from_observation(observation, goal_pose=False):
     use_filtered = osp.exists("/output") # If using backend, use filtered object pose
- 
+
     if goal_pose:
         key = "desired_goal"
     else:
@@ -881,4 +883,3 @@ def load_pytorch_policy(fpath, itr, deterministic=False):
         return action
 
     return get_action
-
