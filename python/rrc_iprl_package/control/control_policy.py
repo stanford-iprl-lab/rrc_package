@@ -57,7 +57,7 @@ class ImpedanceControllerPolicy:
     KP_REPOSE = KP
     KV_REPOSE = KV
 
-    kp_obj = 0.003
+    kp_obj = 0.03
     KP_OBJ = [kp_obj,
               kp_obj,
               kp_obj,
