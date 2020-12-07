@@ -31,10 +31,12 @@ except ImportError:
 
 
 class TrajMode(enum.Enum):
-    RESET = enum.auto()
+    RESET          = enum.auto()
     PRE_TRAJ_LOWER = enum.auto()
     PRE_TRAJ_REACH = enum.auto()
-    REPOSE = enum.auto()
+    ROTATE_X       = enum.auto()
+    ROTATE_Z       = enum.auto()
+    REPOSITION     = enum.auto()
 
 
 class ImpedanceControllerPolicy:
@@ -46,16 +48,6 @@ class ImpedanceControllerPolicy:
     KV = [0.7, 0.7, 0.8, 
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
-
-    #KP_REPOSE = [130, 130, 130,
-    #             130, 130, 130,
-    #             130, 130, 130]
-    #KV_REPOSE = [0.7, 0.7, 0.7, 
-    #             0.7, 0.7, 0.7,
-    #             0.7, 0.7, 0.7]
-
-    KP_REPOSE = KP
-    KV_REPOSE = KV
 
     KP_OBJ = [0.01, 
               0.01,
@@ -83,8 +75,6 @@ class ImpedanceControllerPolicy:
         print("USE_FILTERED_POSE: {}".format(self.USE_FILTERED_POSE))
         print("KP: {}".format(self.KP))
         print("KV: {}".format(self.KV))
-        print("KP_REPOSE: {}".format(self.KP_REPOSE))
-        print("KV_REPOSE: {}".format(self.KV_REPOSE))
         print("KP_OBJ: {}".format(self.KP_OBJ))
         print("KV_OBJ: {}".format(self.KV_OBJ))
         
@@ -204,14 +194,11 @@ class ImpedanceControllerPolicy:
             obj_pose = get_pose_from_observation(observation)
 
         self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
-
+    
     """
-    Run trajectory optimization to move object given fixed contact points
+    Set repose goal
     """
-    def set_traj_lift_object(self, observation, nGrid = 50, dt = 0.01):
-        self.traj_waypoint_counter = 0
-        qnum = 3
-
+    def set_repose_x_bounds(self, observation):
         # Get object pose
         if self.USE_FILTERED_POSE:
             obj_pose = self.filtered_obj_pose
@@ -223,11 +210,30 @@ class ImpedanceControllerPolicy:
         clipped_pos[2] = 0.01
         #clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2) 
         x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
+
+        # set object goal pose
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
-        if self.difficulty == 4:
-            x_goal[0, -4:] = self.goal_pose.orientation
 
+        if self.mode != TrajMode.REPOSITION:
+            x_goal[0, -4:] = self.goal_pose.orientation
+        # TODO add rotation goal decomposition here
+
+        return x0, x_goal
+
+    """
+    Run trajectory optimization to move object given fixed contact points
+    """
+    def set_traj_repose_object(self, observation, x0, x_goal, nGrid = 50, dt = 0.01):
+        self.traj_waypoint_counter = 0
+        qnum = 3
+
+        # Get object pose
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
+            
         print("Object pose position: {}".format(obj_pose.position))
         print("Object pose orientation: {}".format(obj_pose.orientation))
         print("Traj lift x0: {}".format(repr(x0)))
@@ -302,6 +308,47 @@ class ImpedanceControllerPolicy:
         # Zero-order hold for velocity waypoints
         self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
         self.dx_traj = np.repeat(self.dx_soln, repeats=interp_n+1, axis=0)[:-interp_n, :]
+
+    """
+    Set trajectory to retract fingers away from object
+    """
+    # TODO
+    def set_traj_release_object(self, observation):
+        # Get object pose
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
+
+        # Get joint positions
+        current_position, _ = get_robot_position_velocity(observation)
+        # Get current fingertip positions
+        current_ft_pos = self.get_fingertip_pos_wf(current_position)
+
+        # Set ft_goal for retract away from object
+        ft_goal = np.zeros(9)
+        incr = 0.08
+        for f_i in range(3):
+            f_wf = current_ft_pos[f_i]
+            if self.cp_params[f_i] is None:
+                f_new_wf = f_wf
+            else:
+                # Get face that finger is on
+                face = c_utils.get_face_from_cp_param(self.cp_params[f_i])
+                f_of = c_utils.get_of_from_wf(f_wf, obj_pose)
+        
+                # Release object
+                f_new_of = f_of - incr * c_utils.OBJ_FACES_INFO[face]["up_axis"]
+        
+                # Convert back to wf
+                f_new_wf = c_utils.get_wf_from_of(f_new_of, obj_pose)
+        
+            ft_goal[3*f_i:3*f_i+3] = f_new_wf
+
+        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
+        self.l_wf_traj = None
+        self.x_traj = None
+        self.dx_traj = None
 
     """
     Run trajectory optimization to move fingers to contact points on object
@@ -438,10 +485,19 @@ class ImpedanceControllerPolicy:
             self.set_traj_to_object(observation)
             self.mode = TrajMode.PRE_TRAJ_REACH
         elif self.mode == TrajMode.PRE_TRAJ_REACH:
-            self.set_traj_lift_object(observation, nGrid=50, dt=0.08)
-            self.mode = TrajMode.REPOSE
-        elif self.mode == TrajMode.REPOSE:
-            print("ERROR: should not reach this case")
+            # TODO Determine if ROTATE_z, ROTATE_X, or REPOSITION
+            if self.difficulty != 4:
+                self.mode = TrajMode.REPOSITION
+            else:
+                self.mode = TrajMode.ROTATE_Z # TODO replace this with logic 
+            x0, x_goal = self.set_repose_x_bounds(observation)
+            self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
+        elif self.mode == TrajMode.ROTATE_X or self.mode == TrajMode.ROTATE_Z:
+            # TODO set retract traj here
+            self.set_traj_release_object(observation)
+            self.mode = TrajMode.RESET
+        elif self.mode == TrajMode.REPOSITION:
+            print("ERROR: plan_trajectory() should not be called in TrajMode.REPOSITION")
 
         self.traj_waypoint_counter = 0
         return 
@@ -514,7 +570,7 @@ class ImpedanceControllerPolicy:
         ft_pos_goal_list = []
         ft_vel_goal_list = []
         # If object is grasped, transform cp_wf to ft_wf
-        if self.mode == TrajMode.REPOSE:
+        if self.mode in [TrajMode.REPOSITION, TrajMode.ROTATE_X, TrajMode.ROTATE_Z]:
             H_list = c_utils.get_ft_R(current_position)
     
         for f_i in range(3):
@@ -523,7 +579,7 @@ class ImpedanceControllerPolicy:
             #print(f_i)
 
             #print(new_pos)
-            if self.mode == TrajMode.REPOSE:
+            if self.mode in [TrajMode.REPOSITION, TrajMode.ROTATE_X, TrajMode.ROTATE_Z]:
                 H = H_list[f_i]
                 temp = H @ np.array([0, 0, 0.0095])
                 #print("temp: {}".format(temp))
@@ -533,11 +589,8 @@ class ImpedanceControllerPolicy:
 
             ft_pos_goal_list.append(new_pos)
             ft_vel_goal_list.append(new_vel)
-        #if self.mode == TrajMode.REPOSE:
-        #    quit()
 
-        # If in REPOSE, get fingertip forces in world frame
-        if self.mode == TrajMode.REPOSE:
+        if self.mode in [TrajMode.REPOSITION, TrajMode.ROTATE_X, TrajMode.ROTATE_Z]:
             #ft_des_force_wf, W = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
             #                      self.dx_traj[self.traj_waypoint_counter, :],
             #                      obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
@@ -552,26 +605,19 @@ class ImpedanceControllerPolicy:
             ft_des_force_wf = None
 
         # Compute torque with impedance controller, and clip
-        if self.mode == TrajMode.REPOSE:
-            KP = self.KP_REPOSE
-            KV = self.KV_REPOSE
-        else:
-            KP = self.KP
-            KV = self.KV
-    
         torque = c_utils.impedance_controller(ft_pos_goal_list,
                                               ft_vel_goal_list,
                                               current_position, current_velocity,
                                               self.custom_pinocchio_utils,
                                               tip_forces_wf=ft_des_force_wf,
-                                              Kp = KP, Kv = KV)
+                                              Kp = self.KP, Kv = self.KV)
         torque = np.clip(torque, self.action_space.low, self.action_space.high)
 
         self.log_to_buffers(ft_pos_goal_list, ft_vel_goal_list,
                             cur_ft_pos, obj_pose, obj_vel, torque,
                             ft_des_force_wf)
         # always increment traj_waypoint_counter UNLESS in repose mode and have reached final waypoint
-        if not (self.mode == TrajMode.REPOSE and self.traj_waypoint_counter == self.ft_pos_traj.shape[0] - 1):
+        if not (self.mode == TrajMode.REPOSITION and self.traj_waypoint_counter == self.ft_pos_traj.shape[0] - 1):
             self.traj_waypoint_counter += 1
         return torque
 
