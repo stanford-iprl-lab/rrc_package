@@ -19,7 +19,7 @@ from rrc_iprl_package import run_rrc_sb as sb_utils
 
 FRAMESKIP = 1
 MAX_STEPS = 120 * 1000
-EP_LEN = MAX_STEPS # 15 * 1000
+EP_LEN = 6 * 1000
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
