@@ -253,6 +253,8 @@ class ImpedanceControllerPolicy:
             z_R = Rotation.from_euler("z", theta_z)
             new_R = z_R * cur_R
             x_goal[0, -4:] = new_R.as_quat()
+            x_goal[0, 0] = 0
+            x_goal[0, 1] = 0
             x_goal[0, 2] = c_utils.OBJ_SIZE[0]
 
             #x_goal[0, -4:] = self.goal_pose.orientation
@@ -274,6 +276,7 @@ class ImpedanceControllerPolicy:
         else:
             obj_pose = get_pose_from_observation(observation)
             
+        print("Compute repose traj for MODE {}".format(self.mode))
         print("Object pose position: {}".format(obj_pose.position))
         print("Object pose orientation: {}".format(obj_pose.orientation))
         print("Traj lift x0: {}".format(repr(x0)))
