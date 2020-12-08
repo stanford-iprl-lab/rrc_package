@@ -121,6 +121,40 @@ def configurable(pickleable: bool = False):
 
 
 @configurable(pickleable=True)
+class FixedInitializer:
+    """Initializer that uses fixed values for initial pose and goal."""
+
+    def __init__(self, difficulty, initial_state, goal):
+        """Initialize.
+
+        Args:
+            difficulty (int):  Difficulty level of the goal.  This is still
+                needed even for a fixed goal, as it is also used for computing
+                the reward (the cost function is different for the different
+                levels).
+            initial_state (move_cube.Pose):  Initial pose of the object.
+            goal (move_cube.Pose):  Goal pose of the object.
+
+        Raises:
+            Exception:  If initial_state or goal are not valid.  See
+            :meth:`move_cube.validate_goal` for more information.
+        """
+        move_cube.validate_goal(initial_state)
+        move_cube.validate_goal(goal)
+        self.difficulty = difficulty
+        self.initial_state = initial_state
+        self.goal = goal
+
+    def get_initial_state(self):
+        """Get the initial state that was set in the constructor."""
+        return self.initial_state
+
+    def get_goal(self):
+        """Get the goal that was set in the constructor."""
+        return self.goal
+
+
+@configurable(pickleable=True)
 class CurriculumInitializer:
     """Initializer that samples random initial states and goals."""
 
@@ -286,9 +320,18 @@ class SparseCubeEnv(CubeEnv):
 
 @configurable(pickleable=True)
 class TaskSpaceWrapper(gym.ActionWrapper):
-    def __init__(self, env, goal_env=False, relative=False, scale=.008, ac_pen=0.001):
+    def __init__(self, env, goal_env=False, relative=False, scale=.008, ac_pen=0.001,
+                 save_npz=None):
         super(TaskSpaceWrapper, self).__init__(env)
-        assert self.unwrapped.action_type in [ActionType.POSITION, ActionType.TORQUE]
+        if hasattr(self.unwrapped, 'save_npz'):
+            self._save_npz = self.unwrapped.save_npz
+            self.unwrapped.save_npz = None
+            self.action_log = self.unwrapped.action_log
+        else:
+            self.action_log = []
+            self._save_npz = save_npz
+
+        # assert self.unwrapped.action_type in [ActionType.POSITION, ActionType.TORQUE]
         spaces = TriFingerPlatform.spaces
         self.goal_env = goal_env
         self.relative = relative
@@ -309,7 +352,11 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         obs_dict['last_action'] = self.action_space
 
     def reset(self):
+        if hasattr(self.unwrapped, 'save_npz'):
+            self.unwrapped.save_npz = self._save_npz
         obs = super(TaskSpaceWrapper, self).reset()
+        if hasattr(self.unwrapped, 'save_npz'):
+            self.unwrapped.save_npz = None
         platform = self.unwrapped.platform
         if self.pinocchio_utils is None:
             self.pinocchio_utils = CustomPinocchioUtils(
@@ -323,8 +370,16 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         obs_dict['last_action'] = self._last_action
         return obs
 
+    def write_action_log(self, observation, action, reward):
+        if self._save_npz:
+            self.action_log.append(dict(
+                observation=observation, rl_action=action,
+                action=self.action(action), t=self.step_count,
+                reward=reward))
+
     def step(self, action):
         o, r, d, i = super(TaskSpaceWrapper, self).step(action)
+        self.write_action_log(o, action, r)
         self._prev_obs = o
         if self.relative:
             r -= self.ac_pen * np.linalg.norm(action)
@@ -371,6 +426,8 @@ class ScaledActionWrapper(gym.ActionWrapper):
     def __init__(self, env, goal_env=False, relative=True, scale=POS_SCALE,
                  lim_penalty=0.0):
         super(ScaledActionWrapper, self).__init__(env)
+        self._save_npz = self.unwrapped.save_npz
+        self.unwrapped.save_npz = None
         assert self.unwrapped.action_type == ActionType.POSITION, 'position control only'
         self.spaces = TriFingerPlatform.spaces
         self.goal_env = goal_env
@@ -383,16 +440,26 @@ class ScaledActionWrapper(gym.ActionWrapper):
         self.action_space = gym.spaces.Box(low=low, high=high)
         self.scale = scale
         self.lim_penalty = lim_penalty
+        self.action_log = []
+
+    def write_action_log(self, observation, action, reward):
+        if self._save_npz:
+            self.action_log.append(dict(
+                observation=observation, action=action,
+                scaled_action=self.action(action), t=self.step_count,
+                reward=reward))
 
     def reset(self):
+        self.unwrapped.save_npz = self._save_npz
         obs = super(ScaledActionWrapper, self).reset()
-        platform = self.unwrapped.platform
+        self.unwrapped.save_npz = None
         self._prev_obs = obs
         self._clipped_action = self._last_action = np.zeros_like(self.action_space.sample())
         return obs
 
     def step(self, action):
         o, r, d, i = super(ScaledActionWrapper, self).step(action)
+        self.write_action_log(o, action, r)
         self._prev_obs = o
         self._last_action =  action
         r += np.sum(self._clipped_action) * self.lim_penalty

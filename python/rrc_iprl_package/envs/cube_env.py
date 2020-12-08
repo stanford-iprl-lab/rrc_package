@@ -270,8 +270,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def save_action_log(self):
         if self.save_npz and self.action_log:
             np.savez(self.save_npz, initial_pose=self.initial_pose.to_dict(),
-                     goal_pose=self.goal, action_log=self.action_log, 
-                     allow_pickle=True)
+                     goal_pose=self.goal, action_log=self.action_log)
             del self.action_log
         self.action_log = []
 

@@ -25,8 +25,9 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 
 try:
     import torch
+    from spinup import run_rrc
 except ImportError:
-    torch = None
+    torch = run_rrc = None
 
 
 class TrajMode(enum.Enum):
@@ -56,7 +57,7 @@ class ImpedanceControllerPolicy:
         self.platform = None
         print("KP: {}".format(self.KP))
         print("KV: {}".format(self.KV))
-        
+
         self.initialize_logging()
 
     def initialize_logging(self):
@@ -83,11 +84,6 @@ class ImpedanceControllerPolicy:
         self.l_observed_obj_pose = [] # object position - desired  
         self.l_desired_ft_force = [] # fingerip forces - desired
         self.l_desired_torque = []
-
-    def mock_pinocchio_utils(self, platform):
-        self.custom_pinocchio_utils = CustomPinocchioUtils(
-                    platform.simfinger.finger_urdf_path,
-                    platform.simfinger.tip_link_names)
 
     """
     Store logs in npz file
@@ -427,7 +423,7 @@ class ImpedanceControllerPolicy:
 
 
 class HierarchicalControllerPolicy:
-    DIST_THRESH = 0.09
+    DIST_THRESH = 0.9
     ORI_THRESH = np.pi / 6
 
     RESET_TIME_LIMIT = 50
@@ -444,7 +440,7 @@ class HierarchicalControllerPolicy:
         self.impedance_controller = ImpedanceControllerPolicy(
                 action_space, initial_pose, goal_pose, npz_file, debug_waypoints=debug_waypoints,
                 difficulty = difficulty)
-        self.load_policy(load_dir, deterministic)
+        self.load_dir = load_dir
         self.start_mode = start_mode
         self.steps_from_reset = 0
         self.step_count = self.rl_start_step = 0
@@ -466,14 +462,15 @@ class HierarchicalControllerPolicy:
     def platform(self, platform):
         self.impedance_controller.platform = platform
 
-    def load_policy(self, load_dir, deterministic=False):
+    def load_policy(self, load_dir=None, **load_kwargs):
+        load_dir = load_dir or self.load_dir
         self.observation_names = []
         if not load_dir:
             self.rl_frameskip = 1
             self.rl_observation_space = None
             self.rl_policy = lambda obs: self.impedance_controller.predict(obs)
         elif osp.exists(load_dir) and 'pyt_save' in os.listdir(load_dir):
-            self.load_spinup_policy(load_dir, deterministic=deterministic)
+            self.load_spinup_policy(load_dir, **load_kwargs)
         else:
             self.load_sb_policy(load_dir)
 
@@ -491,20 +488,18 @@ class HierarchicalControllerPolicy:
         self.sb_policy.load(load_dir)
         self.rl_policy = lambda obs: self.sb_policy.predict(obs)[0]
 
-    def load_spinup_policy(self, load_dir, load_itr='last', deterministic=False):
+    def load_spinup_policy(self, load_dir, load_itr='last', deterministic=True,
+                           ac_wrappers=None):
         self.rl_env, self.rl_policy = load_policy_and_env(load_dir, load_itr, deterministic)
-        if self.rl_env:
-            self.rl_frameskip = self.rl_env.frameskip
-        else:
-            self.rl_frameskip = 10
+        if self.rl_env is None:
+            self.rl_env = run_rrc.build_env_fn(ac_wrappers=ac_wrappers)()
+        self.rl_frameskip = self.rl_env.frameskip
         self.observation_names = list(self.rl_env.unwrapped.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
         print('loaded policy from {}'.format(load_dir))
 
     def activate_rl(self, obj_pose):
         if self.start_mode != PolicyMode.RL_PUSH or self.rl_retries == self.MAX_RETRIES:
-            if self.rl_retries == self.MAX_RETRIES and self.difficulty == 4:
-                self.difficulty = 3
             return False
         return np.linalg.norm(obj_pose.position[:2] - np.zeros(2)) > self.DIST_THRESH
 
@@ -589,7 +584,7 @@ class HierarchicalControllerPolicy:
             assert False, 'use a different start mode, started with: {}'.format(self.start_mode)
         self.step_count += 1
         return ac
-    
+
 
 class ResidualControllerPolicy(HierarchicalControllerPolicy):
     DIST_THRESH = 0.09
@@ -671,8 +666,11 @@ def load_policy_and_env(fpath, itr='last', deterministic=False):
 
     # try to load environment from save
     # (sometimes this will fail because the environment could not be pickled)
-    state = joblib.load(osp.join(fpath, 'vars'+itr+'.pkl'))
-    env = state['env']
+    try:
+        state = joblib.load(osp.join(fpath, 'vars'+itr+'.pkl'))
+        env = state['env']
+    except EOFError:
+        env = None
 
     return env, get_action
 

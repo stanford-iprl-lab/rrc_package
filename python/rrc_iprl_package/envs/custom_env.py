@@ -380,15 +380,23 @@ class PushCubeEnv(gym.Env):
 class HierarchicalPolicyWrapper(ObservationWrapper):
     def __init__(self, env, policy):
         assert isinstance(env.unwrapped, cube_env.RealRobotCubeEnv), \
-                'env expects type CubeEnv'
-        self.env = env
+                'env expects type CubeEnv or RealRobotCubeEnv'
+        self.env = self.wrapped_env = env
+        # if env is wrapped, unwrap and store wrapped_env separately
+        if isinstance(env, gym.Wrapper):
+            self.is_wrapped = True
+            self.wrapped_env = env
+            self.env = env.unwrapped
+        else:
+            self.is_wrapped = False
+
         self.reward_range = self.env.reward_range
         # set observation_space and action_space below
         spaces = trifinger_simulation.TriFingerPlatform.spaces
         self._action_space = gym.spaces.Dict({
             'torque': spaces.robot_torque.gym, 'position': spaces.robot_position.gym})
         self.set_policy(policy)
-        self._platform = None
+        self._platform = self.custom_pinocchio_utils = None
 
     @property
     def impedance_control_mode(self):
@@ -446,31 +454,30 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             obs_dict['rl'] = observation_rl
         return obs_dict
 
-    def process_observation_rl(self, observation):
+    def process_observation_rl(self, obs):
         t = self.step_count
-        robot_observation = self.platform.get_robot_observation(t)
-        camera_observation = self.platform.get_camera_observation(t)
+        obs_dict = {}
+        for on in self.rl_observation_names:
+            if on == 'robot_position':
+                val = obs['observation']['position']
+            elif on == 'robot_velocity':
+                val = obs['observation']['velocity']
+            elif on == 'robot_tip_positions':
+                val = self.custom_pinocchio_utils.forward_kinematics(obs['observation']['position'])
+            elif on == 'object_position':
+                val = obs['achieved_goal']['position']
+            elif on == 'object_orientation':
+                val = obs['achieved_goal']['orientation']
+            elif on == 'goal_position':
+                val = obs['desired_goal']['position']
+            elif on == 'goal_orientation':
+                val = obs['desired_goal']['orientation']
+            elif on == 'action':
+                val = self._last_action
+            obs_dict[on] = np.asarray(val, dtype='float64').flatten()
 
-        object_observation = camera_observation.object_pose
-        robot_tip_positions = self.platform.forward_kinematics(
-            robot_observation.position
-        )
-        robot_tip_positions = np.array(robot_tip_positions)
-        goal_pose = self.goal
-        if not isinstance(goal_pose, dict):
-            goal_pose = goal_pose.to_dict()
-
-        observation = {
-            "robot_position": robot_observation.position,
-            "robot_velocity": robot_observation.velocity,
-            "robot_tip_positions": robot_tip_positions,
-            "object_position": object_observation.position,
-            "object_orientation": object_observation.orientation,
-            "goal_object_position": np.asarray(goal_pose["position"]),
-            "goal_object_orientation": np.asarray(goal_pose["orientation"]),
-        }
-        observation = np.concatenate([observation[k].flatten() for k in self.rl_observation_names])
-        return observation
+        obs = np.concatenate([obs_dict[k] for k in self.rl_observation_names])
+        return obs
 
     def reset(self):
         obs = super(HierarchicalPolicyWrapper, self).reset()
@@ -482,6 +489,9 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 initial_object_pose=initial_object_pose,
             )
         self.policy.reset_policy(obs['impedance'], self._platform)
+        # use custom_pinocchio_utils for computing fingertip positions
+        if self.custom_pinocchio_utils is None:
+            self.custom_pinocchio_utils = self.policy.impedance_controller.custom_pinocchio_utils
         return obs
 
     def _step(self, action):
@@ -525,7 +535,8 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 break
 
         is_done = self.step_count == self.episode_length
-        self.unwrapped.write_action_log(observation, action, reward)
+        self.unwrapped.write_action_log(self.observation(observation), action,
+                                        reward)
         info = self.env.info
         info['num_steps'] = self.step_count
         return observation, reward, is_done, info
@@ -543,7 +554,16 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
     def step(self, action):
         # RealRobotCubeEnv handles gym_action_to_robot_action
         #print(self.mode)
+        self._last_action = action
         self.unwrapped.frameskip = self.frameskip
+
+        # if env was originally wrapped, unwrap to see if ActionWrapper was used
+        if self.is_wrapped and self.mode == PolicyMode.RL_PUSH:
+            wrapped_env = self.wrapped_env
+            while wrapped_env.unwrapped != wrapped_env:
+                if hasattr(wrapped_env, 'action'):
+                    action = self.wrapped_env.action(action)
+                wrapped_env = wrapped_env.env
 
         obs, r, d, i = self._step(action)
         obs = self.observation(obs)
@@ -655,8 +675,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
                 visualization=False,
                 initial_object_pose=init_pose,
             )
-        self.impedance_controller.mock_pinocchio_utils(self._platform)
-        self.impedance_controller.reset_policy(self._obs_dict['impedance'], 
+        self.impedance_controller.reset_policy(self._obs_dict['impedance'],
                                                self._platform)
 
     def grasp_object(self, obs):
