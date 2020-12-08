@@ -65,9 +65,11 @@ class ImpedanceControllerPolicy:
               0.001,]
 
     # Re-orientation constants
-    MIN_Z_ERROR = np.pi/4
+    MIN_Z_ERROR = 0.2 # 11.5 degrees
     MAX_Z_TRIES = 2
     Z_INCR      = np.pi/3
+
+    FT_RADIUS   = 0.005 # 5mm
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
@@ -485,9 +487,6 @@ class ImpedanceControllerPolicy:
 
         ft_pos, ft_vel = c_utils.get_finger_waypoints(nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
 
-        print("FT_GOAL: {}".format(ft_goal))
-        print(ft_pos[-1,:])
-    
         # Number of interpolation points
         interp_n = 26
 
@@ -620,7 +619,7 @@ class ImpedanceControllerPolicy:
             timestamp = full_observation["cam0_timestamp"]
         else:
             timestamp = full_observation["cam0_timestamp"] / 1000
-        print("Cam0_timestamp: {}".format(timestamp))
+        #print("Cam0_timestamp: {}".format(timestamp))
         obj_vel = self.get_obj_vel(self.filtered_obj_pose, timestamp)
         
         # Get current fingertip position
@@ -645,7 +644,7 @@ class ImpedanceControllerPolicy:
             #print(new_pos)
             if self.mode in [TrajMode.REPOSITION, TrajMode.ROTATE_X, TrajMode.ROTATE_Z]:
                 H = H_list[f_i]
-                temp = H @ np.array([0, 0, 0.0095])
+                temp = H @ np.array([0, 0, self.FT_RADIUS])
                 #print("temp: {}".format(temp))
                 new_pos = np.array(new_pos) + temp[:3]
                 new_pos = new_pos.tolist()
