@@ -237,12 +237,13 @@ class ImpedanceControllerPolicy:
         # Isolate z component of quaternion difference between goal and init orientation
         delta_euler = delta_R.as_euler("zxy")
         theta_z = delta_euler[0] # rotation around z axis
+        print("THETA_Z delta: {}".format(theta_z))
 
         # Set repose mode to ROTATE_z, ROTATE_X, or REPOSITION
         if self.difficulty != 4:
             mode = TrajMode.REPOSITION
         else:
-            if self.z_tries < self.MAX_Z_TRIES and theta_z > self.MIN_Z_ERROR:
+            if self.z_tries < self.MAX_Z_TRIES and np.abs(theta_z) > self.MIN_Z_ERROR:
                 mode = TrajMode.ROTATE_Z
             else:
                 mode = TrajMode.REPOSITION
