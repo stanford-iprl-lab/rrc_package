@@ -37,6 +37,7 @@ class TrajMode(enum.Enum):
     ROTATE_X       = enum.auto()
     ROTATE_Z       = enum.auto()
     REPOSITION     = enum.auto()
+    RELEASE        = enum.auto()
 
 
 class ImpedanceControllerPolicy:
@@ -62,6 +63,11 @@ class ImpedanceControllerPolicy:
               0.001,
               0.001,
               0.001,]
+
+    # Re-orientation constants
+    MIN_Z_ERROR = np.pi/4
+    MAX_Z_TRIES = 2
+    Z_INCR      = np.pi/3
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
@@ -145,12 +151,15 @@ class ImpedanceControllerPolicy:
                 self.platform.simfinger.tip_link_names)
 
         # Define nlp for finger traj opt
-        nGrid = 40
+        nGrid = 20
         dt = 0.04
         self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
+        self.release_nlp = c_utils.define_static_object_opt(15, dt)
 
-        init_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
-        self.init_ft_pos = self.get_fingertip_pos_wf(init_position)
+        #init_position = np.array([0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7])
+        # Get joint positions
+        current_position, _ = get_robot_position_velocity(observation)
+        self.init_ft_pos = self.get_fingertip_pos_wf(current_position)
         self.init_ft_pos = np.asarray(self.init_ft_pos).flatten()
 
         # Previous object pose and time (for estimating object velocity)
@@ -175,6 +184,9 @@ class ImpedanceControllerPolicy:
         # Counters
         self.step_count = 0 # Number of times predict() is called
 
+        # Re-orientation try counters
+        self.z_tries = 0
+
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.goal_pose = goal_pose
         self.x0 = np.concatenate([initial_pose.position, initial_pose.orientation])[None]
@@ -198,7 +210,8 @@ class ImpedanceControllerPolicy:
     """
     Set repose goal
     """
-    def set_repose_x_bounds(self, observation):
+    def get_repose_mode_and_bounds(self, observation):
+
         # Get object pose
         if self.USE_FILTERED_POSE:
             obj_pose = self.filtered_obj_pose
@@ -215,11 +228,36 @@ class ImpedanceControllerPolicy:
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
 
-        if self.mode != TrajMode.REPOSITION:
-            x_goal[0, -4:] = self.goal_pose.orientation
-        # TODO add rotation goal decomposition here
+        # Get quaternion error between goal and current object orientation
+        cur_R = Rotation.from_quat(obj_pose.orientation)
+        goal_R = Rotation.from_quat(self.goal_pose.orientation)
+        delta_R = goal_R * cur_R.inv()
+        # Isolate z component of quaternion difference between goal and init orientation
+        delta_euler = delta_R.as_euler("zxy")
+        theta_z = delta_euler[0] # rotation around z axis
 
-        return x0, x_goal
+        # Set repose mode to ROTATE_z, ROTATE_X, or REPOSITION
+        if self.difficulty != 4:
+            mode = TrajMode.REPOSITION
+        else:
+            if self.z_tries < self.MAX_Z_TRIES and theta_z > self.MIN_Z_ERROR:
+                mode = TrajMode.ROTATE_Z
+            else:
+                mode = TrajMode.REPOSITION
+
+        # TODO add rotation goal decomposition here
+        if mode == TrajMode.ROTATE_Z:
+            theta_z = np.clip(theta_z, -self.Z_INCR, self.Z_INCR)
+            z_R = Rotation.from_euler("z", theta_z)
+            new_R = z_R * cur_R
+            x_goal[0, -4:] = new_R.as_quat()
+            x_goal[0, 2] = c_utils.OBJ_SIZE[0]
+
+            #x_goal[0, -4:] = self.goal_pose.orientation
+
+            self.z_tries += 1
+
+        return mode, x0, x_goal
 
     """
     Run trajectory optimization to move object given fixed contact points
@@ -310,6 +348,28 @@ class ImpedanceControllerPolicy:
         self.dx_traj = np.repeat(self.dx_soln, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
     """
+    Set traj to raise fingers back to init pos
+    """
+    def set_traj_ft_init_pos(self, observation):
+        # Get object pose
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
+
+        # Get joint positions
+        current_position, _ = get_robot_position_velocity(observation)
+        # Get current fingertip positions
+        current_ft_pos = self.get_fingertip_pos_wf(current_position)
+
+        self.l_wf_traj = None
+        self.x_traj = None
+        self.dx_traj = None
+
+        # Raise fingers back to init position
+        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, self.init_ft_pos, self.release_nlp)
+
+    """
     Set trajectory to retract fingers away from object
     """
     # TODO
@@ -327,7 +387,8 @@ class ImpedanceControllerPolicy:
 
         # Set ft_goal for retract away from object
         ft_goal = np.zeros(9)
-        incr = 0.08
+        incr = 0.05
+        height = 0.05
         for f_i in range(3):
             f_wf = current_ft_pos[f_i]
             if self.cp_params[f_i] is None:
@@ -342,13 +403,15 @@ class ImpedanceControllerPolicy:
         
                 # Convert back to wf
                 f_new_wf = c_utils.get_wf_from_of(f_new_of, obj_pose)
+                f_new_wf[2] = height
         
             ft_goal[3*f_i:3*f_i+3] = f_new_wf
 
-        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
+        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal, self.release_nlp)
         self.l_wf_traj = None
         self.x_traj = None
         self.dx_traj = None
+
 
     """
     Run trajectory optimization to move fingers to contact points on object
@@ -380,7 +443,7 @@ class ImpedanceControllerPolicy:
                 cp_wf_list[i] = current_ft_pos[i]
 
         ft_goal = np.asarray(cp_wf_list).flatten()
-        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
+        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal, self.finger_nlp)
         self.l_wf_traj = None
         self.x_traj = None
         self.dx_traj = None
@@ -407,7 +470,7 @@ class ImpedanceControllerPolicy:
 
         ft_goal = c_utils.get_pre_grasp_ft_goal(obj_pose, current_ft_pos, self.cp_params)
 
-        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
+        self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal, self.release_nlp)
         self.l_wf_traj = None
         self.x_traj = None
         self.dx_traj = None
@@ -416,11 +479,11 @@ class ImpedanceControllerPolicy:
     Run trajectory optimization for fingers, given fingertip goal positions
     ft_goal: (9,) array of fingertip x,y,z goal positions in world frame
     """
-    def run_finger_traj_opt(self, current_position, obj_pose, ft_goal):
-        nGrid = self.finger_nlp.nGrid
+    def run_finger_traj_opt(self, current_position, obj_pose, ft_goal, nlp):
+        nGrid = nlp.nGrid
         self.traj_waypoint_counter = 0
 
-        ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
+        ft_pos, ft_vel = c_utils.get_finger_waypoints(nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
 
         print("FT_GOAL: {}".format(ft_goal))
         print(ft_pos[-1,:])
@@ -485,16 +548,17 @@ class ImpedanceControllerPolicy:
             self.set_traj_to_object(observation)
             self.mode = TrajMode.PRE_TRAJ_REACH
         elif self.mode == TrajMode.PRE_TRAJ_REACH:
-            # TODO Determine if ROTATE_z, ROTATE_X, or REPOSITION
-            if self.difficulty != 4:
-                self.mode = TrajMode.REPOSITION
+            self.mode, x0, x_goal = self.get_repose_mode_and_bounds(observation)
+            if self.mode == TrajMode.REPOSITION:
+                self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
             else:
-                self.mode = TrajMode.ROTATE_Z # TODO replace this with logic 
-            x0, x_goal = self.set_repose_x_bounds(observation)
-            self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
+                self.set_traj_repose_object(observation, x0, x_goal, nGrid=25, dt=0.08)
         elif self.mode == TrajMode.ROTATE_X or self.mode == TrajMode.ROTATE_Z:
             # TODO set retract traj here
             self.set_traj_release_object(observation)
+            self.mode = TrajMode.RELEASE
+        elif self.mode == TrajMode.RELEASE:
+            self.set_traj_ft_init_pos(observation)
             self.mode = TrajMode.RESET
         elif self.mode == TrajMode.REPOSITION:
             print("ERROR: plan_trajectory() should not be called in TrajMode.REPOSITION")
