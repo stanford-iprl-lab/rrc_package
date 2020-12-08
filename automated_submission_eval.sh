@@ -182,8 +182,8 @@ do
                     curl --user ${username}:${password} -o "${job_dir}/user/control_policy_log.npz" ${base_url}/${job_id}/user/control_policy_log.npz
                     curl --user ${username}:${password} -o "${job_dir}/user/grasp_trajopt_data.npz" ${base_url}/${job_id}/user/grasp_trajopt_data.npz
                     curl --user ${username}:${password} -o "${job_dir}/user/lift_trajopt_data.npz" ${base_url}/${job_id}/user/lift_trajopt_data.npz
-                    curl --user ${username}:${password} -o "${job_dir}/camera_data.dat" ${base_url}/${job_id}/user/camera_data.dat
-                    curl --user ${username}:${password} -o "${job_dir}/user/robot_data.dat" ${base_url}/${job_id}/robot_data.dat
+                    curl --user ${username}:${password} -o "${job_dir}/camera_data.dat" ${base_url}/${job_id}/camera_data.dat
+                    curl --user ${username}:${password} -o "${job_dir}/robot_data.dat" ${base_url}/${job_id}/robot_data.dat
                     curl --user ${username}:${password} -o "${job_dir}/camera60.yml" ${base_url}/${job_id}/camera60.yml
                     curl --user ${username}:${password} -o "${job_dir}/camera180.yml" ${base_url}/${job_id}/camera180.yml
                     curl --user ${username}:${password} -o "${job_dir}/camera300.yml" ${base_url}/${job_id}/camera300.yml
