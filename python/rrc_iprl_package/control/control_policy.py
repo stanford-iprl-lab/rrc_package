@@ -234,7 +234,6 @@ class ImpedanceControllerPolicy:
             obj_pose = self.filtered_obj_pose
         else:
             obj_pose = get_pose_from_observation(observation)
-        cur_R = Rotation.from_quat(obj_pose.orientation)
             
         # Clip obj z coord to half width of cube
         clipped_pos = obj_pose.position.copy()
@@ -248,6 +247,7 @@ class ImpedanceControllerPolicy:
         clipped_quat[1] = 0
         clipped_quat = clipped_quat / np.linalg.norm(clipped_quat)
         x0 = np.concatenate([clipped_pos, clipped_quat])[None]
+        cur_R = Rotation.from_quat(clipped_quat)
         #quit()
 
         # set object goal pose
