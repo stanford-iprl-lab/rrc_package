@@ -234,20 +234,20 @@ class ImpedanceControllerPolicy:
             obj_pose = self.filtered_obj_pose
         else:
             obj_pose = get_pose_from_observation(observation)
+        cur_R = Rotation.from_quat(obj_pose.orientation)
             
         # Clip obj z coord to half width of cube
         clipped_pos = obj_pose.position.copy()
         clipped_pos[2] = 0.01
         #clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2) 
-        #x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
+        x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
 
         # Make x and y components of quaterion 0 and renormalize..?
-        clipped_quat = obj_pose.orientation.copy() 
-        clipped_quat[0] = 0
-        clipped_quat[1] = 0
-        clipped_quat = clipped_quat / np.linalg.norm(clipped_quat)
-        x0 = np.concatenate([clipped_pos, clipped_quat])[None]
-        cur_R = Rotation.from_quat(clipped_quat)
+        #clipped_quat = obj_pose.orientation.copy() 
+        #clipped_quat[0] = 0
+        #clipped_quat[1] = 0
+        #clipped_quat = clipped_quat / np.linalg.norm(clipped_quat)
+        #x0 = np.concatenate([clipped_pos, clipped_quat])[None]
         #quit()
 
         # set object goal pose
@@ -732,7 +732,7 @@ class ImpedanceControllerPolicy:
 
     """
     """
-    def set_filtered_pose_from_observation(self, observation, theta=0.1):
+    def set_filtered_pose_from_observation(self, observation, theta=0.01):
         new_pose = get_pose_from_observation(observation)
 
         f_p = (1-theta) * self.filtered_obj_pose.position + theta * new_pose.position
