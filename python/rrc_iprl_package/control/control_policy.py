@@ -25,9 +25,8 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 
 try:
     import torch
-    from spinup import run_rrc
 except ImportError:
-    torch = run_rrc = None
+    torch = None
 
 
 class TrajMode(enum.Enum):
@@ -492,7 +491,7 @@ class HierarchicalControllerPolicy:
                            ac_wrappers=None):
         self.rl_env, self.rl_policy = load_policy_and_env(load_dir, load_itr, deterministic)
         if self.rl_env is None:
-            self.rl_env = run_rrc.build_env_fn(ac_wrappers=ac_wrappers)()
+            self.rl_env = rrc_utils.build_env_fn(ac_wrappers=ac_wrappers)()
         self.rl_frameskip = self.rl_env.frameskip
         self.observation_names = list(self.rl_env.unwrapped.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
