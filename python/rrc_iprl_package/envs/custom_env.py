@@ -26,10 +26,12 @@ from trifinger_simulation.tasks import move_cube
 import rrc_iprl_package.pybullet_utils as pbutils
 from rrc_iprl_package.envs import cube_env
 from rrc_iprl_package.envs.cube_env import ActionType
+from rrc_iprl_package.envs.env_wrappers import configurable
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy, ImpedanceControllerPolicy
 
 
+@configurable(pickleable=True)
 class PushCubeEnv(gym.Env):
     observation_names = ["robot_position",
             "robot_velocity",
@@ -377,6 +379,7 @@ class PushCubeEnv(gym.Env):
         return observation, reward, is_done, self.info
 
 
+@configurable(pickleable=True)
 class HierarchicalPolicyWrapper(ObservationWrapper):
     def __init__(self, env, policy):
         assert isinstance(env.unwrapped, cube_env.RealRobotCubeEnv), \
