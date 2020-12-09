@@ -65,7 +65,7 @@ class ImpedanceControllerPolicy:
               kp_obj,
               kp_obj,]
 
-    kv_obj = 0.01
+    kv_obj = 0.003
     KV_OBJ = [kv_obj,
               kv_obj,
               kv_obj,
