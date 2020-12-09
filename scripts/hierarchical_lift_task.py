@@ -65,6 +65,7 @@ def main():
                    initial_pose=initial_pose, goal_pose=goal_pose,
                    load_dir=rl_load_dir, difficulty=difficulty,
                    start_mode=start_mode)
+    policy.load_policy(rl_load_dir)
     env = custom_env.HierarchicalPolicyWrapper(env, policy)
     observation = env.reset()
 
