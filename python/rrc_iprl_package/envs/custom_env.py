@@ -5,6 +5,7 @@ import pybullet
 import os.path as osp
 import logging
 
+from scipy.spatial.transform import Rotation
 from gym import wrappers
 from gym import ObservationWrapper
 from gym.spaces import Dict
@@ -50,7 +51,8 @@ class PushCubeEnv(gym.Env):
         frameskip=1,
         num_steps=None,
         visualization=False,
-        alpha=0.01
+        alpha=0.01,
+        save_npz=None
         ):
         """Initialize.
 
@@ -83,6 +85,8 @@ class PushCubeEnv(gym.Env):
 
         # will be initialized in reset()
         self.platform = None
+        self.save_npz = save_npz
+        self.action_log = []
         self._prev_action = None
         self.action_type = action_type
 
@@ -162,6 +166,19 @@ class PushCubeEnv(gym.Env):
                                                   for k in self.observation_names})
         self.alpha = alpha
         self.filtered_position = self.filtered_orientation = None
+
+    def write_action_log(self, observation, action, reward):
+        if self.save_npz:
+            self.action_log.append(dict(
+                observation=observation, action=action, t=self.step_count,
+                reward=reward))
+
+    def save_action_log(self):
+        if self.save_npz and self.action_log:
+            np.savez(self.save_npz, initial_pose=self.initial_pose.to_dict(),
+                     goal_pose=self.goal, action_log=self.action_log)
+            del self.action_log
+        self.action_log = []
 
     def seed(self, seed=None):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
@@ -476,7 +493,12 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             elif on == 'goal_position':
                 val = obs['desired_goal']['position']
             elif on == 'goal_orientation':
+                # disregard x and y axis rotation for goal_orientation
                 val = obs['desired_goal']['orientation']
+                goal_rot = Rotation.from_quat(val)
+                xyz = goal_rot.as_euler('xyz')
+                xyz[:2] = 0.
+                val = Rotation.from_euler('xyz', xyz).as_quat()
             elif on == 'action':
                 val = self._last_action
                 if isinstance(val, dict):
@@ -567,8 +589,8 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         if self.is_wrapped and self.mode == PolicyMode.RL_PUSH:
             wrapped_env = self.wrapped_env
             while wrapped_env.unwrapped != wrapped_env:
-                if hasattr(wrapped_env, 'action'):
-                    action = self.wrapped_env.action(action)
+                if isinstance(wrapped_env, gym.ActionWrapper):
+                    action = wrapped_env.action(action)
                 wrapped_env = wrapped_env.env
 
         obs, r, d, i = self._step(action)

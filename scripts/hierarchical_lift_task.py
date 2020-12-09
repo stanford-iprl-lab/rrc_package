@@ -16,8 +16,8 @@ from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 FRAMESKIP = 1
-#MAX_STEPS = 20 * 1000 // FRAMESKIP
-MAX_STEPS = None # For running on real robot
+MAX_STEPS = 120 * 1000
+EP_LEN = 10 * 1000  # None
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -48,10 +48,11 @@ def main():
         save_path = '/output/action_log.npz'
     else:
         save_path = 'action_log.npz'
+    ep_len = EP_LEN or MAX_STEPS
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose.to_dict(), difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
-        num_steps=MAX_STEPS, visualization=True, save_npz=save_path
+        num_steps=ep_len, visualization=True, save_npz=save_path
     )
 
     if difficulty == 4:
@@ -75,6 +76,7 @@ def main():
     is_done = False
     old_mode = policy.mode
     steps_so_far = 0
+    eps_so_far = 0
     try:
         while not is_done:
             if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
@@ -85,7 +87,12 @@ def main():
                 old_mode = policy.mode
             #print("reward:", reward)
             accumulated_reward += reward
-            steps_so_far += 1
+            steps_so_far += env.frameskip
+            if EP_LEN is not None and is_done and (eps_so_far+1)*EP_LEN < MAX_STEPS:
+                is_done = False
+                eps_so_far += 1
+                observation = env.reset()
+
     except Exception as e:
         print("Error encounted: {}. Saving logs and exiting".format(e))
         env.save_action_log()

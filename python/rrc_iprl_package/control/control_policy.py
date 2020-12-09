@@ -11,15 +11,16 @@ import enum
 import copy
 import time
 from scipy.interpolate import interp1d
+from scipy.spatial.transform import Rotation
 import csv
 
-from datetime import date
+import datetime
 from trifinger_simulation import TriFingerPlatform
 from trifinger_simulation.tasks import move_cube
 from trifinger_simulation import pinocchio_utils
 from trifinger_simulation import visual_objects
 
-from rrc_iprl_package.envs import rrc_utils
+from rrc_iprl_package.envs.rrc_utils import build_env_fn
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
@@ -38,13 +39,38 @@ class TrajMode(enum.Enum):
 
 
 class ImpedanceControllerPolicy:
-    WAIT_TIME = 1
+    USE_FILTERED_POSE = True
+
     KP = [300, 300, 400,
           300, 300, 400,
           300, 300, 400]
     KV = [0.7, 0.7, 0.8, 
           0.7, 0.7, 0.8,
           0.7, 0.7, 0.8]
+
+    #KP_REPOSE = [130, 130, 130,
+    #             130, 130, 130,
+    #             130, 130, 130]
+    #KV_REPOSE = [0.7, 0.7, 0.7, 
+    #             0.7, 0.7, 0.7,
+    #             0.7, 0.7, 0.7]
+
+    KP_REPOSE = KP
+    KV_REPOSE = KV
+
+    KP_OBJ = [0.01, 
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,]
+
+    KV_OBJ = [0.001, 
+              0.001,
+              0.001,
+              0.001,
+              0.001,
+              0.001,]
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
@@ -56,9 +82,14 @@ class ImpedanceControllerPolicy:
         self.goal_face = None
         self.platform = None
         self.custom_pinocchio_utils = None
+        print("USE_FILTERED_POSE: {}".format(self.USE_FILTERED_POSE))
         print("KP: {}".format(self.KP))
         print("KV: {}".format(self.KV))
-
+        print("KP_REPOSE: {}".format(self.KP_REPOSE))
+        print("KV_REPOSE: {}".format(self.KV_REPOSE))
+        print("KP_OBJ: {}".format(self.KP_OBJ))
+        print("KV_OBJ: {}".format(self.KV_OBJ))
+        
         self.initialize_logging()
 
     def initialize_logging(self):
@@ -69,10 +100,13 @@ class ImpedanceControllerPolicy:
             self.lift_trajopt_filepath  = "/output/lift_trajopt_data"
             self.control_policy_log_filepath = "/output/control_policy_log"
         else:
-            self.csv_filepath           = "./output/control_policy_data.csv"
-            self.grasp_trajopt_filepath = "./output/grasp_trajopt_data"
-            self.lift_trajopt_filepath  = "./output/lift_trajopt_data"
-            self.control_policy_log_filepath = "./output/control_policy_log"
+            time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            if not osp.exists("./output/{}".format(time_str)):
+                os.makedirs("./output/{}".format(time_str))
+            self.csv_filepath           = "./output/{}/control_policy_data.csv".format(time_str)
+            self.grasp_trajopt_filepath = "./output/{}/grasp_trajopt_data".format(time_str)
+            self.lift_trajopt_filepath  = "./output/{}/lift_trajopt_data".format(time_str)
+            self.control_policy_log_filepath = "./output/{}/control_policy_log".format(time_str)
 
         # Lists for logging data
         # Rows correspond to step_count / timestamp
@@ -82,9 +116,17 @@ class ImpedanceControllerPolicy:
         self.l_actual_ft_pos    = [] # fingertip positions - actual (computed from observation)
         self.l_desired_ft_vel   = [] # fingertip velocities - desired
         self.l_desired_obj_pose = [] # object position - desired  
-        self.l_observed_obj_pose = [] # object position - desired  
+        self.l_desired_obj_vel = [] # object position - desired  
+        self.l_observed_obj_pose = [] # object position - observed
+        self.l_observed_filt_obj_pose = [] # object position - observed
+        self.l_observed_obj_vel = [] # object velocity - observed
         self.l_desired_ft_force = [] # fingerip forces - desired
         self.l_desired_torque = []
+
+        # Logs for debugging object pose feedback controller
+        self.DEBUG = True
+        self.l_dquat = [] # quaternion derivatives
+        self.l_desired_obj_w = []
 
     """
     Store logs in npz file
@@ -97,22 +139,28 @@ class ImpedanceControllerPolicy:
                  desired_ft_vel   = np.asarray(self.l_desired_ft_vel),
                  actual_ft_pos    = np.asarray(self.l_actual_ft_pos),
                  desired_obj_pose = np.squeeze(np.asarray(self.l_desired_obj_pose)),
+                 desired_obj_vel = np.squeeze(np.asarray(self.l_desired_obj_vel)),
                  observed_obj_pose = np.squeeze(np.asarray(self.l_observed_obj_pose)),
+                 observed_filt_obj_pose = np.squeeze(np.asarray(self.l_observed_filt_obj_pose)),
+                 observed_obj_vel = np.squeeze(np.asarray(self.l_observed_obj_vel)),
                  desired_ft_force = np.squeeze(np.asarray(self.l_desired_ft_force)),
                  desired_torque   = np.squeeze(np.asarray(self.l_desired_torque)),
+                 dquat            = np.squeeze(np.asarray(self.l_dquat)),
+                 desired_obj_w    = np.squeeze(np.asarray(self.l_desired_obj_w)),
                 )
 
     def init_pinocchio_utils(self, platform):
         platform = platform or self.platform
         if self.custom_pinocchio_utils is None:
             self.custom_pinocchio_utils = CustomPinocchioUtils(
-                    platform.simfinger.finger_urdf_path,
-                    platform.simfinger.tip_link_names)
+                        platform.simfinger.finger_urdf_path,
+                        platform.simfinger.tip_link_names)
 
     def reset_policy(self, observation, platform=None):
         if platform:
             self.platform = platform
         self.init_pinocchio_utils(platform)
+
         # Define nlp for finger traj opt
         nGrid = 40
         dt = 0.04
@@ -122,10 +170,22 @@ class ImpedanceControllerPolicy:
         self.init_ft_pos = self.get_fingertip_pos_wf(init_position)
         self.init_ft_pos = np.asarray(self.init_ft_pos).flatten()
 
+        # Previous object pose and time (for estimating object velocity)
+        self.prev_obj_pose = get_pose_from_observation(observation)
+        if osp.exists("/output"):
+            self.prev_step_time = observation["cam0_timestamp"]
+        else:
+            self.prev_step_time = observation["cam0_timestamp"] / 1000
+        self.prev_vel = np.zeros(6)
+        self.filt_vel = np.zeros(6)
+
+        self.filtered_obj_pose = get_pose_from_observation(observation)
+
         self.ft_pos_traj = np.tile(self.init_ft_pos, (10000,1))
         self.ft_vel_traj = np.zeros((10000,9))
         self.l_wf_traj = None
         self.x_traj = None
+        self.dx_traj = None
         self.mode = TrajMode.RESET
         self.plan_trajectory(observation)
 
@@ -145,7 +205,11 @@ class ImpedanceControllerPolicy:
     """
     def set_cp_params(self, observation):
         # Get object pose
-        obj_pose = get_pose_from_observation(observation)
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
+
         self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
 
     """
@@ -156,11 +220,15 @@ class ImpedanceControllerPolicy:
         qnum = 3
 
         # Get object pose
-        obj_pose = get_pose_from_observation(observation)
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
             
         # Clip obj z coord to half width of cube
         clipped_pos = obj_pose.position.copy()
-        clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2) 
+        clipped_pos[2] = 0.01
+        #clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2) 
         x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
@@ -240,6 +308,7 @@ class ImpedanceControllerPolicy:
 
         # Zero-order hold for velocity waypoints
         self.ft_vel_traj = np.repeat(ft_vel, repeats=interp_n+1, axis=0)[:-interp_n, :]
+        self.dx_traj = np.repeat(self.dx_soln, repeats=interp_n+1, axis=0)[:-interp_n, :]
 
     """
     Run trajectory optimization to move fingers to contact points on object
@@ -250,7 +319,10 @@ class ImpedanceControllerPolicy:
         self.set_cp_params(observation)
 
         # Get object pose
-        obj_pose = get_pose_from_observation(observation)
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
@@ -259,7 +331,7 @@ class ImpedanceControllerPolicy:
         current_ft_pos = self.get_fingertip_pos_wf(current_position)
 
         # Get list of desired fingertip positions
-        cp_wf_list = c_utils.get_cp_pos_wf_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation)
+        cp_wf_list = c_utils.get_cp_pos_wf_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation, use_obj_size_offset = True)
 
         # Deal with None fingertip_goal here
         # If cp_wf is None, set ft_goal to be  current ft position
@@ -271,6 +343,7 @@ class ImpedanceControllerPolicy:
         self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
         self.l_wf_traj = None
         self.x_traj = None
+        self.dx_traj = None
 
     """
     Run traj opt to lower fingers to ground level
@@ -281,7 +354,10 @@ class ImpedanceControllerPolicy:
         self.set_cp_params(observation)
 
         # Get object pose
-        obj_pose = get_pose_from_observation(observation)
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
@@ -294,6 +370,7 @@ class ImpedanceControllerPolicy:
         self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal)
         self.l_wf_traj = None
         self.x_traj = None
+        self.dx_traj = None
 
     """
     Run trajectory optimization for fingers, given fingertip goal positions
@@ -305,8 +382,8 @@ class ImpedanceControllerPolicy:
 
         ft_pos, ft_vel = c_utils.get_finger_waypoints(self.finger_nlp, ft_goal, current_position, obj_pose, npz_filepath = self.grasp_trajopt_filepath)
 
-        # print("FT_GOAL: {}".format(ft_goal))
-        # print(ft_pos[-1,:])
+        #print("FT_GOAL: {}".format(ft_goal))
+        #print(ft_pos[-1,:])
     
         # Number of interpolation points
         interp_n = 26
@@ -327,7 +404,7 @@ class ImpedanceControllerPolicy:
         return ft_pos_traj, ft_vel_traj
 
     def log_to_buffers(self, ft_pos_goal_list, ft_vel_goal_list, 
-                       cur_ft_pos, obj_pose, torque,
+                       cur_ft_pos, obj_pose, obj_vel, torque,
                        ft_des_force_wf=None):
         # LOGGING
         self.l_step_count.append(self.step_count)       
@@ -336,6 +413,8 @@ class ImpedanceControllerPolicy:
         self.l_desired_ft_vel.append(np.asarray(ft_vel_goal_list).flatten())  
         self.l_actual_ft_pos.append(cur_ft_pos)  
         self.l_observed_obj_pose.append(np.concatenate((obj_pose.position,obj_pose.orientation)))
+        self.l_observed_filt_obj_pose.append(np.concatenate((self.filtered_obj_pose.position,self.filtered_obj_pose.orientation)))
+        self.l_observed_obj_vel.append(obj_vel)
         self.l_desired_torque.append(np.asarray(torque))
 
         if self.x_traj is None:
@@ -343,6 +422,11 @@ class ImpedanceControllerPolicy:
             self.l_desired_obj_pose.append(np.ones(7) * np.nan)
         else:
             self.l_desired_obj_pose.append(self.x_traj[self.traj_waypoint_counter, :])
+        if self.dx_traj is None:
+            # Nan if there is no obj traj (during grasping)
+            self.l_desired_obj_vel.append(np.ones(6) * np.nan)
+        else:
+            self.l_desired_obj_vel.append(self.dx_traj[self.traj_waypoint_counter, :])
         if ft_des_force_wf is None:
             # Nan if no desired ft forces (during grasping)
             self.l_desired_ft_force.append(np.ones(9) * np.nan)
@@ -369,6 +453,44 @@ class ImpedanceControllerPolicy:
         self.traj_waypoint_counter = 0
         return 
 
+    # TODO: What about when object observations are noisy???
+    def get_obj_vel(self, cur_obj_pose, cur_step_time):
+        dt = cur_step_time - self.prev_step_time
+
+        if dt == 0:
+            return self.filt_vel
+
+        obj_vel_position = (cur_obj_pose.position - self.prev_obj_pose.position) / dt
+
+        # TODO: verify that we are getting angular velocities from quaternions correctly
+        #cur_R = Rotation.from_quat(cur_obj_pose.orientation)
+        #prev_R = Rotation.from_quat(self.prev_obj_pose.orientation)
+        #delta_R = cur_R * prev_R.inv()
+        #obj_vel_quat = delta_R.as_quat() / dt
+        obj_vel_quat = (cur_obj_pose.orientation - self.prev_obj_pose.orientation) / dt
+        M = c_utils.get_dquat_to_dtheta_matrix(self.prev_obj_pose.orientation) # from Paul Mitiguy dynamics notes
+        obj_vel_theta = 2 * M @ obj_vel_quat
+        #obj_vel_theta = np.zeros(obj_vel_theta.shape)
+        
+        cur_vel = np.concatenate((obj_vel_position, obj_vel_theta))
+    
+        # Set previous obj_pose and step_time to current values
+        self.prev_obj_pose = cur_obj_pose
+        self.prev_step_time = cur_step_time
+        self.prev_vel = cur_vel
+
+        # filter the velocity
+        theta = 0.1
+        filt_vel = (1-theta) * self.filt_vel + theta * cur_vel
+        self.filt_vel = filt_vel.copy()
+
+        # Log obj_vel_quat for debugging
+        if self.DEBUG:
+            self.l_dquat.append(obj_vel_quat)
+           
+        return filt_vel
+        return cur_vel
+
     def predict(self, full_observation):
         self.step_count += 1
         observation = full_observation['observation']
@@ -376,6 +498,17 @@ class ImpedanceControllerPolicy:
 
         # Get object pose
         obj_pose = get_pose_from_observation(full_observation)
+        # Filter object pose
+        self.set_filtered_pose_from_observation(full_observation)
+
+        # Estimate object velocity based on previous and current object pose
+        # TODO: this might cause an issue if observed object poses are the same across steps?
+        if osp.exists("/output"):
+            timestamp = full_observation["cam0_timestamp"]
+        else:
+            timestamp = full_observation["cam0_timestamp"] / 1000
+        print("Cam0_timestamp: {}".format(timestamp))
+        obj_vel = self.get_obj_vel(self.filtered_obj_pose, timestamp)
         
         # Get current fingertip position
         cur_ft_pos = self.get_fingertip_pos_wf(current_position)
@@ -387,32 +520,62 @@ class ImpedanceControllerPolicy:
 
         ft_pos_goal_list = []
         ft_vel_goal_list = []
+        # If object is grasped, transform cp_wf to ft_wf
+        if self.mode == TrajMode.REPOSE:
+            H_list = c_utils.get_ft_R(current_position)
+    
         for f_i in range(3):
             new_pos = self.ft_pos_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
             new_vel = self.ft_vel_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
+            #print(f_i)
+
+            #print(new_pos)
+            if self.mode == TrajMode.REPOSE:
+                H = H_list[f_i]
+                temp = H @ np.array([0, 0, 0.0095])
+                #print("temp: {}".format(temp))
+                new_pos = np.array(new_pos) + temp[:3]
+                new_pos = new_pos.tolist()
+            #print(new_pos)
+
             ft_pos_goal_list.append(new_pos)
             ft_vel_goal_list.append(new_vel)
+        #if self.mode == TrajMode.REPOSE:
+        #    quit()
 
-        if self.l_wf_traj is None:
-            ft_des_force_wf = None
-        else:
+        # If in REPOSE, get fingertip forces in world frame
+        if self.mode == TrajMode.REPOSE:
+            #ft_des_force_wf, W = c_utils.get_ft_forces(self.x_traj[self.traj_waypoint_counter, :],
+            #                      self.dx_traj[self.traj_waypoint_counter, :],
+            #                      obj_pose, obj_vel, self.KP_OBJ, self.KV_OBJ,
+            #                      self.cp_params)
+            #ft_des_force_wf = np.asarray(ft_des_force_wf).flatten()
             ft_des_force_wf = self.l_wf_traj[self.traj_waypoint_counter, :]
 
-        if full_observation.get('residual_ft_force'):
-            ft_des_force_wf += full_observation.get('residual_ft_force')
-
+            #if self.DEBUG:
+            #    self.l_desired_obj_w.append(W.flatten())
+    
+        else:
+            ft_des_force_wf = None
 
         # Compute torque with impedance controller, and clip
+        if self.mode == TrajMode.REPOSE:
+            KP = self.KP_REPOSE
+            KV = self.KV_REPOSE
+        else:
+            KP = self.KP
+            KV = self.KV
+    
         torque = c_utils.impedance_controller(ft_pos_goal_list,
                                               ft_vel_goal_list,
                                               current_position, current_velocity,
                                               self.custom_pinocchio_utils,
                                               tip_forces_wf=ft_des_force_wf,
-                                              Kp = self.KP, Kv = self.KV)
+                                              Kp = KP, Kv = KV)
         torque = np.clip(torque, self.action_space.low, self.action_space.high)
 
         self.log_to_buffers(ft_pos_goal_list, ft_vel_goal_list,
-                            cur_ft_pos, obj_pose, torque,
+                            cur_ft_pos, obj_pose, obj_vel, torque,
                             ft_des_force_wf)
         # always increment traj_waypoint_counter UNLESS in repose mode and have reached final waypoint
         if not (self.mode == TrajMode.REPOSE and self.traj_waypoint_counter == self.ft_pos_traj.shape[0] - 1):
@@ -426,9 +589,23 @@ class ImpedanceControllerPolicy:
         fingertip_pos_wf = self.custom_pinocchio_utils.forward_kinematics(current_q)
         return fingertip_pos_wf
 
+    """
+    """
+    def set_filtered_pose_from_observation(self, observation, theta=0.01):
+        new_pose = get_pose_from_observation(observation)
+
+        f_p = (1-theta) * self.filtered_obj_pose.position + theta * new_pose.position
+        f_o = (1-theta) * self.filtered_obj_pose.orientation + theta * new_pose.orientation
+        
+        filt_pose = move_cube.Pose(position=f_p, orientation=f_o)
+        self.filtered_obj_pose = filt_pose
+        
+        return filt_pose
+        
+        
 
 class HierarchicalControllerPolicy:
-    DIST_THRESH = 0.9
+    DIST_THRESH = 0.09
     ORI_THRESH = np.pi / 6
 
     RESET_TIME_LIMIT = 50
@@ -447,6 +624,7 @@ class HierarchicalControllerPolicy:
                 difficulty = difficulty)
         self.load_dir = load_dir
         self.start_mode = start_mode
+        self._platform = None
         self.steps_from_reset = 0
         self.step_count = self.rl_start_step = 0
         self.traj_initialized = False
@@ -457,19 +635,21 @@ class HierarchicalControllerPolicy:
         self.mode = self.start_mode
         self.traj_initialized = False
         self.steps_from_reset = self.step_count = self.rl_start_step = 0
+        if platform:
+            self._platform = platform
         self.impedance_controller.reset_policy(observation, platform)
 
     @property
     def platform(self):
-        return self.impedance_controller.platform
+        return self._platform
 
     @platform.setter
     def platform(self, platform):
         self.impedance_controller.platform = platform
 
-    def load_policy(self, load_dir=None, **load_kwargs):
-        load_dir = load_dir or self.load_dir
+    def load_policy(self, load_dir, **load_kwargs):
         self.observation_names = []
+        load_dir = load_dir or self.load_dir
         if not load_dir:
             self.rl_frameskip = 1
             self.rl_observation_space = None
@@ -489,15 +669,15 @@ class HierarchicalControllerPolicy:
         self.rl_frameskip = self.rl_env.unwrapped.frameskip
         self.observation_names = list(self.rl_env.unwrapped.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
-        self.sb_policy = sb_utils.make_model(None, None)
+        self.sb_policy = sb_utils.make_her_sac_model(None, None)
         self.sb_policy.load(load_dir)
         self.rl_policy = lambda obs: self.sb_policy.predict(obs)[0]
 
-    def load_spinup_policy(self, load_dir, load_itr='last', deterministic=True,
-                           ac_wrappers=[]):
+    def load_spinup_policy(self, load_dir, load_itr='last', deterministic=False,
+                           ac_wrappers=('scaled',)):
         self.rl_env, self.rl_policy = load_policy_and_env(load_dir, load_itr, deterministic)
         if self.rl_env is None:
-            self.rl_env = rrc_utils.build_env_fn(ac_wrappers=ac_wrappers)()
+            self.rl_env = build_env_fn(ac_wrappers=ac_wrappers)()
         self.rl_frameskip = self.rl_env.frameskip
         self.observation_names = list(self.rl_env.unwrapped.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
@@ -505,6 +685,8 @@ class HierarchicalControllerPolicy:
 
     def activate_rl(self, obj_pose):
         if self.start_mode != PolicyMode.RL_PUSH or self.rl_retries == self.MAX_RETRIES:
+            if self.rl_retries == self.MAX_RETRIES and self.difficulty == 4:
+                self.difficulty = 3
             return False
         return np.linalg.norm(obj_pose.position[:2] - np.zeros(2)) > self.DIST_THRESH
 
@@ -551,7 +733,7 @@ class HierarchicalControllerPolicy:
             goal_pose = get_pose_from_observation(observation, goal_pose=True)
             if self.difficulty == 4:
                 self.impedance_controller.set_init_goal(
-                        init_pose, goal_pose, flip=False)
+                        init_pose, goal_pose, flip=flip_needed(init_pose, goal_pose))
             else:
                 self.impedance_controller.set_init_goal(init_pose, goal_pose)
 
@@ -589,7 +771,7 @@ class HierarchicalControllerPolicy:
             assert False, 'use a different start mode, started with: {}'.format(self.start_mode)
         self.step_count += 1
         return ac
-
+    
 
 class ResidualControllerPolicy(HierarchicalControllerPolicy):
     DIST_THRESH = 0.09
@@ -623,7 +805,15 @@ class ResidualControllerPolicy(HierarchicalControllerPolicy):
 
 
 def get_pose_from_observation(observation, goal_pose=False):
-    key = 'achieved_goal' if not goal_pose else 'desired_goal'
+    use_filtered = osp.exists("/output") # If using backend, use filtered object pose
+ 
+    if goal_pose:
+        key = "desired_goal"
+    else:
+        if use_filtered:
+            key = "filtered_achieved_goal"
+        else:
+            key = "achieved_goal"
     return move_cube.Pose.from_dict(observation[key])
 
 def flip_needed(init_pose, goal_pose):
@@ -684,7 +874,7 @@ def load_pytorch_policy(fpath, itr, deterministic=False):
     """ Load a pytorch policy saved with Spinning Up Logger."""
 
     fname = osp.join(fpath, 'pyt_save', 'model'+itr+'.pt')
-    # print('\n\nLoading from %s.\n\n'%fname)
+    print('\n\nLoading from %s.\n\n'%fname)
 
     model = torch.load(fname)
 
