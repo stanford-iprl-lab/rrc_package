@@ -1,0 +1,47 @@
+{
+    "ac_kwargs":	{},
+    "actor_critic":	"MLPActorCritic",
+    "clip_ratio":	0.2,
+    "env_fn":	"env_fn",
+    "epochs":	250,
+    "exp_name":	"scaled_actions",
+    "gamma":	0.99,
+    "info_kwargs":	{
+        "final_dist":	"FinalDist",
+        "final_ori_dist":	"FinalOriDist",
+        "final_ori_scaled":	"FinalOriScaledDist",
+        "final_score":	"FinalScore",
+        "is_success":	"SuccessRateVal",
+        "is_success_ori":	"OriSuccessRateVal"
+    },
+    "lam":	0.97,
+    "logger":	{
+        "<spinup.utils.logx.EpochLogger object at 0x7f11acca28d0>":	{
+            "epoch_dict":	{},
+            "exp_name":	"scaled_actions",
+            "first_row":	true,
+            "log_current_row":	{},
+            "log_headers":	[],
+            "max_saves":	10,
+            "output_dir":	"/scr1/Developer/Projects/spinningup/data/scaled_actions/scaled_actions_s0",
+            "output_file":	{
+                "<_io.TextIOWrapper name='/scr1/Developer/Projects/spinningup/data/scaled_actions/scaled_actions_s0/progress.txt' mode='w' encoding='UTF-8'>":	{
+                    "mode":	"w"
+                }
+            }
+        }
+    },
+    "logger_kwargs":	{
+        "exp_name":	"scaled_actions",
+        "output_dir":	"/scr1/Developer/Projects/spinningup/data/scaled_actions/scaled_actions_s0"
+    },
+    "max_ep_len":	1000,
+    "pi_lr":	0.0003,
+    "save_freq":	10,
+    "seed":	0,
+    "steps_per_epoch":	22500,
+    "target_kl":	0.01,
+    "train_pi_iters":	80,
+    "train_v_iters":	80,
+    "vf_lr":	0.001
+}

@@ -19,6 +19,7 @@ from trifinger_simulation.tasks import move_cube
 from trifinger_simulation import pinocchio_utils
 from trifinger_simulation import visual_objects
 
+from rrc_iprl_package.envs import rrc_utils
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
@@ -671,8 +672,11 @@ def load_policy_and_env(fpath, itr='last', deterministic=False):
 
     # try to load environment from save
     # (sometimes this will fail because the environment could not be pickled)
-    state = joblib.load(osp.join(fpath, 'vars'+itr+'.pkl'))
-    env = state['env']
+    try:
+        state = joblib.load(osp.join(fpath, 'vars'+itr+'.pkl'))
+        env = state['env']
+    except:
+        env = rrc_utils.p2_reorient_env_fn()
 
     return env, get_action
 
