@@ -220,7 +220,7 @@ class StaticObjectSystem:
         con_list.append(self.MAX_FT_R - r) # within max xy radius 
         
         # z coord is above ground
-        con_list.append(z - 0.01)
+        con_list.append(z - 0.0095)
     return horzcat(*con_list)
 ################################################################################
 # End of constraint functions
