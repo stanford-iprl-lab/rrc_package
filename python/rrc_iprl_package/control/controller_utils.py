@@ -112,8 +112,8 @@ def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     dx_delta = np.concatenate((dp_delta, do_delta))
     W = Kp @ x_delta + Kv @ dx_delta - OBJ_MASS * g
     
-    print("x_delta: {}".format(x_delta))
-    print("dx_delta: {}".format(dx_delta))
+    #print("x_delta: {}".format(x_delta))
+    #print("dx_delta: {}".format(dx_delta))
 
     #print(W)
 
@@ -624,10 +624,16 @@ def assign_faces_to_fingers(obj_pose, finger_id_list, free_faces):
                 else:
                     face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
 
+        # Assign first face in free_faces
+        if face not in free_faces:
+            face = free_faces[0]
+
         assignments[f_i] = face
 
         xy_distances[f_i, :] = np.nan
-        free_faces.remove(face)
+
+        if face in free_faces:
+            free_faces.remove(face)
 
     return assignments
 

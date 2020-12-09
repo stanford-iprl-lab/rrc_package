@@ -310,9 +310,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 cur_vel = observation["observation"]["velocity"]
                 cur_pos = observation["observation"]["position"]
 
-                print("cur vel: {}".format(cur_vel))
-                print("cur pos: {}".format(cur_pos))
-                print("default pos: {}".format(self.default_position))
+                #print("cur vel: {}".format(cur_vel))
+                #print("cur pos: {}".format(cur_pos))
+                #print("default pos: {}".format(self.default_position))
         return observation
 
     def _reset_platform_frontend(self):
@@ -383,14 +383,14 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if osp.exists("/output"):
             filtered_quat = camera_observation.filtered_object_pose.orientation
             filtered_quat_norm = np.linalg.norm(filtered_quat)
-            print("filtered pose:")
-            print(camera_observation.filtered_object_pose.position)
-            print(camera_observation.filtered_object_pose.orientation)
-            print("quat norm: {}".format(filtered_quat_norm))
+            #print("filtered pose:")
+            #print(camera_observation.filtered_object_pose.position)
+            #print(camera_observation.filtered_object_pose.orientation)
+            #print("quat norm: {}".format(filtered_quat_norm))
             if filtered_quat_norm == 0:
                 quat = camera_observation.object_pose.orientation
             else:
-                print("USING FILTERED QUAT")
+                #print("USING FILTERED QUAT")
                 quat = filtered_quat
                 
             observation["filtered_achieved_goal"] = {
