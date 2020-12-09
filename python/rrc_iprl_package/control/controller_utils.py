@@ -21,7 +21,8 @@ class PolicyMode(enum.Enum):
 # Object properties
 OBJ_MASS = 0.016 # 16 grams
 OBJ_SIZE = move_cube._CUBOID_SIZE
-OBJ_SIZE_OFFSET = 0.012
+OBJ_SIZE_OFFSET = 0
+#OBJ_SIZE_OFFSET = 0.012
 OBJ_MU = 1
 
 # Here, hard code the base position of the fingers (as angle on the arena)
@@ -328,6 +329,8 @@ def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf, use_obj_siz
     rotation = Rotation.from_quat(cube_quat_wf)
     translation = np.asarray(cube_pos_wf)
 
+    #print("WF")
+    #print(rotation.apply(cp.pos_of) + translation)
     return rotation.apply(cp.pos_of) + translation
 
 """
