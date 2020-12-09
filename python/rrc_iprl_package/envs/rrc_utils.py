@@ -69,6 +69,70 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
         return env
     return env_fn
 
+def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/6, dist_thresh=0.09,
+            ac_norm_pen=0, fingertip_coef=0, augment_rew=True,
+            ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
+            sample_radius=0.09, ac_wrappers=[], relative=(False, False, False),
+            lim_pen=0., return_wrappers=False, goal_env=False):
+    scaled_ac = 'scaled' in ac_wrappers
+    task_space = 'task' in ac_wrappers
+    step_rew = 'step' in ac_wrappers
+    sa_relative, ts_relative, goal_relative = relative
+    env_str = 'real_robot_challenge_phase_2-v2'
+    action_type = cube_env.ActionType.POSITION
+
+    # 1. Reward wrappers
+    rew_wrappers = []
+    rew_wrappers.append(functools.partial(env_wrappers.CubeRewardWrapper,
+                pos_coef=pos_coef, ori_coef=ori_coef,
+                ac_norm_pen=ac_norm_pen, fingertip_coef=fingertip_coef,
+                rew_fn=rew_fn, augment_reward=augment_rew))
+    # Step reward wrapper
+    if step_rew:
+        rew_wrappers.append(env_wrappers.StepRewardWrapper)
+
+    # Reorient wrapper (for is_done flag)
+    rew_wrappers.append(functools.partial(env_wrappers.ReorientWrapper,
+                                          goal_env=goal_env, dist_thresh=dist_thresh,
+                                          ori_thresh=ori_thresh))
+    # 2. Action wrappers (scaled actions, task space, 
+    final_wrappers = []
+    if scaled_ac:
+        final_wrappers.append(functools.partial(env_wrappers.ScaledActionWrapper,
+                              goal_env=goal_env, relative=sa_relative,
+                              lim_penalty=lim_pen))
+    if goal_relative:
+        final_wrappers.append(env_wrappers.RelativeGoalWrapper)
+
+    # Adds time limit, logging, action clipping, and flattens observation 
+    p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',
+                    'final_ori_dist', 'final_ori_scaled']
+    p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
+                                            info_keys=p2_info_keys)
+    final_wrappers += [functools.partial(wrappers.TimeLimit, max_episode_steps=ep_len),
+                       p2_log_info_wrapper,
+                       wrappers.ClipAction, wrappers.FlattenObservation]
+    ewrappers = []
+    if task_space:
+        assert not scaled_ac, 'Can only use TaskSpaceWrapper OR ScaledActionWrapper'
+        ewrappers.append(functools.partial(env_wrappers.TaskSpaceWrapper,
+                                           relative=ts_relative))
+        action_type = cube_env.ActionType.TORQUE
+    ewrappers += rew_wrappers + final_wrappers
+
+    # initializer = env_wrappers.ReorientInitializer(1, sample_radius)
+    p2_fixed_reorient = env_wrappers.RandomGoalOrientationInitializer(difficulty=1)
+
+    ret = make_env_fn(env_str, ewrappers,
+                      initializer=p2_fixed_reorient, # initializer,
+                      action_type=action_type,
+                      frameskip=frameskip)
+
+    if return_wrappers:
+        ret = (ret, ewrappers)
+    return ret
+
+
 
 if phase == 1:
     push_random_initializer = cube_env.RandomInitializer(difficulty=1)
