@@ -54,17 +54,20 @@ def main():
         num_steps=MAX_STEPS, visualization=True, save_npz=save_path
     )
 
-    if osp.exists('/ws/src/usercode'):
-        rl_load_dir = '/ws/src/usercode/models/scaled_actions/scaled_actions_s0'
+    if difficulty == 4:
+        if osp.exists('/ws/src/usercode'):
+            rl_load_dir = '/ws/src/usercode/models/scaled_actions/scaled_actions_s0'
+        else:
+            rl_load_dir = './models/scaled_actions/scaled_actions_s0'
+        start_mode = PolicyMode.RL_PUSH
     else:
-        rl_load_dir = './models/scaled_actions/scaled_actions_s0'
-    # rl_load_dir  = osp.join(rl_load_dir ,'pyt_save/model249.pt')
-    start_mode = PolicyMode.RL_PUSH
+        rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
     goal_pose = move_cube.Pose.from_dict(goal)
     policy = HierarchicalControllerPolicy(action_space=env.action_space,
                    initial_pose=initial_pose, goal_pose=goal_pose,
                    load_dir=rl_load_dir, difficulty=difficulty,
                    start_mode=start_mode)
+    policy.load_policy(rl_load_dir)
     env = custom_env.HierarchicalPolicyWrapper(env, policy)
     observation = env.reset()
 

@@ -252,7 +252,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self.step_count += t - self.t_prev
             self.t_prev = t
             # make sure to not exceed the episode length
-            if self.step_count >= self.episode_length:
+            if self.step_count >= self.episode_length or self.t_prev == 120*1000 - 1:
                 break
 
         is_done = self.step_count >= self.episode_length
@@ -270,8 +270,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def save_action_log(self):
         if self.save_npz and self.action_log:
             np.savez(self.save_npz, initial_pose=self.initial_pose.to_dict(),
-                     goal_pose=self.goal, action_log=self.action_log, 
-                     allow_pickle=True)
+                     goal_pose=self.goal, action_log=self.action_log)
             del self.action_log
         self.action_log = []
 
