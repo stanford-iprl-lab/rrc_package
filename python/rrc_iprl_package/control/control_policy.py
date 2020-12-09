@@ -69,12 +69,12 @@ class ImpedanceControllerPolicy:
     MAX_Z_TRIES = 3
     Z_INCR      = np.pi/3
 
-    FT_RADIUS   = 0.005 # 5mm
+    FT_RADIUS   = 0.0095
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
         if difficulty == 4:
-            self.difficulty = 3
+            self.difficulty = 4
         else:
             self.difficulty = difficulty
         self.action_space = action_space
@@ -211,6 +211,18 @@ class ImpedanceControllerPolicy:
             obj_pose = get_pose_from_observation(observation)
 
         self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
+
+    """
+    Get rotation difference around z axis between goal and current poses
+    """
+    def get_theta_z(self, obj_pose):
+        cur_R = Rotation.from_quat(obj_pose.orientation)
+        goal_R = Rotation.from_quat(self.goal_pose.orientation)
+        delta_R = goal_R * cur_R.inv()
+        # Isolate z component of quaternion difference between goal and init orientation
+        delta_euler = delta_R.as_euler("zxy")
+        theta_z = delta_euler[0] # rotation around z axis
+        return theta_z
     
     """
     Set repose goal
@@ -222,6 +234,7 @@ class ImpedanceControllerPolicy:
             obj_pose = self.filtered_obj_pose
         else:
             obj_pose = get_pose_from_observation(observation)
+        cur_R = Rotation.from_quat(obj_pose.orientation)
             
         # Clip obj z coord to half width of cube
         clipped_pos = obj_pose.position.copy()
@@ -233,13 +246,8 @@ class ImpedanceControllerPolicy:
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
 
-        # Get quaternion error between goal and current object orientation
-        cur_R = Rotation.from_quat(obj_pose.orientation)
-        goal_R = Rotation.from_quat(self.goal_pose.orientation)
-        delta_R = goal_R * cur_R.inv()
-        # Isolate z component of quaternion difference between goal and init orientation
-        delta_euler = delta_R.as_euler("zxy")
-        theta_z = delta_euler[0] # rotation around z axis
+        # Get z error between goal and current object orientation
+        theta_z = self.get_theta_z(obj_pose)
         print("THETA_Z delta: {}".format(theta_z))
 
         # Set repose mode to ROTATE_z, ROTATE_X, or REPOSITION
@@ -259,7 +267,7 @@ class ImpedanceControllerPolicy:
             x_goal[0, -4:] = new_R.as_quat()
             x_goal[0, 0] = 0
             x_goal[0, 1] = 0
-            x_goal[0, 2] = c_utils.OBJ_SIZE[0]
+            x_goal[0, 2] = c_utils.OBJ_SIZE[0] / 2
 
             #x_goal[0, -4:] = self.goal_pose.orientation
 
@@ -322,6 +330,7 @@ class ImpedanceControllerPolicy:
             if free_finger_id is not None:
                 ft_vel_arr[free_finger_id * qnum : free_finger_id * qnum + qnum] = np.zeros(qnum)
             ft_vel[t_i, :] = ft_vel_arr
+
 
         # Add 0 forces for free_fingertip to l_wf
         l_wf = np.zeros((nGrid, 9))
@@ -445,11 +454,19 @@ class ImpedanceControllerPolicy:
         # Get list of desired fingertip positions
         cp_wf_list = c_utils.get_cp_pos_wf_from_cp_params(self.cp_params, obj_pose.position, obj_pose.orientation, use_obj_size_offset = True)
 
+        R_list = c_utils.get_ft_R(current_position)
+
         # Deal with None fingertip_goal here
         # If cp_wf is None, set ft_goal to be  current ft position
         for i in range(len(cp_wf_list)):
             if cp_wf_list[i] is None:
                 cp_wf_list[i] = current_ft_pos[i]
+            else:
+                # Transform cp to ft center
+                R = R_list[i]
+                temp = R @ np.array([0, 0, self.FT_RADIUS])
+                new_pos = np.array(cp_wf_list[i]) + temp[:3]
+                cp_wf_list[i] = new_pos
 
         ft_goal = np.asarray(cp_wf_list).flatten()
         self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal, self.finger_nlp)
@@ -547,6 +564,12 @@ class ImpedanceControllerPolicy:
     Replans trajectory according to TrajMode, and sets self.traj_waypoint_counter
     """
     def plan_trajectory(self, observation):
+        # Get object pose
+        if self.USE_FILTERED_POSE:
+            obj_pose = self.filtered_obj_pose
+        else:
+            obj_pose = get_pose_from_observation(observation)
+
         if self.mode == TrajMode.RESET: 
             self.set_traj_lower_finger(observation)
             self.mode = TrajMode.PRE_TRAJ_LOWER
@@ -558,11 +581,16 @@ class ImpedanceControllerPolicy:
             if self.mode == TrajMode.REPOSITION:
                 self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
             else:
-                self.set_traj_repose_object(observation, x0, x_goal, nGrid=25, dt=0.08)
+                self.set_traj_repose_object(observation, x0, x_goal, nGrid=20, dt=0.08)
         elif self.mode == TrajMode.ROTATE_X or self.mode == TrajMode.ROTATE_Z:
-            # TODO set retract traj here
-            self.set_traj_release_object(observation)
-            self.mode = TrajMode.RELEASE
+            # Get z error between goal and current object orientation
+            theta_z = self.get_theta_z(obj_pose)
+            if np.abs(theta_z) < self.MIN_Z_ERROR:
+                self.mode, x0, x_goal = self.get_repose_mode_and_bounds(observation)
+                self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
+            else:
+                self.set_traj_release_object(observation)
+                self.mode = TrajMode.RELEASE
         elif self.mode == TrajMode.RELEASE:
             self.set_traj_ft_init_pos(observation)
             self.mode = TrajMode.RESET
@@ -641,21 +669,17 @@ class ImpedanceControllerPolicy:
         ft_vel_goal_list = []
         # If object is grasped, transform cp_wf to ft_wf
         if self.mode in [TrajMode.REPOSITION, TrajMode.ROTATE_X, TrajMode.ROTATE_Z]:
-            H_list = c_utils.get_ft_R(current_position)
+            R_list = c_utils.get_ft_R(current_position)
     
         for f_i in range(3):
             new_pos = self.ft_pos_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
             new_vel = self.ft_vel_traj[self.traj_waypoint_counter, f_i*3:f_i*3+3]
-            #print(f_i)
 
-            #print(new_pos)
             if self.mode in [TrajMode.REPOSITION, TrajMode.ROTATE_X, TrajMode.ROTATE_Z]:
-                H = H_list[f_i]
-                temp = H @ np.array([0, 0, self.FT_RADIUS])
-                #print("temp: {}".format(temp))
+                R = R_list[f_i]
+                temp = R @ np.array([0, 0, self.FT_RADIUS])
                 new_pos = np.array(new_pos) + temp[:3]
                 new_pos = new_pos.tolist()
-            #print(new_pos)
 
             ft_pos_goal_list.append(new_pos)
             ft_vel_goal_list.append(new_vel)
@@ -700,7 +724,7 @@ class ImpedanceControllerPolicy:
 
     """
     """
-    def set_filtered_pose_from_observation(self, observation, theta=0.01):
+    def set_filtered_pose_from_observation(self, observation, theta=0.1):
         new_pose = get_pose_from_observation(observation)
 
         f_p = (1-theta) * self.filtered_obj_pose.position + theta * new_pose.position
