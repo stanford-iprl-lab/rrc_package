@@ -48,7 +48,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         cube_initial_pose: dict = None,
         goal_difficulty: int = 1,
         action_type: ActionType = ActionType.POSITION,
-        default_position: np.ndarray = np.array([0.0, 0.75, -1.6] * 3),
+        default_position: np.ndarray = np.array([0.0, 0.9, -1.8] * 3),
         visualization: bool = True,
         frameskip: int = 1,
         num_steps: int = None,
