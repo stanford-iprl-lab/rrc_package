@@ -361,6 +361,7 @@ class ImpedanceControllerPolicy:
             obj_pose = self.filtered_obj_pose
         else:
             obj_pose = get_pose_from_observation(observation)
+        obj_pose = c_utils.get_aligned_pose(obj_pose)
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
@@ -384,6 +385,7 @@ class ImpedanceControllerPolicy:
             obj_pose = self.filtered_obj_pose
         else:
             obj_pose = get_pose_from_observation(observation)
+        obj_pose = c_utils.get_aligned_pose(obj_pose)
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
