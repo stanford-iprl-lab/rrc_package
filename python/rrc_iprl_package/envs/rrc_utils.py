@@ -69,16 +69,20 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
         return env
     return env_fn
 
-def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/6, dist_thresh=0.09,
+def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
             ac_norm_pen=0, fingertip_coef=0, augment_rew=True,
             ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
             sample_radius=0.09, ac_wrappers=[], relative=(False, False, False),
-            lim_pen=0., return_wrappers=False, goal_env=False):
+            lim_pen=0., return_wrappers=False, goal_env=False, keep_goal=False,
+            use_quat=False):
     scaled_ac = 'scaled' in ac_wrappers
     task_space = 'task' in ac_wrappers
     step_rew = 'step' in ac_wrappers
     sa_relative, ts_relative, goal_relative = relative
-    env_str = 'real_robot_challenge_phase_2-v2'
+    if goal_env:
+        env_str = 'real_robot_challenge_phase_2-v1'
+    else:
+        env_str = 'real_robot_challenge_phase_2-v2'
     action_type = cube_env.ActionType.POSITION
 
     # 1. Reward wrappers
@@ -102,7 +106,8 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/6, dist_thresh=0.09,
                               goal_env=goal_env, relative=sa_relative,
                               lim_penalty=lim_pen))
     if goal_relative:
-        final_wrappers.append(env_wrappers.RelativeGoalWrapper)
+        final_wrappers.append(functools.partial(env_wrappers.RelativeGoalWrapper,
+                                  keep_goal=keep_goal, use_quat=use_quat))
 
     # Adds time limit, logging, action clipping, and flattens observation 
     p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',

@@ -9,17 +9,15 @@ import sys
 import os
 import os.path as osp
 import numpy as np
-from gym.wrappers import TimeLimit
 
 from rrc_iprl_package.envs import cube_env, custom_env
 from trifinger_simulation.tasks import move_cube 
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
-from rrc_iprl_package import run_rrc_sb as sb_utils 
 
 FRAMESKIP = 1
 MAX_STEPS = 120 * 1000
-EP_LEN = MAX_STEPS # 15 * 1000
+EP_LEN = 10 * 1000  # None
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -42,63 +40,72 @@ def main():
     else:
         goal = json.loads(goal_pose_json)
     initial_pose = move_cube.sample_goal(-1)
+    initial_pose.position = np.array([0.0,0.0,move_cube._CUBOID_SIZE[2]/2])
+    theta = 0
+    initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
+   
     if osp.exists('/output'):
         save_path = '/output/action_log.npz'
     else:
         save_path = 'action_log.npz'
-
+    ep_len = EP_LEN or MAX_STEPS
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose.to_dict(), difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
-        num_steps=EP_LEN, visualization=True, save_npz=save_path
+        num_steps=ep_len, visualization=True, save_npz=save_path
     )
-    rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
+
+    if difficulty == 4:
+        if osp.exists('/ws/src/usercode'):
+            rl_load_dir = '/ws/src/usercode/models/scaled_actions/scaled_actions_s0'
+        else:
+            rl_load_dir = './models/scaled_actions/scaled_actions_s0'
+        start_mode = PolicyMode.RL_PUSH
+    else:
+        rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
     goal_pose = move_cube.Pose.from_dict(goal)
     policy = HierarchicalControllerPolicy(action_space=env.action_space,
                    initial_pose=initial_pose, goal_pose=goal_pose,
                    load_dir=rl_load_dir, difficulty=difficulty,
                    start_mode=start_mode)
+    policy.load_policy(rl_load_dir)
     env = custom_env.HierarchicalPolicyWrapper(env, policy)
     observation = env.reset()
 
     accumulated_reward = 0
     is_done = False
-    total_steps = steps_so_far = ep_so_far = 0
     old_mode = policy.mode
+    steps_so_far = 0
+    eps_so_far = 0
     try:
-        while total_steps < MAX_STEPS:
+        while not is_done:
+            if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
             action = policy.predict(observation)
             observation, reward, is_done, info = env.step(action)
-            steps_so_far = env.step_count
-            accumulated_reward += reward
             if old_mode != policy.mode:
-                print('mode changed: {} to {}'.format(old_mode, policy.mode))
+                #print('mode changed: {} to {}'.format(old_mode, policy.mode))
                 old_mode = policy.mode
-            if is_done and steps_so_far + EP_LEN * ep_so_far < MAX_STEPS:
-                if not steps_so_far // EP_LEN:
-                    import pdb; pdb.set_trace()
-                assert steps_so_far // EP_LEN, 'steps_so_far should have been ' \
-                    'incremented. Instead got: total_steps: {}, ep_so_far: {}'.format(
-                        total_steps, ep_so_far)
-                print("Resetting env after {} steps reached".format(steps_so_far))
+            #print("reward:", reward)
+            accumulated_reward += reward
+            steps_so_far += env.frameskip
+            if EP_LEN is not None and is_done and (eps_so_far+1)*EP_LEN < MAX_STEPS:
                 is_done = False
+                eps_so_far += 1
                 observation = env.reset()
-            ep_so_far += steps_so_far // EP_LEN
-            steps_so_far = env.step_count
-            total_steps = steps_so_far + EP_LEN * ep_so_far
+
     except Exception as e:
         print("Error encounted: {}. Saving logs and exiting".format(e))
         env.save_action_log()
         policy.impedance_controller.save_log()
         raise e
 
-
-    print("Terminating run after {} steps reached".format(total_steps))
     env.save_action_log()
     # Save control_policy_log
     policy.impedance_controller.save_log()
-    print("------")
-    print("Accumulated Reward: {:.3f}".format(accumulated_reward))
+
+    #print("------")
+    #print("Accumulated Reward: {:.3f}".format(accumulated_reward))
+
 
 if __name__ == "__main__":
     main()

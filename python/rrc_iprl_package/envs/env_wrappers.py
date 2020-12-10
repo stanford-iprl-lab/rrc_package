@@ -273,7 +273,7 @@ class RandomGoalOrientationInitializer:
         self.random = np.random.RandomState()
 
     def get_initial_state(self):
-        return self.init_pose
+        return move_cube.sample_goal(-1)
 
     def get_goal(self):
         goal =  move_cube.sample_goal(-1)
@@ -486,13 +486,15 @@ class ScaledActionWrapper(gym.ActionWrapper):
 
 @configurable(pickleable=True)
 class RelativeGoalWrapper(gym.ObservationWrapper):
-    def __init__(self, env, keep_goal=False):
+    def __init__(self, env, keep_goal=False, use_quat=False):
         super(RelativeGoalWrapper, self).__init__(env)
         self._observation_keys = list(env.observation_space.spaces.keys())
         assert 'goal_object_position' in self._observation_keys, 'goal_object_position missing in observation'
         self.position_only = 'goal_object_orientation' not in self._observation_keys
+        self.use_quat = use_quat
         self.observation_names =  [k for k in self._observation_keys if 'goal_object' not in k]
         self.observation_names.append('relative_goal_object_position')
+        # add goal_object position if keep_goal, and orientation if not position_only 
         if keep_goal:
             self.observation_names.append('goal_object_position')
         if not self.position_only:
@@ -500,26 +502,38 @@ class RelativeGoalWrapper(gym.ObservationWrapper):
             if keep_goal:
                 self.observation_names.append('goal_object_orientation')
         obs_dict = {}
+
         for k in self.observation_names:
             if 'relative_goal_object' not in k:
                 obs_dict[k] = env.observation_space.spaces[k]
             elif k == 'relative_goal_object_position':
-                high = env.observation_space['goal_object_position'].high - env.observation_space['goal_object_position'].low
+                high = (env.observation_space['goal_object_position'].high
+                        - env.observation_space['goal_object_position'].low)
                 low = -high
                 obs_dict[k] = gym.spaces.Box(low=low, high=high)
             elif k == 'relative_goal_object_orientation':
-                high = env.observation_space['goal_object_orientation'].high - env.observation_space['goal_object_orientation'].low
-                low = -high
-                obs_dict[k] = gym.spaces.Box(low=low, high=high)
+                if use_quat:
+                    high = (env.observation_space['goal_object_orientation'].high
+                            - env.observation_space['goal_object_orientation'].low)
+                    low = -high
+                    obs_dict[k] = gym.spaces.Box(low=low, high=high)
+                else:
+                    low, high = -np.pi, np.pi
+                    obs_dict[k] = gym.spaces.Box(low=low, high=high, shape=(1,))
         self.observation_space = gym.spaces.Dict(obs_dict)
 
     def observation(self, obs):
         obs_dict = {k: obs[k] for k in self.observation_names if k in self._observation_keys}
         obs_dict['relative_goal_object_position'] = obs['goal_object_position'] - obs['object_position']
         if not self.position_only:
-            offset = (Rotation.from_quat(obs['goal_object_orientation'])
-                      * Rotation.from_quat(obs['object_orientation']).inv()).as_quat()
-            obs_dict['relative_goal_object_orientation'] = offset
+            goal_rot = Rotation.from_quat(obs['goal_object_orientation'])
+            actual_rot = Rotation.from_quat(obs['object_orientation'])
+            if self.use_quat:
+                obs_dict['relative_goal_object_orientation'] = (
+                        goal_rot*actual_rot.inv()).as_quat()
+            else:
+                obs_dict['relative_goal_object_orientation'] = get_theta_z_wf(
+                        goal_rot, actual_rot)
         return obs_dict
 
 
@@ -1064,3 +1078,19 @@ def flatten_space(space):
         )
     raise NotImplementedError
 
+
+def get_theta_z_wf(goal_rot, actual_rot):
+    y_axis = [0, 1, 0]
+
+    actual_direction_vector = actual_rot.apply(y_axis)
+
+    goal_direction_vector = goal_rot.apply(y_axis)
+    N = np.array([0, 0, 1]) # normal vector of ground plane
+    proj = goal_direction_vector - goal_direction_vector.dot(N) * N
+    goal_direction_vector = proj / np.linalg.norm(proj) # normalize projection
+
+    orientation_error = np.arccos(
+	goal_direction_vector.dot(actual_direction_vector)
+    )
+
+    return orientation_error

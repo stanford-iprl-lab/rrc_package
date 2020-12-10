@@ -7,6 +7,7 @@ import os.path as osp
 try:
     import robot_interfaces
     import robot_fingers
+    import trifinger_cameras
     from robot_interfaces.py_trifinger_types import Action 
 except ImportError:
     robot_interfaces = robot_fingers = None
@@ -165,6 +166,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "achieved_goal": object_state_space,
             }
         )
+        if osp.exists('/output'):
+            self.observation_space.spaces['filtered_achieved_goal'] = object_state_space
+        self.observation_space.spaces['cam0_timestamp'] = gym.spaces.Box(low=0., high=np.inf, shape=())
+
         self.save_npz = save_npz
         self.action_log = []
         self.filtered_position = None
@@ -252,7 +257,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self.step_count += t - self.t_prev
             self.t_prev = t
             # make sure to not exceed the episode length
-            if self.step_count >= self.episode_length:
+            if self.step_count >= self.episode_length or self.t_prev == 120*1000 - 1:
                 break
 
         is_done = self.step_count >= self.episode_length
@@ -387,20 +392,6 @@ class RealRobotCubeEnv(gym.GoalEnv):
     def _create_observation(self, t, action):
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
-        cam_pose = self.get_camera_pose(camera_observation)
-
-        # use exponential smoothing filter camera observation pose 
-        # filter orientation
-        if self.filtered_orientation is None:
-            self.filtered_orientation = cam_pose.orientation
-        self.filtered_orientation = ((1-self.alpha)*self.filtered_orientation + 
-                          self.alpha*cam_pose.orientation)
-
-        # filter position
-        if self.filtered_position is None:
-            self.filtered_position = cam_pose.position
-        self.filtered_position = ((1-self.alpha)*self.filtered_position +
-                          self.alpha*cam_pose.position)
 
         observation = {
             "observation": {
@@ -411,14 +402,20 @@ class RealRobotCubeEnv(gym.GoalEnv):
             "action": action,
             "desired_goal": self.goal,
             "achieved_goal": {
-                "position": self.filtered_position,
-                "orientation": self.filtered_orientation,
+                "position": camera_observation.object_pose.position,
+                "orientation": camera_observation.object_pose.orientation,
             },
+            "cam0_timestamp": camera_observation.cameras[0].timestamp,
         }
 
-        if not osp.exists('/output'):
-            self.filtered_position = self.filtered_orientation = None
+        if osp.exists("/output"):
+            obj_pose = self.get_camera_pose(camera_observation)
+            observation["filtered_achieved_goal"] = {
+                "position": obj_pose.position,
+                "orientation": obj_pose.orientation}
+
         return observation
+
 
     def _gym_action_to_robot_action(self, gym_action):
         # construct robot action depending on action type

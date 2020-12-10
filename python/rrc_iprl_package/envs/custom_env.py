@@ -5,6 +5,7 @@ import pybullet
 import os.path as osp
 import logging
 
+from scipy.spatial.transform import Rotation
 from gym import wrappers
 from gym import ObservationWrapper
 from gym.spaces import Dict
@@ -50,7 +51,8 @@ class PushCubeEnv(gym.Env):
         frameskip=1,
         num_steps=None,
         visualization=False,
-        alpha=0.01
+        alpha=0.01,
+        save_npz=None
         ):
         """Initialize.
 
@@ -83,6 +85,8 @@ class PushCubeEnv(gym.Env):
 
         # will be initialized in reset()
         self.platform = None
+        self.save_npz = save_npz
+        self.action_log = []
         self._prev_action = None
         self.action_type = action_type
 
@@ -162,6 +166,19 @@ class PushCubeEnv(gym.Env):
                                                   for k in self.observation_names})
         self.alpha = alpha
         self.filtered_position = self.filtered_orientation = None
+
+    def write_action_log(self, observation, action, reward):
+        if self.save_npz:
+            self.action_log.append(dict(
+                observation=observation, action=action, t=self.step_count,
+                reward=reward))
+
+    def save_action_log(self):
+        if self.save_npz and self.action_log:
+            np.savez(self.save_npz, initial_pose=self.initial_pose.to_dict(),
+                     goal_pose=self.goal, action_log=self.action_log)
+            del self.action_log
+        self.action_log = []
 
     def seed(self, seed=None):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
@@ -398,8 +415,9 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         spaces = trifinger_simulation.TriFingerPlatform.spaces
         self._action_space = gym.spaces.Dict({
             'torque': spaces.robot_torque.gym, 'position': spaces.robot_position.gym})
+        self._last_action = np.zeros(9)
         self.set_policy(policy)
-        self._platform = self.custom_pinocchio_utils = None
+        self._platform = None
 
     @property
     def impedance_control_mode(self):
@@ -460,41 +478,56 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
     def process_observation_rl(self, obs):
         t = self.step_count
         obs_dict = {}
+        cpu = self.policy.impedance_controller.custom_pinocchio_utils
         for on in self.rl_observation_names:
             if on == 'robot_position':
                 val = obs['observation']['position']
             elif on == 'robot_velocity':
                 val = obs['observation']['velocity']
             elif on == 'robot_tip_positions':
-                val = self.custom_pinocchio_utils.forward_kinematics(obs['observation']['position'])
+                val = cpu.forward_kinematics(obs['observation']['position'])
             elif on == 'object_position':
                 val = obs['achieved_goal']['position']
             elif on == 'object_orientation':
                 val = obs['achieved_goal']['orientation']
             elif on == 'goal_position':
-                val = obs['desired_goal']['position']
+                val = 0 * obs['desired_goal']['position']
             elif on == 'goal_orientation':
+                # disregard x and y axis rotation for goal_orientation
                 val = obs['desired_goal']['orientation']
+                goal_rot = Rotation.from_quat(val)
+                actual_rot = Rotation.from_quat(np.zeros([0,0,0,1]))
+                y_axis = [0, 1, 0]
+                actual_vector = actual_rot.apply(y_axis)
+                goal_vector = goal_rot.apply(y_axis)
+                N = np.array([0,0,1])
+                proj = goal_vector - goal_vector.dot(N) * N
+                proj = proj / np.linalg.norm(proj)
+                ori_error = np.arccos(proj.dot(actual_vector))
+                xyz = np.zeros(3)
+                xyz[2] = ori_error
+                val = Rotation.from_euler('xyz', xyz).as_quat()
             elif on == 'action':
                 val = self._last_action
+                if isinstance(val, dict):
+                    val = val['torque']
             obs_dict[on] = np.asarray(val, dtype='float64').flatten()
 
         obs = np.concatenate([obs_dict[k] for k in self.rl_observation_names])
         return obs
 
     def reset(self):
-        obs = super(HierarchicalPolicyWrapper, self).reset()
-        initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
-        # initial_object_pose = move_cube.sample_goal(difficulty=-1) 
         if self._platform is None:
+            initial_object_pose = move_cube.sample_goal(-1)
             self._platform = trifinger_simulation.TriFingerPlatform(
                 visualization=False,
                 initial_object_pose=initial_object_pose,
             )
+        self.policy.impedance_controller.init_pinocchio_utils(self._platform)
+        obs = super(HierarchicalPolicyWrapper, self).reset()
+        initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
+        # initial_object_pose = move_cube.sample_goal(difficulty=-1) 
         self.policy.reset_policy(obs['impedance'], self._platform)
-        # use custom_pinocchio_utils for computing fingertip positions
-        if self.custom_pinocchio_utils is None:
-            self.custom_pinocchio_utils = self.policy.impedance_controller.custom_pinocchio_utils
         return obs
 
     def _step(self, action):
@@ -564,8 +597,8 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         if self.is_wrapped and self.mode == PolicyMode.RL_PUSH:
             wrapped_env = self.wrapped_env
             while wrapped_env.unwrapped != wrapped_env:
-                if hasattr(wrapped_env, 'action'):
-                    action = self.wrapped_env.action(action)
+                if isinstance(wrapped_env, gym.ActionWrapper):
+                    action = wrapped_env.action(action)
                 wrapped_env = wrapped_env.env
 
         obs, r, d, i = self._step(action)

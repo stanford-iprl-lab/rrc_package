@@ -55,9 +55,11 @@ def main():
         num_steps=MAX_STEPS, visualization=True, save_npz=save_path
     )
     if osp.exists('/ws/src/usercode'):
-        rl_load_dir = '/ws/src/usercode/models/HER.zip'
+        rl_load_dir = '/ws/src/usercode/models/scaled_actions/scaled_actions_s0'
     else:
-        rl_load_dir = './models/HER.zip'
+        rl_load_dir = './models/scaled_actions/scaled_actions_s0'
+    load_path = osp.join(rl_load_dir ,'pyt_save/model249.pt')
+
     env = custom_env.ResidualPolicyWrapper(env, goal_env=True)
     env = TimeLimit(env, max_episode_steps=EP_LEN)
     env = env_wrappers.FlattenGoalWrapper(env)
