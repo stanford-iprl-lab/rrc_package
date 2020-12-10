@@ -496,8 +496,16 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 # disregard x and y axis rotation for goal_orientation
                 val = obs['desired_goal']['orientation']
                 goal_rot = Rotation.from_quat(val)
-                xyz = goal_rot.as_euler('xyz')
-                xyz[:2] = 0.
+                actual_rot = Rotation.from_quat(np.zeros([0,0,0,1]))
+                y_axis = [0, 1, 0]
+                actual_vector = actual_rot.apply(y_axis)
+                goal_vector = goal_rot.apply(y_axis)
+                N = np.array([0,0,1])
+                proj = goal_vector - goal_vector.dot(N) * N
+                proj = proj / np.linalg.norm(proj)
+                ori_error = np.arccos(proj.dot(actual_vector))
+                xyz = np.zeros(3)
+                xyz[2] = ori_error
                 val = Rotation.from_euler('xyz', xyz).as_quat()
             elif on == 'action':
                 val = self._last_action
