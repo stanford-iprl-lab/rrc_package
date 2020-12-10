@@ -74,7 +74,7 @@ class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
         if difficulty == 4:
-            self.difficulty = 3
+            self.difficulty = 4
         else:
             self.difficulty = difficulty
         self.action_space = action_space
@@ -603,14 +603,14 @@ class ImpedanceControllerPolicy:
                 self.set_traj_repose_object(observation, x0, x_goal, nGrid=20, dt=0.08)
         elif self.mode == TrajMode.ROTATE_X or self.mode == TrajMode.ROTATE_Z:
             # Get z error between goal and current object orientation
-            theta_z = self.get_theta_z_wf(obj_pose)
-            print("THETA_Z: {}".format(theta_z))
-            if np.abs(theta_z) < self.MIN_Z_ERROR or self.z_tries > self.MAX_Z_TRIES:
-                self.mode, x0, x_goal = self.get_repose_mode_and_bounds(observation)
-                self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
-            else:
-                self.set_traj_release_object(observation)
-                self.mode = TrajMode.RELEASE
+            #theta_z = self.get_theta_z_wf(obj_pose)
+            #print("THETA_Z: {}".format(theta_z))
+            #if np.abs(theta_z) < self.MIN_Z_ERROR or self.z_tries > self.MAX_Z_TRIES:
+            #    self.mode, x0, x_goal = self.get_repose_mode_and_bounds(observation)
+            #    self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
+            #else:
+            self.set_traj_release_object(observation)
+            self.mode = TrajMode.RELEASE
         elif self.mode == TrajMode.RELEASE:
             self.set_traj_ft_init_pos(observation)
             self.mode = TrajMode.RESET
