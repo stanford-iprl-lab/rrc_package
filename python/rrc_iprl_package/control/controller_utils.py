@@ -437,6 +437,7 @@ def get_of_from_wf(p, obj_pose):
 Project y axis of goal_pose onto XY plane and get difference between y axis of obj_pose
 """
 def get_y_axis_delta(obj_pose, goal_pose):
+    ground_face = get_closest_ground_face(obj_pose)
     goal_rot = Rotation.from_quat(goal_pose.orientation)
     actual_rot = Rotation.from_quat(obj_pose.orientation)
 
@@ -455,7 +456,11 @@ def get_y_axis_delta(obj_pose, goal_pose):
     )
 
     # Determine direction of rotation
-    rot = Rotation.from_euler("z", orientation_error)
+    if ground_face in [5]: # TODO ???
+        direction = -1
+    else:
+        direction = 1
+    rot = Rotation.from_euler("z", direction * orientation_error)
     new_rot = rot * actual_rot
 
     # Check new error, if larger, rotate the other way
@@ -465,12 +470,12 @@ def get_y_axis_delta(obj_pose, goal_pose):
     )
 
     if new_orientation_error < orientation_error:
-        return orientation_error
+        return direction * orientation_error
     else:
-        return -orientation_error
+        return -1 * direction * orientation_error
 
 """
-Get's orientation that is parallel to ground, with specified ground face down
+Get orientation that is parallel to ground, with specified ground face down
 """
 def get_ground_aligned_orientation(obj_pose):
     z_axis = [0, 0, 1]
