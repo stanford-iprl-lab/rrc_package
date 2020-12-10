@@ -156,7 +156,7 @@ class ImpedanceControllerPolicy:
                 self.platform.simfinger.tip_link_names)
 
         # Define nlp for finger traj opt
-        nGrid = 20
+        nGrid = 30
         dt = 0.04
         self.finger_nlp = c_utils.define_static_object_opt(nGrid, dt)
         self.release_nlp = c_utils.define_static_object_opt(15, dt)
