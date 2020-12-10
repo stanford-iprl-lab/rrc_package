@@ -21,8 +21,8 @@ class PolicyMode(enum.Enum):
 # Object properties
 OBJ_MASS = 0.016 # 16 grams
 OBJ_SIZE = move_cube._CUBOID_SIZE
-#OBJ_SIZE_OFFSET = 0
-OBJ_SIZE_OFFSET = 0.012
+OBJ_SIZE_OFFSET = 0
+#OBJ_SIZE_OFFSET = 0.012
 OBJ_MU = 1
 
 # Here, hard code the base position of the fingers (as angle on the arena)
