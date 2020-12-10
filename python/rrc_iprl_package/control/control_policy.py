@@ -74,7 +74,7 @@ class ImpedanceControllerPolicy:
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
         if difficulty == 4:
-            self.difficulty = 4
+            self.difficulty = 3
         else:
             self.difficulty = difficulty
         self.action_space = action_space
