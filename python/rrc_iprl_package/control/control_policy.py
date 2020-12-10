@@ -480,12 +480,12 @@ class ImpedanceControllerPolicy:
         for i in range(len(cp_wf_list)):
             if cp_wf_list[i] is None:
                 cp_wf_list[i] = current_ft_pos[i]
-            else:
-                # Transform cp to ft center
-                R = R_list[i]
-                temp = R @ np.array([0, 0, self.FT_RADIUS])
-                new_pos = np.array(cp_wf_list[i]) + temp[:3]
-                cp_wf_list[i] = new_pos
+            #else:
+            #    # Transform cp to ft center
+            #    R = R_list[i]
+            #    temp = R @ np.array([0, 0, self.FT_RADIUS])
+            #    new_pos = np.array(cp_wf_list[i]) + temp[:3]
+            #    cp_wf_list[i] = new_pos
 
         ft_goal = np.asarray(cp_wf_list).flatten()
         self.ft_pos_traj, self.ft_vel_traj = self.run_finger_traj_opt(current_position, obj_pose, ft_goal, self.finger_nlp)
