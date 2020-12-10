@@ -41,7 +41,7 @@ class TrajMode(enum.Enum):
 
 
 class ImpedanceControllerPolicy:
-    USE_FILTERED_POSE = True
+    USE_FILTERED_POSE = False
 
     KP = [300, 300, 400,
           300, 300, 400,
@@ -192,6 +192,8 @@ class ImpedanceControllerPolicy:
         # Re-orientation try counters
         self.z_tries = 0
 
+        self.pose_at_grasp_time = None
+
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.goal_pose = goal_pose
         self.x0 = np.concatenate([initial_pose.position, initial_pose.orientation])[None]
@@ -223,7 +225,8 @@ class ImpedanceControllerPolicy:
         else:
             obj_pose = get_pose_from_observation(observation)
 
-        obj_pose = c_utils.get_aligned_pose(obj_pose)
+        #obj_pose = c_utils.get_aligned_pose(obj_pose)
+        obj_pose = self.pose_at_grasp_time
         x0 = np.concatenate([obj_pose.position, obj_pose.orientation])[None]
 
         cur_R = Rotation.from_quat(obj_pose.orientation)
@@ -274,6 +277,7 @@ class ImpedanceControllerPolicy:
             obj_pose = self.filtered_obj_pose
         else:
             obj_pose = get_pose_from_observation(observation)
+        obj_pose = self.pose_at_grasp_time
             
         print("Compute repose traj for MODE {}".format(self.mode))
         print("Object pose position: {}".format(obj_pose.position))
@@ -435,6 +439,7 @@ class ImpedanceControllerPolicy:
             obj_pose = get_pose_from_observation(observation)
 
         obj_pose = c_utils.get_aligned_pose(obj_pose)
+        self.pose_at_grasp_time = obj_pose
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
