@@ -507,7 +507,6 @@ class ImpedanceControllerPolicy:
             timestamp = full_observation["cam0_timestamp"]
         else:
             timestamp = full_observation["cam0_timestamp"] / 1000
-        print("Cam0_timestamp: {}".format(timestamp))
         obj_vel = self.get_obj_vel(self.filtered_obj_pose, timestamp)
         
         # Get current fingertip position
@@ -609,7 +608,7 @@ class HierarchicalControllerPolicy:
     ORI_THRESH = np.pi / 6
 
     RESET_TIME_LIMIT = 50
-    RL_RETRY_STEPS = 70
+    RL_RETRY_STEPS = 300
     MAX_RETRIES = 3
 
     default_robot_position = TriFingerPlatform.spaces.robot_position.default
@@ -675,28 +674,28 @@ class HierarchicalControllerPolicy:
         self.rl_policy = lambda obs: self.sb_policy.predict(obs)[0]
 
     def load_spinup_policy(self, load_dir, load_itr='last', deterministic=False,
-                           ac_wrappers=('scaled',), **load_kwargs):
+                          **load_kwargs):
         self.rl_env, self.rl_policy = load_policy_and_env(load_dir, load_itr, deterministic)
         if self.rl_env is None:
-            self.rl_env = rrc_utils.build_env_fn(ac_wrappers=ac_wrappers, **load_kwargs)()
+            self.rl_env = rrc_utils.build_env_fn(**load_kwargs)()
         self.rl_frameskip = self.rl_env.frameskip
-        self.observation_names = list(self.rl_env.unwrapped.observation_space.spaces.keys())
+        self.observation_names = list(self.rl_env.env.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
         print('loaded policy from {}'.format(load_dir))
 
-    def activate_rl(self, obj_pose):
+    def activate_rl(self, obj_pose, goal_pose):
         if self.start_mode != PolicyMode.RL_PUSH or self.rl_retries == self.MAX_RETRIES:
             if self.rl_retries == self.MAX_RETRIES and self.difficulty == 4:
                 self.difficulty = 3
             return False
-        return np.linalg.norm(obj_pose.position[:2] - np.zeros(2)) > self.DIST_THRESH
+        return get_theta_z_wf(obj_pose, goal_pose) > self.DIST_THRESH
 
     def initialize_traj_opt(self, observation):
         obj_pose = get_pose_from_observation(observation)
         goal_pose = get_pose_from_observation(observation, goal_pose=True)
 
         # TODO: check orientation error
-        if (self.activate_rl(obj_pose) and
+        if (self.activate_rl(obj_pose, goal_pose) and
             self.start_mode == PolicyMode.RL_PUSH and
             self.mode != PolicyMode.RESET):
             if self.mode != PolicyMode.RL_PUSH:
@@ -716,7 +715,7 @@ class HierarchicalControllerPolicy:
               (self.steps_from_reset >= self.RESET_TIME_LIMIT and
                obj_pose.position[2] < 0.034)):
             self.steps_from_reset = 0
-            if self.activate_rl(obj_pose):
+            if self.activate_rl(obj_pose, goal_pose):
                 self.rl_retries += 1
                 self.mode = PolicyMode.RL_PUSH
                 self.rl_start_step = self.step_count
@@ -743,7 +742,7 @@ class HierarchicalControllerPolicy:
             self.mode = PolicyMode.IMPEDANCE
 
     def reset_action(self, observation):
-        robot_position = observation['observation']['position']
+        robot_position = np.asarray(observation['observation']['position']).copy()
         time_limit_step = self.RESET_TIME_LIMIT // 3
         if self.steps_from_reset < time_limit_step:  # middle
             robot_position[1::3] = self.default_robot_position[1::3]
@@ -891,3 +890,21 @@ def load_pytorch_policy(fpath, itr, deterministic=False):
 
     return get_action
 
+def get_theta_z_wf(obj_pose, goal_pose):
+    goal_rot = Rotation.from_quat(goal_pose.orientation)
+    actual_rot = Rotation.from_quat(obj_pose.orientation)
+
+    y_axis = [0, 1, 0]
+
+    actual_direction_vector = actual_rot.apply(y_axis)
+
+    goal_direction_vector = goal_rot.apply(y_axis)
+    N = np.array([0, 0, 1]) # normal vector of ground plane
+    proj = goal_direction_vector - goal_direction_vector.dot(N) * N
+    goal_direction_vector = proj / np.linalg.norm(proj) # normalize projection
+
+    orientation_error = np.arccos(
+	goal_direction_vector.dot(actual_direction_vector)
+    )
+
+    return orientation_error

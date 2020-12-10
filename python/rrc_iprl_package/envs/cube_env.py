@@ -266,10 +266,13 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         return observation, reward, is_done, self.info
 
-    def write_action_log(self, observation, action, reward):
-        self.action_log.append(dict(
+    def write_action_log(self, observation, action, reward, **log_kwargs):
+        log = dict(
             observation=observation, action=action, t=self.step_count,
-            reward=reward))
+            reward=reward)
+        for k, v in log_kwargs.items():
+            log[k] = v
+        self.action_log.append(log)
 
     def save_action_log(self, save_npz=None):
         save_npz = save_npz or self.save_npz

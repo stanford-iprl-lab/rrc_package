@@ -17,7 +17,7 @@ from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 FRAMESKIP = 1
 MAX_STEPS = 120 * 1000
-EP_LEN = 10 * 1000  # None
+EP_LEN = None
 
 class RandomPolicy:
     """Dummy policy which uses random actions."""
@@ -44,22 +44,23 @@ def main():
     theta = 0
     initial_pose.orientation = np.array([0, 0, np.sin(theta/2), np.cos(theta/2)])
    
+    eps_so_far = 0
     if osp.exists('/output'):
-        save_path = '/output/action_log.npz'
+        save_path = lambda: '/output/action_log{}.npz'.format(eps_so_far)
     else:
-        save_path = 'action_log.npz'
+        save_path = lambda: 'action_log{}.npz'.format(eps_so_far)
     ep_len = EP_LEN or MAX_STEPS
     env = cube_env.RealRobotCubeEnv(
         goal, initial_pose.to_dict(), difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
-        num_steps=ep_len, visualization=True, save_npz=save_path
+        num_steps=ep_len, visualization=True, save_npz=None
     )
 
     if difficulty == 4:
         if osp.exists('/ws/src/usercode'):
-            rl_load_dir = '/ws/src/usercode/models/scaled_actions/scaled_actions_s0'
+            rl_load_dir = '/ws/src/usercode/models/ppo-scaled-rew-cuboid/ppo-scaled-rew-cuboid_s0'
         else:
-            rl_load_dir = './models/scaled_actions/scaled_actions_s0'
+            rl_load_dir = './models/ppo-scaled-rew-cuboid/ppo-scaled-rew-cuboid_s0'
         start_mode = PolicyMode.RL_PUSH
     else:
         rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
@@ -68,7 +69,8 @@ def main():
                    initial_pose=initial_pose, goal_pose=goal_pose,
                    load_dir=rl_load_dir, difficulty=difficulty,
                    start_mode=start_mode)
-    policy.load_policy(rl_load_dir)
+    policy.load_policy(rl_load_dir, ac_wrappers=('scaled',), relative=(False,False,True), 
+                       pos_coef=.5, ori_coef=.5, frameskip=15, ep_len=600)
     env = custom_env.HierarchicalPolicyWrapper(env, policy)
     observation = env.reset()
 
@@ -76,12 +78,13 @@ def main():
     is_done = False
     old_mode = policy.mode
     steps_so_far = 0
-    eps_so_far = 0
     try:
         while not is_done:
             if MAX_STEPS is not None and steps_so_far == MAX_STEPS: break
             action = policy.predict(observation)
+            old_obs = observation
             observation, reward, is_done, info = env.step(action)
+            env.write_action_log(old_obs, action, reward)
             if old_mode != policy.mode:
                 #print('mode changed: {} to {}'.format(old_mode, policy.mode))
                 old_mode = policy.mode
@@ -91,15 +94,16 @@ def main():
             if EP_LEN is not None and is_done and (eps_so_far+1)*EP_LEN < MAX_STEPS:
                 is_done = False
                 eps_so_far += 1
+                env.write_action_log(save_path())
                 observation = env.reset()
 
     except Exception as e:
         print("Error encounted: {}. Saving logs and exiting".format(e))
-        env.save_action_log()
+        env.save_action_log(save_path())
         policy.impedance_controller.save_log()
         raise e
 
-    env.save_action_log()
+    env.save_action_log(save_path())
     # Save control_policy_log
     policy.impedance_controller.save_log()
 

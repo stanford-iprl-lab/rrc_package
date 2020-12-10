@@ -473,7 +473,7 @@ class RelativeGoalWrapper(gym.ObservationWrapper):
         super(RelativeGoalWrapper, self).__init__(env)
         self._observation_keys = list(env.observation_space.spaces.keys())
         assert 'goal_object_position' in self._observation_keys, 'goal_object_position missing in observation'
-        self.position_only = 'goal_object_orientation' not in self._observation_keys
+        self.position_only = 'goal_orientation' not in self._observation_keys
         self.use_quat = use_quat
         self.observation_names =  [k for k in self._observation_keys if 'goal_object' not in k]
         self.observation_names.append('relative_goal_object_position')
