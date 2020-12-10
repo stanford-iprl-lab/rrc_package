@@ -449,14 +449,25 @@ def get_y_axis_delta(obj_pose, goal_pose):
     proj = goal_direction_vector - goal_direction_vector.dot(N) * N
     goal_direction_vector = proj / np.linalg.norm(proj) # normalize projection
 
+    # Always in [0, pi] range
     orientation_error = np.arccos(
         goal_direction_vector.dot(actual_direction_vector)
     )
 
-    #print(orientation_error)
-    #print(2*pi - orientation_error)
+    # Determine direction of rotation
+    rot = Rotation.from_euler("z", orientation_error)
+    new_rot = rot * actual_rot
 
-    return orientation_error
+    # Check new error, if larger, rotate the other way
+    new_direction_vector = new_rot.apply(y_axis)
+    new_orientation_error = np.arccos(
+        goal_direction_vector.dot(new_direction_vector)
+    )
+
+    if new_orientation_error < orientation_error:
+        return orientation_error
+    else:
+        return -orientation_error
 
 """
 Get's orientation that is parallel to ground, with specified ground face down
