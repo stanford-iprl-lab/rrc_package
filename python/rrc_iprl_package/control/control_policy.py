@@ -65,7 +65,7 @@ class ImpedanceControllerPolicy:
               0.001,]
 
     # Re-orientation constants
-    MIN_Z_ERROR = 0.2 # 11.5 degrees
+    MIN_Z_ERROR = 0.3
     MAX_Z_TRIES = 3
     Z_INCR      = np.pi/3
 
@@ -215,15 +215,25 @@ class ImpedanceControllerPolicy:
     """
     Get rotation difference around z axis between goal and current poses
     """
-    def get_theta_z(self, obj_pose):
-        cur_R = Rotation.from_quat(obj_pose.orientation)
-        goal_R = Rotation.from_quat(self.goal_pose.orientation)
-        delta_R = goal_R * cur_R.inv()
-        # Isolate z component of quaternion difference between goal and init orientation
-        delta_euler = delta_R.as_euler("zxy")
-        theta_z = delta_euler[0] # rotation around z axis
-        return theta_z
-    
+    def get_theta_z_wf(self, obj_pose):
+        goal_rot = Rotation.from_quat(self.goal_pose.orientation)
+        actual_rot = Rotation.from_quat(obj_pose.orientation)
+
+        y_axis = [0, 1, 0]
+
+        actual_direction_vector = actual_rot.apply(y_axis)
+
+        goal_direction_vector = goal_rot.apply(y_axis)
+        N = np.array([0, 0, 1]) # normal vector of ground plane
+        proj = goal_direction_vector - goal_direction_vector.dot(N) * N
+        goal_direction_vector = proj / np.linalg.norm(proj) # normalize projection
+
+        orientation_error = np.arccos(
+            goal_direction_vector.dot(actual_direction_vector)
+        )
+
+        return orientation_error
+
     """
     Set repose goal
     """
@@ -255,7 +265,7 @@ class ImpedanceControllerPolicy:
         x_goal[0, :3] = self.goal_pose.position
 
         # Get z error between goal and current object orientation
-        theta_z = self.get_theta_z(obj_pose)
+        theta_z = self.get_theta_z_wf(obj_pose)
         print("THETA_Z delta: {}".format(theta_z))
 
         # Set repose mode to ROTATE_z, ROTATE_X, or REPOSITION
@@ -271,6 +281,7 @@ class ImpedanceControllerPolicy:
         if mode == TrajMode.ROTATE_Z:
             theta_z = np.clip(theta_z, -self.Z_INCR, self.Z_INCR)
             z_R = Rotation.from_euler("z", theta_z)
+
             new_R = z_R * cur_R
             x_goal[0, -4:] = new_R.as_quat()
             x_goal[0, 0] = 0
@@ -592,7 +603,8 @@ class ImpedanceControllerPolicy:
                 self.set_traj_repose_object(observation, x0, x_goal, nGrid=20, dt=0.08)
         elif self.mode == TrajMode.ROTATE_X or self.mode == TrajMode.ROTATE_Z:
             # Get z error between goal and current object orientation
-            theta_z = self.get_theta_z(obj_pose)
+            theta_z = self.get_theta_z_wf(obj_pose)
+            print("THETA_Z: {}".format(theta_z))
             if np.abs(theta_z) < self.MIN_Z_ERROR:
                 self.mode, x0, x_goal = self.get_repose_mode_and_bounds(observation)
                 self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
