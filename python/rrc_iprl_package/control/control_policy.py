@@ -600,7 +600,7 @@ class ImpedanceControllerPolicy:
             if self.mode == TrajMode.REPOSITION:
                 self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
             else:
-                self.set_traj_repose_object(observation, x0, x_goal, nGrid=20, dt=0.08)
+                self.set_traj_repose_object(observation, x0, x_goal, nGrid=30, dt=0.08)
         elif self.mode == TrajMode.ROTATE_X or self.mode == TrajMode.ROTATE_Z:
             # Get z error between goal and current object orientation
             #theta_z = self.get_theta_z_wf(obj_pose)
