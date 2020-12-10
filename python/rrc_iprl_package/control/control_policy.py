@@ -747,10 +747,10 @@ class ImpedanceControllerPolicy:
     def set_filtered_pose_from_observation(self, observation, theta=0.01):
         new_pose = get_pose_from_observation(observation)
 
-        MAX_QUAT_DELTA = 0.1
-        # Outlier detection
-        if np.abs(new_pose.orientation - self.filtered_obj_pose.orientation).max() >= MAX_QUAT_DELTA:
-            new_pose.orientation = self.filtered_obj_pose.orientation.copy()
+        #MAX_QUAT_DELTA = 0.1
+        ## Outlier detection
+        #if np.abs(new_pose.orientation - self.filtered_obj_pose.orientation).max() >= MAX_QUAT_DELTA:
+        #    new_pose.orientation = self.filtered_obj_pose.orientation.copy()
 
         f_p = (1-theta) * self.filtered_obj_pose.position + theta * new_pose.position
         f_o = (1-theta) * self.filtered_obj_pose.orientation + theta * new_pose.orientation
