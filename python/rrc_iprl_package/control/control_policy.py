@@ -213,28 +213,6 @@ class ImpedanceControllerPolicy:
         self.cp_params = c_utils.get_lifting_cp_params(obj_pose)
 
     """
-    Get rotation difference around z axis between goal and current poses
-    """
-    def get_theta_z_wf(self, obj_pose):
-        goal_rot = Rotation.from_quat(self.goal_pose.orientation)
-        actual_rot = Rotation.from_quat(obj_pose.orientation)
-
-        y_axis = [0, 1, 0]
-
-        actual_direction_vector = actual_rot.apply(y_axis)
-
-        goal_direction_vector = goal_rot.apply(y_axis)
-        N = np.array([0, 0, 1]) # normal vector of ground plane
-        proj = goal_direction_vector - goal_direction_vector.dot(N) * N
-        goal_direction_vector = proj / np.linalg.norm(proj) # normalize projection
-
-        orientation_error = np.arccos(
-            goal_direction_vector.dot(actual_direction_vector)
-        )
-
-        return orientation_error
-
-    """
     Set repose goal
     """
     def get_repose_mode_and_bounds(self, observation):
@@ -244,28 +222,18 @@ class ImpedanceControllerPolicy:
             obj_pose = self.filtered_obj_pose
         else:
             obj_pose = get_pose_from_observation(observation)
-        cur_R = Rotation.from_quat(obj_pose.orientation)
-            
-        # Clip obj z coord to half width of cube
-        clipped_pos = obj_pose.position.copy()
-        clipped_pos[2] = 0.01
-        #clipped_pos[2] = max(obj_pose.position[2], move_cube._CUBOID_SIZE[0]/2) 
-        x0 = np.concatenate([clipped_pos, obj_pose.orientation])[None]
 
-        # Make x and y components of quaterion 0 and renormalize..?
-        #clipped_quat = obj_pose.orientation.copy() 
-        #clipped_quat[0] = 0
-        #clipped_quat[1] = 0
-        #clipped_quat = clipped_quat / np.linalg.norm(clipped_quat)
-        #x0 = np.concatenate([clipped_pos, clipped_quat])[None]
-        #quit()
+        obj_pose = c_utils.get_aligned_pose(obj_pose)
+        x0 = np.concatenate([obj_pose.position, obj_pose.orientation])[None]
+
+        cur_R = Rotation.from_quat(obj_pose.orientation)
 
         # set object goal pose
         x_goal = x0.copy()
         x_goal[0, :3] = self.goal_pose.position
 
         # Get z error between goal and current object orientation
-        theta_z = self.get_theta_z_wf(obj_pose)
+        theta_z = c_utils.get_y_axis_delta(obj_pose, self.goal_pose)
         print("THETA_Z delta: {}".format(theta_z))
 
         # Set repose mode to ROTATE_z, ROTATE_X, or REPOSITION
@@ -464,6 +432,8 @@ class ImpedanceControllerPolicy:
         else:
             obj_pose = get_pose_from_observation(observation)
 
+        obj_pose = c_utils.get_aligned_pose(obj_pose)
+
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
 
@@ -506,6 +476,7 @@ class ImpedanceControllerPolicy:
             obj_pose = self.filtered_obj_pose
         else:
             obj_pose = get_pose_from_observation(observation)
+        obj_pose = c_utils.get_aligned_pose(obj_pose)
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
@@ -600,7 +571,7 @@ class ImpedanceControllerPolicy:
             if self.mode == TrajMode.REPOSITION:
                 self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
             else:
-                self.set_traj_repose_object(observation, x0, x_goal, nGrid=30, dt=0.08)
+                self.set_traj_repose_object(observation, x0, x_goal, nGrid=20, dt=0.08)
         elif self.mode == TrajMode.ROTATE_X or self.mode == TrajMode.ROTATE_Z:
             # Get z error between goal and current object orientation
             #theta_z = self.get_theta_z_wf(obj_pose)

@@ -433,6 +433,81 @@ def get_of_from_wf(p, obj_pose):
 
     return rotation_inv.apply(p) + translation_inv
 
+"""
+Project y axis of goal_pose onto XY plane and get difference between y axis of obj_pose
+"""
+def get_y_axis_delta(obj_pose, goal_pose):
+    goal_rot = Rotation.from_quat(goal_pose.orientation)
+    actual_rot = Rotation.from_quat(obj_pose.orientation)
+
+    y_axis = [0, 1, 0]
+
+    actual_direction_vector = actual_rot.apply(y_axis)
+
+    goal_direction_vector = goal_rot.apply(y_axis)
+    N = np.array([0, 0, 1]) # normal vector of ground plane
+    proj = goal_direction_vector - goal_direction_vector.dot(N) * N
+    goal_direction_vector = proj / np.linalg.norm(proj) # normalize projection
+
+    orientation_error = np.arccos(
+        goal_direction_vector.dot(actual_direction_vector)
+    )
+
+    #print(orientation_error)
+    #print(2*pi - orientation_error)
+
+    return orientation_error
+
+"""
+Get's orientation that is parallel to ground, with specified ground face down
+"""
+def get_ground_aligned_orientation(obj_pose):
+    z_axis = [0, 0, 1]
+    ground_face = get_closest_ground_face(obj_pose)
+    actual_rot = Rotation.from_quat(obj_pose.orientation)
+
+    print("GROUND FACE: {}".format(ground_face))
+
+    pose_up_vector = actual_rot.apply(OBJ_FACES_INFO[ground_face]["up_axis"])
+    print(pose_up_vector)
+
+    orientation_error = np.arccos(
+        pose_up_vector.dot(z_axis)
+    )
+
+    # Rotate by orientation error 
+    align_rot = Rotation.from_euler("y", orientation_error)
+    new_rot = align_rot.inv() * actual_rot
+    
+    # Check new error, if larger, rotate the other way
+    pose_up_vector = new_rot.apply(OBJ_FACES_INFO[ground_face]["up_axis"])
+    new_orientation_error = np.arccos(
+        pose_up_vector.dot(z_axis)
+    )
+
+    if new_orientation_error > orientation_error:
+        align_rot = Rotation.from_euler("y", -orientation_error)
+        new_rot = align_rot.inv() * actual_rot
+
+    return new_rot.as_quat()
+
+def get_aligned_pose(obj_pose):
+    print("Observed pose:")
+    print(obj_pose.position, obj_pose.orientation)
+
+    # Clip obj z coord to half width of cube
+    clipped_pos = obj_pose.position.copy()
+    clipped_pos[2] = 0.01 # TODO hardcoded
+    aligned_quat = get_ground_aligned_orientation(obj_pose)
+
+    obj_pose.position = clipped_pos
+    obj_pose.orientation = aligned_quat
+
+    print("Aligned pose:")
+    print(obj_pose.position, obj_pose.orientation)
+    
+    return obj_pose
+
 ##############################################################################
 # Lift mode functions
 ##############################################################################
@@ -642,7 +717,7 @@ def assign_faces_to_fingers(obj_pose, finger_id_list, free_faces):
 
 def get_pre_grasp_ft_goal(obj_pose, fingertips_current_wf, cp_params):
     ft_goal = np.zeros(9)
-    incr = 0.03
+    incr = 0.04
 
     # Get list of desired fingertip positions
     cp_wf_list = get_cp_pos_wf_from_cp_params(cp_params, obj_pose.position, obj_pose.orientation, use_obj_size_offset = True)
