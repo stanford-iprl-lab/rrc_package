@@ -605,7 +605,7 @@ class ImpedanceControllerPolicy:
             # Get z error between goal and current object orientation
             theta_z = self.get_theta_z_wf(obj_pose)
             print("THETA_Z: {}".format(theta_z))
-            if np.abs(theta_z) < self.MIN_Z_ERROR:
+            if np.abs(theta_z) < self.MIN_Z_ERROR or self.z_tries > self.MAX_Z_TRIES:
                 self.mode, x0, x_goal = self.get_repose_mode_and_bounds(observation)
                 self.set_traj_repose_object(observation, x0, x_goal, nGrid=50, dt=0.08)
             else:
