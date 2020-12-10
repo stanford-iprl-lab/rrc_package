@@ -491,7 +491,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             elif on == 'object_orientation':
                 val = obs['achieved_goal']['orientation']
             elif on == 'goal_position':
-                val = obs['desired_goal']['position']
+                val = 0 * obs['desired_goal']['position']
             elif on == 'goal_orientation':
                 # disregard x and y axis rotation for goal_orientation
                 val = obs['desired_goal']['orientation']
