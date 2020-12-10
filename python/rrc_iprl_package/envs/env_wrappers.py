@@ -320,16 +320,10 @@ class SparseCubeEnv(CubeEnv):
 
 @configurable(pickleable=True)
 class TaskSpaceWrapper(gym.ActionWrapper):
-    def __init__(self, env, goal_env=False, relative=False, scale=.008, ac_pen=0.001,
-                 save_npz=None):
+    def __init__(self, env, goal_env=False, relative=False, scale=.008, ac_pen=0.001):
         super(TaskSpaceWrapper, self).__init__(env)
-        if hasattr(self.unwrapped, 'save_npz'):
-            self._save_npz = self.unwrapped.save_npz
-            self.unwrapped.save_npz = None
-            self.action_log = self.unwrapped.action_log
-        else:
-            self.action_log = []
-            self._save_npz = save_npz
+        self.action_log = []
+        self._save_npz = self.unwrapped.save_npz
 
         # assert self.unwrapped.action_type in [ActionType.POSITION, ActionType.TORQUE]
         spaces = TriFingerPlatform.spaces
@@ -352,11 +346,7 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         obs_dict['last_action'] = self.action_space
 
     def reset(self):
-        if hasattr(self.unwrapped, 'save_npz'):
-            self.unwrapped.save_npz = self._save_npz
         obs = super(TaskSpaceWrapper, self).reset()
-        if hasattr(self.unwrapped, 'save_npz'):
-            self.unwrapped.save_npz = None
         platform = self.unwrapped.platform
         if self.pinocchio_utils is None:
             self.pinocchio_utils = CustomPinocchioUtils(
@@ -371,15 +361,13 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         return obs
 
     def write_action_log(self, observation, action, reward):
-        if self._save_npz:
-            self.action_log.append(dict(
-                observation=observation, rl_action=action,
-                action=self.action(action), t=self.step_count,
-                reward=reward))
+        self.action_log.append(dict(
+            observation=observation, rl_action=action,
+            action=self.action(action), t=self.step_count,
+            reward=reward))
 
     def step(self, action):
         o, r, d, i = super(TaskSpaceWrapper, self).step(action)
-        self.write_action_log(o, action, r)
         self._prev_obs = o
         if self.relative:
             r -= self.ac_pen * np.linalg.norm(action)
@@ -427,7 +415,6 @@ class ScaledActionWrapper(gym.ActionWrapper):
                  lim_penalty=0.0):
         super(ScaledActionWrapper, self).__init__(env)
         self._save_npz = self.unwrapped.save_npz
-        self.unwrapped.save_npz = None
         assert self.unwrapped.action_type == ActionType.POSITION, 'position control only'
         self.spaces = TriFingerPlatform.spaces
         self.goal_env = goal_env
@@ -443,23 +430,19 @@ class ScaledActionWrapper(gym.ActionWrapper):
         self.action_log = []
 
     def write_action_log(self, observation, action, reward):
-        if self._save_npz:
-            self.action_log.append(dict(
-                observation=observation, action=action,
-                scaled_action=self.action(action), t=self.step_count,
-                reward=reward))
+        self.action_log.append(dict(
+            observation=observation, action=action,
+            scaled_action=self.action(action), t=self.step_count,
+            reward=reward))
 
     def reset(self):
-        self.unwrapped.save_npz = self._save_npz
         obs = super(ScaledActionWrapper, self).reset()
-        self.unwrapped.save_npz = None
         self._prev_obs = obs
         self._clipped_action = self._last_action = np.zeros_like(self.action_space.sample())
         return obs
 
     def step(self, action):
         o, r, d, i = super(ScaledActionWrapper, self).step(action)
-        self.write_action_log(o, action, r)
         self._prev_obs = o
         self._last_action =  action
         r += np.sum(self._clipped_action) * self.lim_penalty

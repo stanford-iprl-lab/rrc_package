@@ -261,20 +261,20 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 break
 
         is_done = self.step_count >= self.episode_length
-        self.write_action_log(observation, action, reward)
+        # self.write_action_log(observation, action, reward)
         self.info['num_steps'] = self.step_count
 
         return observation, reward, is_done, self.info
 
     def write_action_log(self, observation, action, reward):
-        if self.save_npz:
-            self.action_log.append(dict(
-                observation=observation, action=action, t=self.step_count,
-                reward=reward))
+        self.action_log.append(dict(
+            observation=observation, action=action, t=self.step_count,
+            reward=reward))
 
-    def save_action_log(self):
-        if self.save_npz and self.action_log:
-            np.savez(self.save_npz, initial_pose=self.initial_pose.to_dict(),
+    def save_action_log(self, save_npz=None):
+        save_npz = save_npz or self.save_npz
+        if save_npz and self.action_log:
+            np.savez(save_npz, initial_pose=self.initial_pose.to_dict(),
                      goal_pose=self.goal, action_log=self.action_log)
             del self.action_log
         self.action_log = []
@@ -284,9 +284,6 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
-        if self.save_npz and self.action_log:
-            self.save_action_log()
-
         if robot_fingers is not None:
             self._reset_platform_frontend()
         else:

@@ -168,14 +168,14 @@ class PushCubeEnv(gym.Env):
         self.filtered_position = self.filtered_orientation = None
 
     def write_action_log(self, observation, action, reward):
-        if self.save_npz:
-            self.action_log.append(dict(
-                observation=observation, action=action, t=self.step_count,
-                reward=reward))
+        self.action_log.append(dict(
+            observation=observation, action=action, t=self.step_count,
+            reward=reward))
 
-    def save_action_log(self):
-        if self.save_npz and self.action_log:
-            np.savez(self.save_npz, initial_pose=self.initial_pose.to_dict(),
+    def save_action_log(self, save_npz=None):
+        save_npz = save_npz or self.save_npz
+        if save_npz and self.action_log:
+            np.savez(save_npz, initial_pose=self.initial_pose.to_dict(),
                      goal_pose=self.goal, action_log=self.action_log)
             del self.action_log
         self.action_log = []

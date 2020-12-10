@@ -20,7 +20,7 @@ from trifinger_simulation.tasks import move_cube
 from trifinger_simulation import pinocchio_utils
 from trifinger_simulation import visual_objects
 
-from rrc_iprl_package.envs.rrc_utils import build_env_fn
+from rrc_iprl_package.envs import rrc_utils
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
@@ -647,7 +647,8 @@ class HierarchicalControllerPolicy:
     def platform(self, platform):
         self.impedance_controller.platform = platform
 
-    def load_policy(self, load_dir, **load_kwargs):
+    def load_policy(self, load_dir, load_itr='last', deterministic=False,
+                    **load_kwargs):
         self.observation_names = []
         load_dir = load_dir or self.load_dir
         if not load_dir:
@@ -655,7 +656,7 @@ class HierarchicalControllerPolicy:
             self.rl_observation_space = None
             self.rl_policy = lambda obs: self.impedance_controller.predict(obs)
         elif osp.exists(load_dir) and 'pyt_save' in os.listdir(load_dir):
-            self.load_spinup_policy(load_dir, **load_kwargs)
+            self.load_spinup_policy(load_dir, load_itr, deterministic, **load_kwargs)
         else:
             self.load_sb_policy(load_dir)
 
@@ -674,10 +675,10 @@ class HierarchicalControllerPolicy:
         self.rl_policy = lambda obs: self.sb_policy.predict(obs)[0]
 
     def load_spinup_policy(self, load_dir, load_itr='last', deterministic=False,
-                           ac_wrappers=('scaled',)):
+                           ac_wrappers=('scaled',), **load_kwargs):
         self.rl_env, self.rl_policy = load_policy_and_env(load_dir, load_itr, deterministic)
         if self.rl_env is None:
-            self.rl_env = build_env_fn(ac_wrappers=ac_wrappers)()
+            self.rl_env = rrc_utils.build_env_fn(ac_wrappers=ac_wrappers, **load_kwargs)()
         self.rl_frameskip = self.rl_env.frameskip
         self.observation_names = list(self.rl_env.unwrapped.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
