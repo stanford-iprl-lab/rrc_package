@@ -694,7 +694,7 @@ class DistRewardWrapper(gym.RewardWrapper):
 class CubeRewardWrapper(gym.Wrapper):
     def __init__(self, env, target_dist=0.156, pos_coef=1., ori_coef=0.,
                  fingertip_coef=0., ac_norm_pen=0.2, goal_env=False, rew_fn='exp',
-                 augment_reward=False):
+                 augment_reward=False, min_ftip_height=0.01):
         super(CubeRewardWrapper, self).__init__(env)
         self._target_dist = target_dist
         self._pos_coef = pos_coef
@@ -705,6 +705,7 @@ class CubeRewardWrapper(gym.Wrapper):
         self._prev_action = None
         self._prev_obs = None
         self._augment_reward = augment_reward
+        self._min_ftip_height = min_ftip_height
         self.rew_fn = rew_fn
         self.obj_pos = deque(maxlen=20)
         self.obj_ori = deque(maxlen=20)
@@ -772,10 +773,14 @@ class CubeRewardWrapper(gym.Wrapper):
             - previous_observation["object_position"]
         )
 
-        step_ftip_rew = (
+        ftip_rew = (
             previous_distance_from_block - current_distance_from_block
-        )
-        return self._fingertip_coef * step_ftip_rew
+        ) * self._fingertip_coef
+        ftip_pen = -np.sum(curr_ftip_pos[::3] < self._min_ftip_height)
+        if ftip_pen != 0:
+            ftip_rew = ftip_pen
+        self.info['fingertip_rew'] = ftip_rew
+        return ftip_rew
 
     def compute_reward(self, achieved_goal, desired_goal, info):
         if isinstance(achieved_goal, dict):
@@ -865,7 +870,11 @@ class CubeRewardWrapper(gym.Wrapper):
                 observation = self.unflatten_observation(observation)
             pos, ori = observation['object_position'], observation['object_orientation'],
         elif 'achieved_goal' in observation:
-            pos, ori = observation['achieved_goal'][:3], observation['achieved_goal'][3:]
+            if isinstance(observation['achieved_goal'], dict):
+                pos = observation['achieved_goal']['position']
+                ori = observation['achieved_goal']['orientation']
+            else:
+                pos, ori = observation['achieved_goal'][:3], observation['achieved_goal'][3:]
         object_pose = move_cube.Pose(position=pos,
                                      orientation=ori)
         return goal_pose, object_pose
