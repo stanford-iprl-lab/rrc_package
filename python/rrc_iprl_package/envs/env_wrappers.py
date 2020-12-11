@@ -343,7 +343,8 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             obs_dict = obs_space.spaces
         else:
             obs_dict = self.observation_space.spaces
-        obs_dict['last_action'] = self.action_space
+        if 'action' not in obs_dict:
+            obs_dict['action'] = self.action_space
 
     def reset(self):
         obs = super(TaskSpaceWrapper, self).reset()
@@ -357,7 +358,7 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         obs_dict = obs
         if self.goal_env:
             obs_dict = obs['observation']
-        obs_dict['last_action'] = self._last_action
+        obs_dict['action'] = self._last_action
         return obs
 
     def write_action_log(self, observation, action, reward):
@@ -377,7 +378,7 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         obs_dict = o
         if self.goal_env:
             obs_dict = obs_dict['observation']
-        obs_dict['last_action'] = self._last_action
+        obs_dict['action'] = self._last_action
         return o, r, d, i
 
     def action(self, action):
