@@ -192,7 +192,6 @@ class ImpedanceControllerPolicy:
         # Re-orientation try counters
         self.z_tries = 0
 
-        self.pose_at_grasp_time = None
 
     def set_init_goal(self, initial_pose, goal_pose, flip=False):
         self.goal_pose = goal_pose
@@ -225,8 +224,7 @@ class ImpedanceControllerPolicy:
         else:
             obj_pose = get_pose_from_observation(observation)
 
-        #obj_pose = c_utils.get_aligned_pose(obj_pose)
-        obj_pose = self.pose_at_grasp_time
+        obj_pose = c_utils.get_aligned_pose(obj_pose)
         x0 = np.concatenate([obj_pose.position, obj_pose.orientation])[None]
 
         cur_R = Rotation.from_quat(obj_pose.orientation)
@@ -271,17 +269,8 @@ class ImpedanceControllerPolicy:
     def set_traj_repose_object(self, observation, x0, x_goal, nGrid = 50, dt = 0.01):
         self.traj_waypoint_counter = 0
         qnum = 3
-
-        # Get object pose
-        if self.USE_FILTERED_POSE:
-            obj_pose = self.filtered_obj_pose
-        else:
-            obj_pose = get_pose_from_observation(observation)
-        obj_pose = self.pose_at_grasp_time
             
         print("Compute repose traj for MODE {}".format(self.mode))
-        print("Object pose position: {}".format(obj_pose.position))
-        print("Object pose orientation: {}".format(obj_pose.orientation))
         print("Traj lift x0: {}".format(repr(x0)))
         print("Traj lift x_goal: {}".format(repr(x_goal)))
     
@@ -291,7 +280,7 @@ class ImpedanceControllerPolicy:
         current_ft_pos = self.get_fingertip_pos_wf(current_position)
         
         self.x_soln, self.dx_soln, l_wf_soln = c_utils.run_fixed_cp_traj_opt(
-                obj_pose, self.cp_params, current_position, self.custom_pinocchio_utils,
+                self.cp_params, current_position, self.custom_pinocchio_utils,
                 x0, x_goal, nGrid, dt, npz_filepath = self.lift_trajopt_filepath)
 
         ft_pos = np.zeros((nGrid, 9))
@@ -439,7 +428,6 @@ class ImpedanceControllerPolicy:
             obj_pose = get_pose_from_observation(observation)
 
         obj_pose = c_utils.get_aligned_pose(obj_pose)
-        self.pose_at_grasp_time = obj_pose
 
         # Get joint positions
         current_position, _ = get_robot_position_velocity(observation)
