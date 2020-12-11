@@ -1,0 +1,54 @@
+{
+    "ac_kwargs":	{
+        "activation":	"ReLU",
+        "hidden_sizes":	[
+            64,
+            64
+        ]
+    },
+    "actor_critic":	"MLPActorCritic",
+    "clip_ratio":	0.2,
+    "early_stopping_fn":	null,
+    "env_fn":	"env_fn",
+    "epochs":	250,
+    "exp_name":	"ppo-scaled-rew-cuboid",
+    "gamma":	0.99,
+    "info_kwargs":	{
+        "final_dist":	"FinalDist",
+        "final_ori_dist":	"FinalOriDist",
+        "final_ori_scaled":	"FinalOriScaledDist",
+        "is_success":	"SuccessRateVal",
+        "is_success_ori":	"OriSuccessRateVal"
+    },
+    "lam":	0.97,
+    "load_path":	null,
+    "logger":	{
+        "<spinup.utils.logx.EpochLogger object at 0x7f7a73284f60>":	{
+            "epoch_dict":	{},
+            "exp_name":	"ppo-scaled-rew-cuboid",
+            "first_row":	true,
+            "log_current_row":	{},
+            "log_headers":	[],
+            "max_saves":	10,
+            "output_dir":	"data/rel-goal-reorient-grid/ppo-scaled-rew-cuboid/ppo-scaled-rew-cuboid_s0",
+            "output_file":	{
+                "<_io.TextIOWrapper name='data/rel-goal-reorient-grid/ppo-scaled-rew-cuboid/ppo-scaled-rew-cuboid_s0/progress.txt' mode='w' encoding='UTF-8'>":	{
+                    "mode":	"w"
+                }
+            }
+        }
+    },
+    "logger_kwargs":	{
+        "exp_name":	"ppo-scaled-rew-cuboid",
+        "output_dir":	"data/rel-goal-reorient-grid/ppo-scaled-rew-cuboid/ppo-scaled-rew-cuboid_s0"
+    },
+    "max_ep_len":	1000,
+    "pi_lr":	0.0003,
+    "save_freq":	10,
+    "seed":	0,
+    "steps_per_epoch":	24000,
+    "target_kl":	0.01,
+    "train_pi_iters":	80,
+    "train_v_iters":	80,
+    "vf_lr":	0.001
+}

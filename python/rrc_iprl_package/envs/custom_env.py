@@ -167,15 +167,18 @@ class PushCubeEnv(gym.Env):
         self.alpha = alpha
         self.filtered_position = self.filtered_orientation = None
 
-    def write_action_log(self, observation, action, reward):
-        if self.save_npz:
-            self.action_log.append(dict(
-                observation=observation, action=action, t=self.step_count,
-                reward=reward))
+    def write_action_log(self, observation, action, reward, **log_kwargs):
+        log = dict(
+            observation=observation, action=action, t=self.step_count,
+            reward=reward)
+        for k, v in log_kwargs.items():
+            log[k] = v
+        self.action_log.append(log)
 
-    def save_action_log(self):
-        if self.save_npz and self.action_log:
-            np.savez(self.save_npz, initial_pose=self.initial_pose.to_dict(),
+    def save_action_log(self, save_npz=None):
+        save_npz = save_npz or self.save_npz
+        if save_npz and self.action_log:
+            np.savez(save_npz, initial_pose=self.initial_pose.to_dict(),
                      goal_pose=self.goal, action_log=self.action_log)
             del self.action_log
         self.action_log = []
@@ -475,6 +478,22 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             obs_dict['rl'] = observation_rl
         return obs_dict
 
+    def get_goal_object_ori(self, obs):
+        val = obs['desired_goal']['orientation']
+        goal_rot = Rotation.from_quat(val)
+        actual_rot = Rotation.from_quat(np.array([0,0,0,1]))
+        y_axis = [0, 1, 0]
+        actual_vector = actual_rot.apply(y_axis)
+        goal_vector = goal_rot.apply(y_axis)
+        N = np.array([0,0,1])
+        proj = goal_vector - goal_vector.dot(N) * N
+        proj = proj / np.linalg.norm(proj)
+        ori_error = np.arccos(proj.dot(actual_vector))
+        xyz = np.zeros(3)
+        xyz[2] = ori_error
+        val = Rotation.from_euler('xyz', xyz).as_quat()
+        return val
+    
     def process_observation_rl(self, obs):
         t = self.step_count
         obs_dict = {}
@@ -489,24 +508,25 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             elif on == 'object_position':
                 val = obs['achieved_goal']['position']
             elif on == 'object_orientation':
-                val = obs['achieved_goal']['orientation']
-            elif on == 'goal_position':
-                val = 0 * obs['desired_goal']['position']
-            elif on == 'goal_orientation':
-                # disregard x and y axis rotation for goal_orientation
-                val = obs['desired_goal']['orientation']
-                goal_rot = Rotation.from_quat(val)
-                actual_rot = Rotation.from_quat(np.zeros([0,0,0,1]))
-                y_axis = [0, 1, 0]
-                actual_vector = actual_rot.apply(y_axis)
-                goal_vector = goal_rot.apply(y_axis)
-                N = np.array([0,0,1])
-                proj = goal_vector - goal_vector.dot(N) * N
-                proj = proj / np.linalg.norm(proj)
-                ori_error = np.arccos(proj.dot(actual_vector))
-                xyz = np.zeros(3)
-                xyz[2] = ori_error
+                actual_rot = Rotation.from_quat(obs['achieved_goal']['orientation'])
+                xyz = actual_rot.as_euler('xyz')
+                xyz[:2] = 0.
                 val = Rotation.from_euler('xyz', xyz).as_quat()
+                val = obs['achieved_goal']['orientation']
+            elif on == 'goal_object_position':
+                val = 0 * np.asarray(obs['desired_goal']['position'])
+            elif on == 'goal_object_orientation':
+                # disregard x and y axis rotation for goal_orientation
+                val = self.get_goal_object_ori(obs)
+            elif on == 'relative_goal_object_position':
+                val = 0. * np.asarray(obs['desired_goal']['position']) - np.asarray(obs['achieved_goal']['position'])
+            elif on == 'relative_goal_object_orientation':
+                goal_rot = Rotation.from_quat(self.get_goal_object_ori(obs))
+                actual_rot = Rotation.from_quat(obs_dict['object_orientation'])
+                if self.policy.rl_env.use_quat:
+                    val = (goal_rot*actual_rot.inv()).as_quat()
+                else:
+                    val = get_theta_z_wf(goal_rot, actual_rot)
             elif on == 'action':
                 val = self._last_action
                 if isinstance(val, dict):
@@ -789,3 +809,19 @@ class ResidualPolicyWrapper(ObservationWrapper):
             return {'torque': action, 'position': np.repeat(np.nan, 9)}
         return action
 
+
+def get_theta_z_wf(goal_rot, actual_rot):
+    y_axis = [0, 1, 0]
+
+    actual_direction_vector = actual_rot.apply(y_axis)
+
+    goal_direction_vector = goal_rot.apply(y_axis)
+    N = np.array([0, 0, 1]) # normal vector of ground plane
+    proj = goal_direction_vector - goal_direction_vector.dot(N) * N
+    goal_direction_vector = proj / np.linalg.norm(proj) # normalize projection
+
+    orientation_error = np.arccos(
+	goal_direction_vector.dot(actual_direction_vector)
+    )
+
+    return orientation_error

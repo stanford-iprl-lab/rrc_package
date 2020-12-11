@@ -320,16 +320,10 @@ class SparseCubeEnv(CubeEnv):
 
 @configurable(pickleable=True)
 class TaskSpaceWrapper(gym.ActionWrapper):
-    def __init__(self, env, goal_env=False, relative=False, scale=.008, ac_pen=0.001,
-                 save_npz=None):
+    def __init__(self, env, goal_env=False, relative=False, scale=.008, ac_pen=0.001):
         super(TaskSpaceWrapper, self).__init__(env)
-        if hasattr(self.unwrapped, 'save_npz'):
-            self._save_npz = self.unwrapped.save_npz
-            self.unwrapped.save_npz = None
-            self.action_log = self.unwrapped.action_log
-        else:
-            self.action_log = []
-            self._save_npz = save_npz
+        self.action_log = []
+        self._save_npz = self.unwrapped.save_npz
 
         # assert self.unwrapped.action_type in [ActionType.POSITION, ActionType.TORQUE]
         spaces = TriFingerPlatform.spaces
@@ -352,11 +346,7 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         obs_dict['last_action'] = self.action_space
 
     def reset(self):
-        if hasattr(self.unwrapped, 'save_npz'):
-            self.unwrapped.save_npz = self._save_npz
         obs = super(TaskSpaceWrapper, self).reset()
-        if hasattr(self.unwrapped, 'save_npz'):
-            self.unwrapped.save_npz = None
         platform = self.unwrapped.platform
         if self.pinocchio_utils is None:
             self.pinocchio_utils = CustomPinocchioUtils(
@@ -371,15 +361,13 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         return obs
 
     def write_action_log(self, observation, action, reward):
-        if self._save_npz:
-            self.action_log.append(dict(
-                observation=observation, rl_action=action,
-                action=self.action(action), t=self.step_count,
-                reward=reward))
+        self.action_log.append(dict(
+            observation=observation, rl_action=action,
+            action=self.action(action), t=self.step_count,
+            reward=reward))
 
     def step(self, action):
         o, r, d, i = super(TaskSpaceWrapper, self).step(action)
-        self.write_action_log(o, action, r)
         self._prev_obs = o
         if self.relative:
             r -= self.ac_pen * np.linalg.norm(action)
@@ -427,7 +415,6 @@ class ScaledActionWrapper(gym.ActionWrapper):
                  lim_penalty=0.0):
         super(ScaledActionWrapper, self).__init__(env)
         self._save_npz = self.unwrapped.save_npz
-        self.unwrapped.save_npz = None
         assert self.unwrapped.action_type == ActionType.POSITION, 'position control only'
         self.spaces = TriFingerPlatform.spaces
         self.goal_env = goal_env
@@ -440,26 +427,23 @@ class ScaledActionWrapper(gym.ActionWrapper):
         self.action_space = gym.spaces.Box(low=low, high=high)
         self.scale = scale
         self.lim_penalty = lim_penalty
+        self.dt = self.frameskip * .001
         self.action_log = []
 
     def write_action_log(self, observation, action, reward):
-        if self._save_npz:
-            self.action_log.append(dict(
-                observation=observation, action=action,
-                scaled_action=self.action(action), t=self.step_count,
-                reward=reward))
+        self.action_log.append(dict(
+            observation=observation, action=action,
+            scaled_action=self.action(action), t=self.step_count,
+            reward=reward))
 
     def reset(self):
-        self.unwrapped.save_npz = self._save_npz
         obs = super(ScaledActionWrapper, self).reset()
-        self.unwrapped.save_npz = None
         self._prev_obs = obs
         self._clipped_action = self._last_action = np.zeros_like(self.action_space.sample())
         return obs
 
     def step(self, action):
         o, r, d, i = super(ScaledActionWrapper, self).step(action)
-        self.write_action_log(o, action, r)
         self._prev_obs = o
         self._last_action =  action
         r += np.sum(self._clipped_action) * self.lim_penalty
@@ -490,7 +474,7 @@ class RelativeGoalWrapper(gym.ObservationWrapper):
         super(RelativeGoalWrapper, self).__init__(env)
         self._observation_keys = list(env.observation_space.spaces.keys())
         assert 'goal_object_position' in self._observation_keys, 'goal_object_position missing in observation'
-        self.position_only = 'goal_object_orientation' not in self._observation_keys
+        self.position_only = 'goal_orientation' not in self._observation_keys
         self.use_quat = use_quat
         self.observation_names =  [k for k in self._observation_keys if 'goal_object' not in k]
         self.observation_names.append('relative_goal_object_position')
@@ -711,7 +695,7 @@ class DistRewardWrapper(gym.RewardWrapper):
 class CubeRewardWrapper(gym.Wrapper):
     def __init__(self, env, target_dist=0.156, pos_coef=1., ori_coef=0.,
                  fingertip_coef=0., ac_norm_pen=0.2, goal_env=False, rew_fn='exp',
-                 augment_reward=False):
+                 augment_reward=False, min_ftip_height=0.01, max_velocity=0.175):
         super(CubeRewardWrapper, self).__init__(env)
         self._target_dist = target_dist
         self._pos_coef = pos_coef
@@ -722,6 +706,8 @@ class CubeRewardWrapper(gym.Wrapper):
         self._prev_action = None
         self._prev_obs = None
         self._augment_reward = augment_reward
+        self._min_ftip_height = min_ftip_height
+        self._max_velocity = max_velocity
         self.rew_fn = rew_fn
         self.obj_pos = deque(maxlen=20)
         self.obj_ori = deque(maxlen=20)
@@ -761,6 +747,9 @@ class CubeRewardWrapper(gym.Wrapper):
             reward = self._compute_reward(goal_pose, object_pose, prev_object_pose)
             if self._fingertip_coef:
                 reward += self.compute_fingertip_reward(observation, self._prev_obs)
+        if (observation['observation']['robot_velocity'] > self.max_velocity).any():
+            curr_vel = observation['observation']['robot_velocity']
+            reward += -np.sum(np.clip(curr_vel - self.max_velocity, 0, np.inf))*10
         if self._augment_reward:
             reward += r
 
@@ -789,10 +778,14 @@ class CubeRewardWrapper(gym.Wrapper):
             - previous_observation["object_position"]
         )
 
-        step_ftip_rew = (
+        ftip_rew = (
             previous_distance_from_block - current_distance_from_block
-        )
-        return self._fingertip_coef * step_ftip_rew
+        ) * self._fingertip_coef
+        ftip_pen = -np.sum(curr_ftip_pos[::3] < self._min_ftip_height)
+        if ftip_pen != 0:
+            ftip_rew = ftip_pen
+        self.info['fingertip_rew'] = ftip_rew
+        return ftip_rew
 
     def compute_reward(self, achieved_goal, desired_goal, info):
         if isinstance(achieved_goal, dict):
@@ -882,7 +875,11 @@ class CubeRewardWrapper(gym.Wrapper):
                 observation = self.unflatten_observation(observation)
             pos, ori = observation['object_position'], observation['object_orientation'],
         elif 'achieved_goal' in observation:
-            pos, ori = observation['achieved_goal'][:3], observation['achieved_goal'][3:]
+            if isinstance(observation['achieved_goal'], dict):
+                pos = observation['achieved_goal']['position']
+                ori = observation['achieved_goal']['orientation']
+            else:
+                pos, ori = observation['achieved_goal'][:3], observation['achieved_goal'][3:]
         object_pose = move_cube.Pose(position=pos,
                                      orientation=ori)
         return goal_pose, object_pose

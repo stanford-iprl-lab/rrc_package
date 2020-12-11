@@ -53,7 +53,7 @@ total_steps = 5e6
 step_rates = np.linspace(0, 0.6, 10)
 
 def success_rate_early_stopping(steps, success_rate):
-    return step_rates[min(9, int(steps/total_steps * 10))] > success_rate
+    return steps/total_steps > 0.25 and step_rates[min(9, int(steps/total_steps * 10))] > success_rate
 
 def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
     """Returns env_fn to pass to spinningup alg"""
@@ -70,7 +70,7 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
     return env_fn
 
 def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
-            ac_norm_pen=0, fingertip_coef=0, augment_rew=True,
+            ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
             ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
             sample_radius=0.09, ac_wrappers=[], relative=(False, False, False),
             lim_pen=0., return_wrappers=False, goal_env=False, keep_goal=False,
