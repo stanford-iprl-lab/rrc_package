@@ -65,8 +65,8 @@ class ImpedanceControllerPolicy:
               0.001,]
 
     # Re-orientation constants
-    MIN_Z_ERROR = 0.5
-    MAX_Z_TRIES = 3
+    MIN_Z_ERROR = np.pi/4
+    MAX_Z_TRIES = 2
     Z_INCR      = np.pi/4
 
     FT_RADIUS   = 0.0075
