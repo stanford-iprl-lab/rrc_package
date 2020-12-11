@@ -4,12 +4,14 @@ import gym
 import pybullet
 import os.path as osp
 import logging
+import pdb
 
 from scipy.spatial.transform import Rotation
 from gym import wrappers
 from gym import ObservationWrapper
 from gym.spaces import Dict
 from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy, TrajMode
+from rrc_iprl_package.envs import env_wrappers
 
 try:
     import robot_interfaces
@@ -399,20 +401,11 @@ class PushCubeEnv(gym.Env):
         return observation, reward, is_done, self.info
 
 
-@configurable(pickleable=True)
 class HierarchicalPolicyWrapper(ObservationWrapper):
     def __init__(self, env, policy):
         assert isinstance(env.unwrapped, cube_env.RealRobotCubeEnv), \
                 'env expects type CubeEnv or RealRobotCubeEnv'
-        self.env = self.wrapped_env = env
-        # if env is wrapped, unwrap and store wrapped_env separately
-        if isinstance(env, gym.Wrapper):
-            self.is_wrapped = True
-            self.wrapped_env = env
-            self.env = env.unwrapped
-        else:
-            self.is_wrapped = False
-
+        self.env = env
         self.reward_range = self.env.reward_range
         # set observation_space and action_space below
         spaces = trifinger_simulation.TriFingerPlatform.spaces
@@ -470,6 +463,12 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             if self.rl_observation_space is not None:
                 obs_dict['rl'] = self.rl_observation_space
             self.observation_space = gym.spaces.Dict(obs_dict)
+        # if env is wrapped, unwrap and store wrapped_env separately
+        if isinstance(policy.rl_env, gym.Wrapper):
+            self.is_wrapped = True
+            self.wrapped_env = self.policy.rl_env
+        else:
+            self.is_wrapped = False
 
     def observation(self, observation):
         obs_dict = {'impedance': observation}
@@ -494,7 +493,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         val = Rotation.from_euler('xyz', xyz).as_quat()
         return val
     
-    def process_observation_rl(self, obs):
+    def process_observation_rl(self, obs, return_dict=False):
         t = self.step_count
         obs_dict = {}
         cpu = self.policy.impedance_controller.custom_pinocchio_utils
@@ -532,7 +531,10 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 if isinstance(val, dict):
                     val = val['torque']
             obs_dict[on] = np.asarray(val, dtype='float64').flatten()
+        if return_dict:
+            return obs_dict
 
+        self._prev_obs = obs_dict
         obs = np.concatenate([obs_dict[k] for k in self.rl_observation_names])
         return obs
 
@@ -591,8 +593,6 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 break
 
         is_done = self.step_count == self.episode_length
-        self.unwrapped.write_action_log(self.observation(observation), action,
-                                        reward)
         info = self.env.info
         info['num_steps'] = self.step_count
         return observation, reward, is_done, info
@@ -607,6 +607,22 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
         return robot_action
 
+    def scale_action(self, action, wrapped_env):
+        obs = self._prev_obs
+        poskey, velkey = 'robot_position', 'robot_velocity'
+        current_position, current_velocity = obs[poskey], obs[velkey]
+        if wrapped_env.relative:
+            goal_position = current_position + .8*wrapped_env.scale * action
+            pos_low, pos_high = wrapped_env.env.action_space.low, wrapped_env.env.action_space.high
+        else:
+            pos_low, pos_high = wrapped_env.spaces.robot_position.low, wrapped_env.spaces.robot_position.high
+            pos_low = np.max([current_position - wrapped_env.scale, pos_low], axis=0)
+            pos_high = np.min([current_position + wrapped_env.scale, pos_high], axis=0)
+            goal_position = action
+        action = np.clip(goal_position, pos_low, pos_high)
+        self._clipped_action = np.abs(action - goal_position)
+        return action
+
     def step(self, action):
         # RealRobotCubeEnv handles gym_action_to_robot_action
         #print(self.mode)
@@ -617,13 +633,38 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         if self.is_wrapped and self.mode == PolicyMode.RL_PUSH:
             wrapped_env = self.wrapped_env
             while wrapped_env.unwrapped != wrapped_env:
-                if isinstance(wrapped_env, gym.ActionWrapper):
+                if isinstance(wrapped_env, env_wrappers.ScaledActionWrapper):
+                    action = self.scale_action(action, wrapped_env)
+                elif isinstance(wrapped_env, gym.ActionWrapper):
                     action = wrapped_env.action(action)
                 wrapped_env = wrapped_env.env
 
         obs, r, d, i = self._step(action)
+
+        if self.is_wrapped and self.mode == PolicyMode.RL_PUSH:
+            wrapped_env = self.wrapped_env
+            while wrapped_env.unwrapped != wrapped_env:
+                if isinstance(wrapped_env, env_wrappers.ReorientWrapper):
+                    wrapped_env.goal_env = True
+                    r += wrapped_env.is_success(obs) * wrapped_env.rew_bonus
+                elif isinstance(wrapped_env, env_wrappers.CubeRewardWrapper):
+                    goal_pose, prev_object_pose = self.get_goal_object_pose(self._prev_obs)
+                    rl_obs = self.process_observation_rl(obs, return_dict=True)
+                    _, object_pose = self.get_goal_object_pose(rl_obs)
+                    wrapped_env._prev_action = action
+                    r += wrapped_env._compute_reward(goal_pose, object_pose, prev_object_pose)
+                wrapped_env = wrapped_env.env
         obs = self.observation(obs)
         return obs, r, d, i
+
+    def get_goal_object_pose(self, observation):
+        goal_pose = self.unwrapped.goal
+        goal_pose = move_cube.Pose.from_dict(goal_pose)
+        if not isinstance(observation, dict):
+            observation = self.unflatten_observation(observation)
+        pos, ori = observation['object_position'], observation['object_orientation'],
+        object_pose = move_cube.Pose(position=pos, orientation=ori)
+        return goal_pose, object_pose
 
 
 class ResidualPolicyWrapper(ObservationWrapper):

@@ -94,7 +94,7 @@ def main():
             if EP_LEN is not None and is_done and (eps_so_far+1)*EP_LEN < MAX_STEPS:
                 is_done = False
                 eps_so_far += 1
-                env.write_action_log(save_path())
+                env.save_action_log(save_path())
                 observation = env.reset()
 
     except Exception as e:
