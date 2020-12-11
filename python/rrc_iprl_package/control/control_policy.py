@@ -69,7 +69,7 @@ class ImpedanceControllerPolicy:
     MAX_Z_TRIES = 3
     Z_INCR      = np.pi/4
 
-    FT_RADIUS   = 0.0095
+    FT_RADIUS   = 0.0075
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
                  npz_file=None, debug_waypoints=False, difficulty=None):
