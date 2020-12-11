@@ -529,14 +529,13 @@ def get_aligned_pose(obj_pose):
 ##############################################################################
 """
 Run trajectory optimization
-obj_pose: current object pose (for getting contact points)
 current_position: current joint positions of robot
 x0: object initial position for traj opt
 x_goal: object goal position for traj opt
 nGrid: number of grid points
 dt: delta t
 """
-def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, npz_filepath = None):
+def run_fixed_cp_traj_opt(cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, npz_filepath = None):
 
     cp_params_on_obj = []
     for cp in cp_params:
