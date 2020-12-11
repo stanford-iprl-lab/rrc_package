@@ -78,7 +78,7 @@ do
     fi
 
     # Increment difficulty level
-    for (( d=2; d<3; d++))
+    for (( d=2; d<5; d++))
     do
         # Increment goal counter 
         for (( gc=0; gc<3; gc++ ))
