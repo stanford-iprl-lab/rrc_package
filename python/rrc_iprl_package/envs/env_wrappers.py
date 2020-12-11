@@ -427,6 +427,7 @@ class ScaledActionWrapper(gym.ActionWrapper):
         self.action_space = gym.spaces.Box(low=low, high=high)
         self.scale = scale
         self.lim_penalty = lim_penalty
+        self.dt = self.frameskip * .001
         self.action_log = []
 
     def write_action_log(self, observation, action, reward):
@@ -694,7 +695,7 @@ class DistRewardWrapper(gym.RewardWrapper):
 class CubeRewardWrapper(gym.Wrapper):
     def __init__(self, env, target_dist=0.156, pos_coef=1., ori_coef=0.,
                  fingertip_coef=0., ac_norm_pen=0.2, goal_env=False, rew_fn='exp',
-                 augment_reward=False, min_ftip_height=0.01):
+                 augment_reward=False, min_ftip_height=0.01, max_velocity=0.175):
         super(CubeRewardWrapper, self).__init__(env)
         self._target_dist = target_dist
         self._pos_coef = pos_coef
@@ -706,6 +707,7 @@ class CubeRewardWrapper(gym.Wrapper):
         self._prev_obs = None
         self._augment_reward = augment_reward
         self._min_ftip_height = min_ftip_height
+        self._max_velocity = max_velocity
         self.rew_fn = rew_fn
         self.obj_pos = deque(maxlen=20)
         self.obj_ori = deque(maxlen=20)
@@ -745,6 +747,9 @@ class CubeRewardWrapper(gym.Wrapper):
             reward = self._compute_reward(goal_pose, object_pose, prev_object_pose)
             if self._fingertip_coef:
                 reward += self.compute_fingertip_reward(observation, self._prev_obs)
+        if (observation['observation']['robot_velocity'] > self.max_velocity).any():
+            curr_vel = observation['observation']['robot_velocity']
+            reward += -np.sum(np.clip(curr_vel - self.max_velocity, 0, np.inf))*10
         if self._augment_reward:
             reward += r
 
