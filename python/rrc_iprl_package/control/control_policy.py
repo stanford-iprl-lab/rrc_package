@@ -41,7 +41,7 @@ class TrajMode(enum.Enum):
 
 
 class ImpedanceControllerPolicy:
-    USE_FILTERED_POSE = False
+    USE_FILTERED_POSE = True
 
     KP = [300, 300, 400,
           300, 300, 400,
@@ -719,7 +719,8 @@ class ImpedanceControllerPolicy:
         #    new_pose.orientation = self.filtered_obj_pose.orientation.copy()
 
         f_p = (1-theta) * self.filtered_obj_pose.position + theta * new_pose.position
-        f_o = (1-theta) * self.filtered_obj_pose.orientation + theta * new_pose.orientation
+        f_o = new_pose.orientation
+        #f_o = (1-theta) * self.filtered_obj_pose.orientation + theta * new_pose.orientation
         
         filt_pose = move_cube.Pose(position=f_p, orientation=f_o)
         self.filtered_obj_pose = filt_pose
