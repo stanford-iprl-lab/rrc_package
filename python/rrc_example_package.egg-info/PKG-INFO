@@ -1,0 +1,11 @@
+Metadata-Version: 1.2
+Name: rrc-example-package
+Version: 1.0.0
+Summary: Example package for the Real Robot Challenge Submission System.
+Home-page: https://real-robot-challenge.com/
+Author: 
+Maintainer: Felix Widmaier
+Maintainer-email: felix.widmaier@tue.mpg.de
+License: BSD 3-clause
+Description: UNKNOWN
+Platform: UNKNOWN
