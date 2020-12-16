@@ -1,9 +1,0 @@
-README.md
-setup.py
-python/rrc_example_package/__init__.py
-python/rrc_example_package/cube_env.py
-python/rrc_example_package/example.py
-python/rrc_example_package.egg-info/PKG-INFO
-python/rrc_example_package.egg-info/SOURCES.txt
-python/rrc_example_package.egg-info/dependency_links.txt
-python/rrc_example_package.egg-info/top_level.txt
