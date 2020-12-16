@@ -320,7 +320,7 @@ class SparseCubeEnv(CubeEnv):
 
 @configurable(pickleable=True)
 class TaskSpaceWrapper(gym.ActionWrapper):
-    def __init__(self, env, goal_env=False, relative=False, scale=.008, ac_pen=0.001):
+    def __init__(self, env, goal_env=False, relative=False, scale=.008, ac_pen=0.01):
         super(TaskSpaceWrapper, self).__init__(env)
         self.action_log = []
         self._save_npz = self.unwrapped.save_npz
@@ -747,9 +747,9 @@ class CubeRewardWrapper(gym.Wrapper):
             reward = self._compute_reward(goal_pose, object_pose, prev_object_pose)
             if self._fingertip_coef:
                 reward += self.compute_fingertip_reward(observation, self._prev_obs)
-        if (observation['observation']['robot_velocity'] > self.max_velocity).any():
-            curr_vel = observation['observation']['robot_velocity']
-            reward += -np.sum(np.clip(curr_vel - self.max_velocity, 0, np.inf))*10
+        if (observation['robot_velocity'] > self._max_velocity).any():
+            curr_vel = observation['robot_velocity']
+            reward += -np.sum(np.clip(curr_vel - self._max_velocity, 0, np.inf))*10
         if self._augment_reward:
             reward += r
 
@@ -781,7 +781,7 @@ class CubeRewardWrapper(gym.Wrapper):
         ftip_rew = (
             previous_distance_from_block - current_distance_from_block
         ) * self._fingertip_coef
-        ftip_pen = -np.sum(curr_ftip_pos[::3] < self._min_ftip_height)
+        ftip_pen = -np.sum(np.array(curr_ftip_pos[::3]) < self._min_ftip_height)
         if ftip_pen != 0:
             ftip_rew = ftip_pen
         self.info['fingertip_rew'] = ftip_rew

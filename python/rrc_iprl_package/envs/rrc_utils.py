@@ -80,7 +80,7 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
     step_rew = 'step' in ac_wrappers
     sa_relative, ts_relative, goal_relative = relative
     if goal_env:
-        env_str = 'real_robot_challenge_phase_2-v1'
+        env_str = 'real_robot_challenge_phase_2-v0'
     else:
         env_str = 'real_robot_challenge_phase_2-v2'
     action_type = cube_env.ActionType.POSITION
