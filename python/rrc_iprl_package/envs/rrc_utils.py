@@ -72,13 +72,12 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
 def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
             ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
             ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
-            sample_radius=0.09, ac_wrappers=[], relative=(False, False, False),
-            lim_pen=0., return_wrappers=False, goal_env=False, keep_goal=False,
-            use_quat=False):
+            sample_radius=0.09, ac_wrappers=[], sa_relative=False, ts_relative=False,
+            goal_relative=False, lim_pen=0., return_wrappers=False,
+            goal_env=False, keep_goal=False, use_quat=False):
     scaled_ac = 'scaled' in ac_wrappers
     task_space = 'task' in ac_wrappers
     step_rew = 'step' in ac_wrappers
-    sa_relative, ts_relative, goal_relative = relative
     if goal_env:
         env_str = 'real_robot_challenge_phase_2-v0'
     else:
