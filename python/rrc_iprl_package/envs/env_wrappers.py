@@ -336,7 +336,16 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             high = np.ones_like(high)
         self.action_space = gym.spaces.Box(low=low, high=high)
         self.scale = scale
-        self.pinocchio_utils = None
+        pose = np.zeros(7)
+        pose[-1] = 1
+        pose = move_cube.Pose.from_dict(dict(position=pose[:3], orientation=pose[3:]))
+        self._platform = TriFingerPlatform(
+                visualization=False,
+                initial_object_pose=pose,
+            )
+        self.pinocchio_utils = CustomPinocchioUtils(
+                    self._platform.simfinger.finger_urdf_path,
+                    self._platform.simfinger.tip_link_names)
         self.ac_pen = ac_pen
         if self.goal_env:
             obs_space = self.observation_space.spaces['observation']
@@ -348,11 +357,6 @@ class TaskSpaceWrapper(gym.ActionWrapper):
 
     def reset(self):
         obs = super(TaskSpaceWrapper, self).reset()
-        platform = self.unwrapped.platform
-        if self.pinocchio_utils is None:
-            self.pinocchio_utils = CustomPinocchioUtils(
-                    platform.simfinger.finger_urdf_path,
-                    platform.simfinger.tip_link_names)
         self._prev_obs = obs
         self._last_action = np.zeros_like(self.action_space.sample())
         obs_dict = obs
@@ -381,8 +385,8 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         obs_dict['action'] = self._last_action
         return o, r, d, i
 
-    def action(self, action):
-        obs = self._prev_obs
+    def action(self, action, obs=None):
+        obs = obs or self._prev_obs
         poskey, velkey = 'robot_position', 'robot_velocity'
         if self.goal_env:
             obs, poskey, velkey = obs['observation'], 'position', 'velocity'
@@ -450,8 +454,8 @@ class ScaledActionWrapper(gym.ActionWrapper):
         r += np.sum(self._clipped_action) * self.lim_penalty
         return o, r, d, i
 
-    def action(self, action):
-        obs = self._prev_obs
+    def action(self, action, obs=None):
+        obs = obs or self._prev_obs
         poskey, velkey = 'robot_position', 'robot_velocity'
         if self.goal_env:
             obs, poskey, velkey = obs['observation'], 'position', 'velocity'
@@ -748,6 +752,9 @@ class CubeRewardWrapper(gym.Wrapper):
             reward = self._compute_reward(goal_pose, object_pose, prev_object_pose)
             if self._fingertip_coef:
                 reward += self.compute_fingertip_reward(observation, self._prev_obs)
+        if self._goal_env:
+            observation = observation['observation']
+
         if (observation['robot_velocity'] > self._max_velocity).any():
             curr_vel = observation['robot_velocity']
             reward += -np.sum(np.clip(curr_vel - self._max_velocity, 0, np.inf))*10
@@ -768,8 +775,8 @@ class CubeRewardWrapper(gym.Wrapper):
             prev_ftip_pos = previous_observation['robot_tip_position']
             curr_ftip_pos = observation['robot_tip_position']
         else:
-            prev_ftip_pos = self.platform.forward_kinematics(previous_observation['robot_position'])
-            curr_ftip_pos = self.platform.forward_kinematics(observation['robot_position'])
+            prev_ftip_pos = np.asarray(self.platform.forward_kinematics(previous_observation['robot_position']))
+            curr_ftip_pos = np.asarray(self.platform.forward_kinematics(observation['robot_position']))
 
         current_distance_from_block = np.linalg.norm(
            curr_ftip_pos - observation["object_position"]

@@ -9,3 +9,5 @@ logs/
 
 .python-version
 output/
+
+.idea/

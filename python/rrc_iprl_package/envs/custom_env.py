@@ -426,7 +426,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         if self.impedance_control_mode:
             return self._action_space['torque']
         else:
-            return self._action_space['position']
+            return self.wrapped_env.action_space
 
     @property
     def action_type(self):
@@ -635,8 +635,10 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             while wrapped_env.unwrapped != wrapped_env:
                 if isinstance(wrapped_env, env_wrappers.ScaledActionWrapper):
                     action = self.scale_action(action, wrapped_env)
-                elif isinstance(wrapped_env, gym.ActionWrapper):
+                elif isinstance(wrapped_env, wrappers.ClipAction):
                     action = wrapped_env.action(action)
+                elif isinstance(wrapped_env, gym.ActionWrapper):
+                    action = wrapped_env.action(action, self._prev_obs)
                 wrapped_env = wrapped_env.env
 
         obs, r, d, i = self._step(action)

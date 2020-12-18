@@ -57,10 +57,12 @@ def main():
     )
 
     if difficulty == 4:
+        # model_path = 'models/ppo-scaled-rew-cuboid/ppo-scaled-rew-cuboid_s0'
+        model_path = 'rel-task-goal-reorient-grid/ppo-reorient_kg_acwtask/ppo-reorient_kg_acwtask_s0/'
         if osp.exists('/ws/src/usercode'):
-            rl_load_dir = '/ws/src/usercode/models/ppo-scaled-rew-cuboid/ppo-scaled-rew-cuboid_s0'
+            rl_load_dir = '/ws/src/usercode/{}'.format(model_path)
         else:
-            rl_load_dir = './models/ppo-scaled-rew-cuboid/ppo-scaled-rew-cuboid_s0'
+            rl_load_dir = './models/{}'.format(model_path)
         start_mode = PolicyMode.RL_PUSH
     else:
         rl_load_dir, start_mode = '', PolicyMode.TRAJ_OPT
@@ -69,9 +71,11 @@ def main():
                    initial_pose=initial_pose, goal_pose=goal_pose,
                    load_dir=rl_load_dir, difficulty=difficulty,
                    start_mode=start_mode)
-    policy.load_policy(rl_load_dir, ac_wrappers=('scaled',), relative=(False,False,True), 
-                       pos_coef=.5, ori_coef=.5, frameskip=15, ep_len=600)
+    policy.load_policy(rl_load_dir, ac_wrappers=('task',), ts_relative=True, goal_relative=True, 
+                       pos_coef=.1, ori_coef=.1, frameskip=15, ep_len=600, keep_goal=True,
+                       use_quat=True)
     env = custom_env.HierarchicalPolicyWrapper(env, policy)
+    import pdb; pdb.set_trace()
     observation = env.reset()
 
     accumulated_reward = 0
