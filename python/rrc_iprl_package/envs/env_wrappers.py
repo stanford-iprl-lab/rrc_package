@@ -30,7 +30,8 @@ _CUBOID_WIDTH = max(move_cube._CUBOID_SIZE)
 _CUBOID_HEIGHT = min(move_cube._CUBOID_SIZE)
 
 ORI_THRESH = np.pi / 8
-REW_BONUS = 1
+REW_BONUS = 10
+REW_PENALTY = -10
 POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
                       0.203])
 
@@ -529,6 +530,7 @@ class RelativeGoalWrapper(gym.ObservationWrapper):
 @configurable(pickleable=True)
 class ReorientWrapper(gym.Wrapper):
     def __init__(self, env, goal_env=True, rew_bonus=REW_BONUS,
+                 rew_penalty=REW_PENALTY,
                  dist_thresh=0.09, ori_thresh=np.pi/6):
         super(ReorientWrapper, self).__init__(env)
         if not isinstance(self.unwrapped.initializer, ReorientInitializer):
@@ -536,13 +538,16 @@ class ReorientWrapper(gym.Wrapper):
             self.unwrapped.initializer = initializer
         self.goal_env = goal_env
         self.rew_bonus = rew_bonus
+        self.rew_penalty = rew_penalty
         self.dist_thresh = dist_thresh
         self.ori_thresh = ori_thresh
 
     def step(self, action):
         o, r, d, i = super(ReorientWrapper, self).step(action)
         i['is_success'] = self.is_success(o)
-        if i['is_success']:
+        if not i['is_success'] and d:
+            r -= self.rew_penalty
+        elif i['is_success']:
             r += self.rew_bonus
         return o, r, d, i
 
@@ -735,6 +740,8 @@ class CubeRewardWrapper(gym.Wrapper):
     def reset(self, **reset_kwargs):
         self._prev_action = None
         self._prev_obs = super(CubeRewardWrapper, self).reset(**reset_kwargs)
+        self.obj_pos.clear()
+        self.obj_ori.clear()
         return self._prev_obs
 
     def step(self, action):
@@ -752,6 +759,7 @@ class CubeRewardWrapper(gym.Wrapper):
             reward = self._compute_reward(goal_pose, object_pose, prev_object_pose)
             if self._fingertip_coef:
                 reward += self.compute_fingertip_reward(observation, self._prev_obs)
+
         if self._goal_env:
             observation = observation['observation']
 
@@ -804,6 +812,7 @@ class CubeRewardWrapper(gym.Wrapper):
             goal_pos, goal_ori = desired_goal[:3], desired_goal[3:]
         self.obj_pos.append(obj_pos)
         self.obj_ori.append(obj_ori)
+        # sliding window average
         obj_pos, obj_ori = np.mean(self.obj_pos, axis=0), np.mean(self.obj_ori, axis=0)
         goal_pose = move_cube.Pose(position=goal_pos, orientation=goal_ori)
         object_pose = move_cube.Pose(position=obj_pos, orientation=obj_ori)

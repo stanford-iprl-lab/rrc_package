@@ -55,6 +55,15 @@ class PushCubeEnv(gym.Env):
         visualization=False,
         alpha=0.01,
         save_npz=None
+        target_dist=0.156,
+        pos_coef=0.5,
+        ori_coef=0.5,
+        fingertip_coef=0.,
+        step_coef=0.,
+        ac_norm_pen=0.2,
+        rew_fn='exp',
+        min_ftip_height=0.01, 
+        max_velocity=0.17
         ):
         """Initialize.
 
@@ -166,8 +175,20 @@ class PushCubeEnv(gym.Env):
 
         self.observation_space = gym.spaces.Dict({k:obs_spaces[k]
                                                   for k in self.observation_names})
+        self._min_ftip_height = min_ftip_height
+        self._max_velocity = max_velocity
+        self.rew_fn = rew_fn
+        self.obj_pos = deque(maxlen=20)
+        self.obj_ori = deque(maxlen=20)
         self.alpha = alpha
         self.filtered_position = self.filtered_orientation = None
+        self._target_dist = target_dist
+        self._pos_coef = pos_coef
+        self._ori_coef = ori_coef
+        self._fingertip_coef = fingertip_coef
+        self._step_coef = step_coef
+        self._ac_norm_pen = ac_norm_pen
+
 
     def write_action_log(self, observation, action, reward, **log_kwargs):
         log = dict(
@@ -319,36 +340,91 @@ class PushCubeEnv(gym.Env):
 
         return {k: observation[k] for k in self.observation_names}
 
+    def compute_position_error(self, goal_pose, object_pose):
+        pos_error = np.linalg.norm(object_pose.position - goal_pose.position)
+        return pos_error
+
+    def compute_orientation_error(self, goal_pose, actual_pose):
+        goal_rot = Rotation.from_quat(goal_pose.orientation)
+        actual_rot = Rotation.from_quat(actual_pose.orientation)
+
+        y_axis = [0, 1, 0]
+        goal_direction_vector = goal_rot.apply(y_axis)
+        actual_direction_vector = actual_rot.apply(y_axis)
+
+        orientation_error = np.arccos(
+            goal_direction_vector.dot(actual_direction_vector)
+        )
+
+        # scale both position and orientation error to be within [0, 1] for
+        # their expected ranges
+        error = orientation_error / np.pi
+        return error
+
     @staticmethod
     def _compute_reward(previous_observation, observation):
+        goal_pose = self.goal
+        if not isinstance(goal_pose, move_cube.Pose):
+            goal_pose = move_cube.Pose.from_dict(goal_pose)
+        prev_object_pose = move_cube.Pose(position=previous_observation['object_position'],
+                                          orientation=previous_observation['object_orientation'])
+        object_pose = move_cube.Pose(position=observation['object_position'],
+                                     orientation=observation['object_orientation'])
 
-        # calculate first reward term
-        current_distance_from_block = np.linalg.norm(
-            observation["robot_tip_positions"] - observation["object_position"]
-        )
-        previous_distance_from_block = np.linalg.norm(
-            previous_observation["robot_tip_positions"]
-            - previous_observation["object_position"]
-        )
+        info = info or self.unwrapped.info
+        pos_error = self.compute_position_error(goal_pose, object_pose)
 
-        reward_term_1 = (
-            previous_distance_from_block - current_distance_from_block
-        )
+        # compute previous object pose error
+        if prev_object_pose is not None:
+            prev_pos_error = self.compute_position_error(goal_pose, prev_object_pose)
+            step_rew = step_pos_rew = prev_pos_error - pos_error
+        else:
+            step_rew = 0
 
-        # calculate second reward term
-        current_dist_to_goal = np.linalg.norm(
-            observation["goal_object_position"]
-            - observation["object_position"]
-        )
-        previous_dist_to_goal = np.linalg.norm(
-            previous_observation["goal_object_position"]
-            - previous_observation["object_position"]
-        )
-        reward_term_2 = previous_dist_to_goal - current_dist_to_goal
+        if self.difficulty == 4 or self._ori_coef:
+            ori_error = self.compute_orientation_error(goal_pose, object_pose)
+            if prev_object_pose is not None:
+                prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
+                step_ori_rew = prev_ori_error - ori_error
+                step_rew = (step_pos_rew * self._pos_coef +
+                            step_ori_rew * self._ori_coef)
+            else:
+                step_rew = 0
 
-        reward = 500 * reward_term_1 + 250 * reward_term_2
-        return reward
+        # compute position and orientation joint reward based on chosen rew_fn 
+        if self.rew_fn == 'lin':
+            rew = self._pos_coef * (1 - pos_error/self.target_dist)
+            if self.difficulty == 4 or self._ori_coef:
+                rew += self._ori_coef * (1 - ori_error)
+        elif self.rew_fn == 'exp4':
+            rew = self._pos_coef * (1 - (pos_error/self.target_dist)**0.4)
+            if self.difficulty == 4 or self._ori_coef:
+                rew += self._ori_coef * (1 - ori_error**0.4)
+        elif self.rew_fn == 'exp':
+            # pos error penalty
+            if pos_error >= self.target_dist:
+                rew = -1
+            else:
+                rew = self._pos_coef * np.exp(-pos_error/self.target_dist)
+            if self.difficulty == 4 or self._ori_coef:
+                rew += self._ori_coef * np.exp(-ori_error)
 
+        # Add to info dict
+        # compute action penalty
+        ac_penalty = -np.linalg.norm(self._prev_action) * self._ac_norm_pen
+        info['ac_penalty'] = ac_penalty
+        if step_rew:
+            info['step_rew'] = step_rew
+        info['rew'] = rew
+        info['pos_error'] = pos_error
+        if self.difficulty == 4 or self._ori_coef:
+            info['ori_error'] = ori_error
+        total_rew = self._step_coef * step_rew + rew + ac_penalty
+        # if pos and ori error are below threshold 
+        if pos_error < DIST_THRESH or ori_error < ORI_THRESH:
+            return 2.5 * ((pos_error < DIST_THRESH) + (ori_error < ORI_THRESH))
+        return total_rew
+         
     def step(self, action):
         if self.platform is None:
             raise RuntimeError("Call `reset()` before starting to step.")

@@ -86,10 +86,11 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
 
     # 1. Reward wrappers
     rew_wrappers = []
-    rew_wrappers.append(functools.partial(env_wrappers.CubeRewardWrapper,
-                pos_coef=pos_coef, ori_coef=ori_coef,
-                ac_norm_pen=ac_norm_pen, fingertip_coef=fingertip_coef,
-                rew_fn=rew_fn, augment_reward=augment_rew))
+    if cube_rew:
+        rew_wrappers.append(functools.partial(env_wrappers.CubeRewardWrapper,
+                    pos_coef=pos_coef, ori_coef=ori_coef,
+                    ac_norm_pen=ac_norm_pen, fingertip_coef=fingertip_coef,
+                    rew_fn=rew_fn, augment_reward=augment_rew))
     # Step reward wrapper
     if step_rew:
         rew_wrappers.append(env_wrappers.StepRewardWrapper)
