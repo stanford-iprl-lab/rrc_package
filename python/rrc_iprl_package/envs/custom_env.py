@@ -7,6 +7,7 @@ import logging
 import pdb
 
 from scipy.spatial.transform import Rotation
+from collections import deque
 from gym import wrappers
 from gym import ObservationWrapper
 from gym.spaces import Dict
@@ -33,6 +34,17 @@ from rrc_iprl_package.envs.env_wrappers import configurable
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy, ImpedanceControllerPolicy
 
+MAX_DIST = move_cube._max_cube_com_distance_to_center
+DIST_THRESH = 0.02
+_CUBOID_WIDTH = max(move_cube._CUBOID_SIZE)
+_CUBOID_HEIGHT = min(move_cube._CUBOID_SIZE)
+
+ORI_THRESH = np.pi / 8
+REW_BONUS = 10
+REW_PENALTY = -10
+POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
+                      0.203])
+
 
 @configurable(pickleable=True)
 class PushCubeEnv(gym.Env):
@@ -54,7 +66,7 @@ class PushCubeEnv(gym.Env):
         num_steps=None,
         visualization=False,
         alpha=0.01,
-        save_npz=None
+        save_npz=None,
         target_dist=0.156,
         pos_coef=0.5,
         ori_coef=0.5,
@@ -98,7 +110,7 @@ class PushCubeEnv(gym.Env):
         self.platform = None
         self.save_npz = save_npz
         self.action_log = []
-        self._prev_action = None
+        self._prev_action = np.zeros(9)
         self.action_type = action_type
 
         # Create the action and observation spaces
@@ -188,7 +200,6 @@ class PushCubeEnv(gym.Env):
         self._fingertip_coef = fingertip_coef
         self._step_coef = step_coef
         self._ac_norm_pen = ac_norm_pen
-
 
     def write_action_log(self, observation, action, reward, **log_kwargs):
         log = dict(
@@ -361,8 +372,7 @@ class PushCubeEnv(gym.Env):
         error = orientation_error / np.pi
         return error
 
-    @staticmethod
-    def _compute_reward(previous_observation, observation):
+    def _compute_reward(self, previous_observation, observation):
         goal_pose = self.goal
         if not isinstance(goal_pose, move_cube.Pose):
             goal_pose = move_cube.Pose.from_dict(goal_pose)
@@ -371,7 +381,7 @@ class PushCubeEnv(gym.Env):
         object_pose = move_cube.Pose(position=observation['object_position'],
                                      orientation=observation['object_orientation'])
 
-        info = info or self.unwrapped.info
+        info = self.unwrapped.info
         pos_error = self.compute_position_error(goal_pose, object_pose)
 
         # compute previous object pose error
@@ -381,7 +391,7 @@ class PushCubeEnv(gym.Env):
         else:
             step_rew = 0
 
-        if self.difficulty == 4 or self._ori_coef:
+        if self._ori_coef:
             ori_error = self.compute_orientation_error(goal_pose, object_pose)
             if prev_object_pose is not None:
                 prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
@@ -393,20 +403,20 @@ class PushCubeEnv(gym.Env):
 
         # compute position and orientation joint reward based on chosen rew_fn 
         if self.rew_fn == 'lin':
-            rew = self._pos_coef * (1 - pos_error/self.target_dist)
-            if self.difficulty == 4 or self._ori_coef:
+            rew = self._pos_coef * (1 - pos_error/self._target_dist)
+            if self._ori_coef:
                 rew += self._ori_coef * (1 - ori_error)
         elif self.rew_fn == 'exp4':
-            rew = self._pos_coef * (1 - (pos_error/self.target_dist)**0.4)
-            if self.difficulty == 4 or self._ori_coef:
+            rew = self._pos_coef * (1 - (pos_error/self._target_dist)**0.4)
+            if self._ori_coef:
                 rew += self._ori_coef * (1 - ori_error**0.4)
         elif self.rew_fn == 'exp':
             # pos error penalty
-            if pos_error >= self.target_dist:
+            if pos_error >= self._target_dist:
                 rew = -1
             else:
-                rew = self._pos_coef * np.exp(-pos_error/self.target_dist)
-            if self.difficulty == 4 or self._ori_coef:
+                rew = self._pos_coef * np.exp(-pos_error/self._target_dist)
+            if self._ori_coef:
                 rew += self._ori_coef * np.exp(-ori_error)
 
         # Add to info dict
@@ -417,7 +427,7 @@ class PushCubeEnv(gym.Env):
             info['step_rew'] = step_rew
         info['rew'] = rew
         info['pos_error'] = pos_error
-        if self.difficulty == 4 or self._ori_coef:
+        if self._ori_coef:
             info['ori_error'] = ori_error
         total_rew = self._step_coef * step_rew + rew + ac_penalty
         # if pos and ori error are below threshold 
@@ -626,6 +636,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
         # initial_object_pose = move_cube.sample_goal(difficulty=-1) 
         self.policy.reset_policy(obs['impedance'], self._platform)
+        self._prev_action = np.zeros(9)
         return obs
 
     def _step(self, action):

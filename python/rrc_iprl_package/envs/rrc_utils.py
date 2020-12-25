@@ -74,7 +74,8 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
             ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
             sample_radius=0.09, ac_wrappers=[], sa_relative=False, ts_relative=False,
             goal_relative=False, lim_pen=0., return_wrappers=False,
-            goal_env=False, keep_goal=False, use_quat=False):
+            goal_env=False, keep_goal=False, use_quat=False,
+            cube_rew=False, step_rew=False):
     scaled_ac = 'scaled' in ac_wrappers
     task_space = 'task' in ac_wrappers
     step_rew = 'step' in ac_wrappers
