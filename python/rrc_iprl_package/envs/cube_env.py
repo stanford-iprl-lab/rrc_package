@@ -131,8 +131,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         self.default_position = default_position
         if self.action_type == ActionType.TORQUE:
-            assert self.action_type in [ActionType.POSITION,
-                    ActionType.TORQUE_AND_POSITION]
+            # assert self.action_type in [ActionType.POSITION,
+            #         ActionType.TORQUE_AND_POSITION]
             self.action_space = robot_torque_space
             self._initial_action = trifingerpro_limits.robot_torque.default
         elif self.action_type == ActionType.POSITION:

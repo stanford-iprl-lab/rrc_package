@@ -994,6 +994,79 @@ class StepRewardWrapper(gym.RewardWrapper):
         return step_reward
 
 
+class ObservationNoiseParams:
+    def __init__(self, object_pos_std=1., object_ori_std=1., robot_pos_std=0.,
+                 robot_vel_std=0., action_noise_loc=-0.01,
+                 action_noise_scale=0.01):
+        self.object_pos_std = object_pos_std
+        self.object_ori_std = object_ori_std
+        self.robot_pos_std = robot_pos_std
+        self.robot_vel_std = robot_vel_std
+        self.action_noise_loc = action_noise_loc
+        self.action_noise_scale = action_noise_scale
+
+    def randomize(self):
+        self.action_noise_loc = np.random.randn(self.action_noise_loc.size)*.1
+        if self.action_noise_scale:
+            self.action_noise_scale = 10**np.random.uniform(-3, 1)
+
+
+class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
+    def __init__(self, env, noise_params=None):
+        super(ObservationNoiseWrapper, self).__init__(env)
+        self.noise_params = noise_params or ObservationNoiseParams()
+
+    def randomize_params(self):
+        self.noise_params.randomize()
+
+    def reset(self, randomize=False, **kwargs):
+        if randomize:
+            self.randomize_params()
+        return super(ObservationNoiseWrapper, self).reset(**kwargs)
+
+    def step(self, action):
+        action = self.action(action)
+        return super(ObservationNoiseWrapper, self).step(action)
+
+    def action(self, action):
+        action_noise = np.random.normal(self.noise_params.action_noise_loc,
+                                   scale=self.noise_params.action_noise_scale,
+                                   size=action.shape)
+        if self.action_type == ActionType.TORQUE_AND_POSITION:
+            action['torque'] += action_noise
+            action['torque'] = np.clip(action['torque'], self.action_space.low,
+                                       self.action_space.high)
+        else:
+            action += action_noise
+            action = np.clip(action, self.action_space.low, self.action_space.high)
+        return action
+
+    def observation(self, obs):
+        if 'object_position' in obs and self.noise_params.object_pos_std:
+            obs['object_position'] += np.random.normal(
+                    scale=self.noise_params.object_pos_std,
+                    size=obs['object_position'].size
+                )
+        if 'object_orientation' in obs and self.noise_params.object_ori_std:
+            rot = Rotation.from_quat(obs['object_orientation'])
+            xyz = rot.as_euler('xyz')
+            xyz += np.random.normal(
+                    scale=self.noise_params.object_ori_std,
+                    size=3
+                )
+        if 'robot_position' in obs and self.noise_params.robot_pos_std:
+            obs['robot_position'] += np.random.normal(
+                    scale=self.noise_params.robot_pos_std,
+                    size=obs['robot_position'].size
+                )
+        if 'robot_velocity' in obs and self.noise_params.robot_vel_std:
+            obs['robot_velocity'] += np.random.normal(
+                    scale=self.noise_params.robot_vel_std,
+                    size=obs['robot_velocity'].size
+                )
+        return obs
+
+
 # Phase 3 orientation error
 def compute_orientation_error(goal_pose, actual_pose):
     goal_rot = Rotation.from_quat(goal_pose.orientation)

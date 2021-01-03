@@ -474,7 +474,7 @@ class PushCubeEnv(gym.Env):
             )
 
         is_done = self.step_count == move_cube.episode_length
-        if is_done and isinstance(self.initializer, CurriculumInitializer):
+        if is_done and isinstance(self.initializer, env_wrappers.CurriculumInitializer):
             goal_pose = self.goal
             if not isinstance(goal_pose, move_cube.Pose):
                 goal_pose = move_cube.Pose.from_dict(goal_pose)
