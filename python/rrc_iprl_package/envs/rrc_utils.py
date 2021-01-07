@@ -71,7 +71,7 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
 
 def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
             ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
-            ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
+            ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp4',
             sample_radius=0.09, ac_wrappers=[], sa_relative=False, ts_relative=False,
             goal_relative=False, lim_pen=0., return_wrappers=False,
             goal_env=False, keep_goal=False, use_quat=False,
@@ -127,12 +127,24 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
     ewrappers += rew_wrappers + final_wrappers
 
     # initializer = env_wrappers.ReorientInitializer(1, sample_radius)
-    p2_fixed_reorient = env_wrappers.RandomGoalOrientationInitializer(difficulty=1)
+    initializer = env_wrappers.RandomGoalOrientationInitializer()
 
-    ret = make_env_fn(env_str, ewrappers,
-                      initializer=p2_fixed_reorient, # initializer,
-                      action_type=action_type,
-                      frameskip=frameskip)
+    if goal_env:
+        ret = make_env_fn(env_str, ewrappers,
+                          initializer=initializer,
+                          action_type=action_type,
+                          frameskip=frameskip)
+    else:
+        ret = make_env_fn(env_str, ewrappers,
+                          initializer=initializer,
+                          action_type=action_type,
+                          frameskip=frameskip,
+                          pos_coef=pos_coef,
+                          ori_coef=ori_coef,
+                          fingertip_coef=fingertip_coef,
+                          ac_norm_pen=ac_norm_pen,
+                          rew_fn=rew_fn
+                          )
 
     if return_wrappers:
         ret = (ret, ewrappers)
@@ -143,7 +155,7 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
 if phase == 1:
     push_random_initializer = cube_env.RandomInitializer(difficulty=1)
 
-    fixed_reorient_initializer = custom_env.RandomGoalOrientationInitializer(difficulty=1)
+    fixed_reorient_initializer = custom_env.RandomGoalOrientationInitializer()
 
     push_curr_initializer = custom_env.CurriculumInitializer(initial_dist=0.,
                                                              num_levels=5)
@@ -329,7 +341,7 @@ if phase == 2:
     p2_env_str = "real_robot_challenge_phase_2-v2"
 
     # INITIALIZERS
-    p2_fixed_reorient = env_wrappers.RandomGoalOrientationInitializer(difficulty=1)
+    p2_fixed_reorient = env_wrappers.RandomGoalOrientationInitializer()
     p2_push_curr = env_wrappers.CurriculumInitializer(initial_dist=0.,
                                                       num_levels=5)
     p2_push_fixed = env_wrappers.CurriculumInitializer(initial_dist=0.,

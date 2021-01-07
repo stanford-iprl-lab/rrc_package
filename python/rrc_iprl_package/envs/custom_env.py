@@ -73,7 +73,7 @@ class PushCubeEnv(gym.Env):
         fingertip_coef=0.,
         step_coef=0.,
         ac_norm_pen=0.2,
-        rew_fn='exp',
+        rew_fn='exp4',
         min_ftip_height=0.01, 
         max_velocity=0.17
         ):
@@ -391,8 +391,9 @@ class PushCubeEnv(gym.Env):
         else:
             step_rew = 0
 
+
+        ori_error = self.compute_orientation_error(goal_pose, object_pose)
         if self._ori_coef:
-            ori_error = self.compute_orientation_error(goal_pose, object_pose)
             if prev_object_pose is not None:
                 prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
                 step_ori_rew = prev_ori_error - ori_error
@@ -418,6 +419,10 @@ class PushCubeEnv(gym.Env):
                 rew = self._pos_coef * np.exp(-pos_error/self._target_dist)
             if self._ori_coef:
                 rew += self._ori_coef * np.exp(-ori_error)
+        elif self.rew_fn == 'cost':
+            rew = self._pos_coef * (-pos_error / self._target_dist)
+            if self._ori_coef:
+                rew += self._ori_coef * (-ori_error)
 
         # Add to info dict
         # compute action penalty
@@ -474,6 +479,8 @@ class PushCubeEnv(gym.Env):
             )
 
         is_done = self.step_count == move_cube.episode_length
+        if self.rew_fn == 'cost':
+            is_done = is_done or reward >= 2.5
         if is_done and isinstance(self.initializer, env_wrappers.CurriculumInitializer):
             goal_pose = self.goal
             if not isinstance(goal_pose, move_cube.Pose):

@@ -268,16 +268,26 @@ class ReorientInitializer:
 class RandomGoalOrientationInitializer:
     init_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
 
-    def __init__(self, difficulty=1, max_dist=np.pi):
-        self.difficulty = difficulty
+    def __init__(self, max_dist=np.pi):
+        self.difficulty = 1
         self.max_dist = max_dist
         self.random = np.random.RandomState()
 
     def get_initial_state(self):
-        return move_cube.sample_goal(-1)
+        self.init_pose = move_cube.sample_goal(-1)
+        return self.init_pose
 
     def get_goal(self):
         goal =  move_cube.sample_goal(-1)
+        if self.max_dist:
+            init_rot = Rotation.from_quat(self.init_pose.orientation)
+            init_xyz = init_rot.as_euler('xyz')
+            goal_y = init_xyz[1] + self.max_dist * np.random.uniform(-1, 1)
+            if np.abs(goal_y) > 2*np.pi:
+                goal_y -= np.sign(goal_y)*2*np.pi
+            goal_xyz = init_xyz[:]
+            goal_xyz[1] = goal_y
+            goal.orientation = Rotation.from_euler('xyz', goal_xyz).as_quat()
         goal.position = np.zeros(3)
         return goal
 
