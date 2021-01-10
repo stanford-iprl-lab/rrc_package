@@ -11,8 +11,6 @@ from collections import deque
 from gym import wrappers
 from gym import ObservationWrapper
 from gym.spaces import Dict
-from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy, TrajMode
-from rrc_iprl_package.envs import env_wrappers
 
 try:
     import robot_interfaces
@@ -28,11 +26,15 @@ from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
 
 import rrc_iprl_package.pybullet_utils as pbutils
+from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
+from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy, TrajMode
+from rrc_iprl_package.envs import env_wrappers
 from rrc_iprl_package.envs import cube_env
 from rrc_iprl_package.envs.cube_env import ActionType
 from rrc_iprl_package.envs.env_wrappers import configurable
 from rrc_iprl_package.control.controller_utils import PolicyMode
-from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy, ImpedanceControllerPolicy
+from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
+
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
 DIST_THRESH = 0.02
@@ -355,6 +357,18 @@ class PushCubeEnv(gym.Env):
         pos_error = np.linalg.norm(object_pose.position - goal_pose.position)
         return pos_error
 
+    def compute_corner_error(self, goal_pose, actual_pose):
+        # copy goal and actual poses to new Pose objects
+        goal_pose = move_cube.Pose.from_dict(goal_pose.to_dict())
+        actual_pose = move_cube.Pose.from_dict(actual_pose.to_dict())
+        # reset goal and actual pose positions to center
+        goal_pose.position = np.array([0., 0., .01])
+        actual_pose.position = np.array([0., 0., .01])
+        goal_corners = move_cube.get_cube_corner_positions(goal_pose)
+        actual_corners = move_cube.get_cube_corner_positions(actual_pose)
+        orientation_errors = np.linalg.norm(goal_corners - actual_corners, axis=1)
+        return orientation_errors
+
     def compute_orientation_error(self, goal_pose, actual_pose):
         goal_rot = Rotation.from_quat(goal_pose.orientation)
         actual_rot = Rotation.from_quat(actual_pose.orientation)
@@ -372,6 +386,25 @@ class PushCubeEnv(gym.Env):
         error = orientation_error / np.pi
         return error
 
+    def compute_fingertip_error(self, observation):
+        if 'robot_tip_positions' not in observation:
+            ftip_pos = observation['robot_position']
+            ftip_pos = self.platform.forward_kinematics(
+                    observation['robot_position']
+                )
+            if self.kinematics is None:
+                robot_tip_positions = self.platform.forward_kinematics(
+                    robot_observation.position)
+            else:
+                robot_tip_positions = self.kinematics.forward_kinematics(
+                        robot_observation.position)
+            ftip_pos = np.array(robot_tip_positions)
+        else:
+            ftip_pos = observation.get('robot_tip_positions')
+        ftip_err = np.linalg.norm(ftip_pos.reshape((3,3))
+                        - observation.get('object_position'), axis=1)
+        return ftip_err
+
     def _compute_reward(self, previous_observation, observation):
         goal_pose = self.goal
         if not isinstance(goal_pose, move_cube.Pose):
@@ -383,24 +416,17 @@ class PushCubeEnv(gym.Env):
 
         info = self.unwrapped.info
         pos_error = self.compute_position_error(goal_pose, object_pose)
+        ori_error = self.compute_orientation_error(goal_pose, object_pose)
+        ori_error = self.compute_corner_error(goal_pose, object_pose).sum()
 
         # compute previous object pose error
         if prev_object_pose is not None:
             prev_pos_error = self.compute_position_error(goal_pose, prev_object_pose)
-            step_rew = step_pos_rew = prev_pos_error - pos_error
+            prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
+            prev_ori_error = self.compute_corner_error(goal_pose, prev_object_pose).sum()
+            step_rew = (prev_pos_error - pos_error) + (prev_ori_error - ori_error)
         else:
             step_rew = 0
-
-
-        ori_error = self.compute_orientation_error(goal_pose, object_pose)
-        if self._ori_coef:
-            if prev_object_pose is not None:
-                prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
-                step_ori_rew = prev_ori_error - ori_error
-                step_rew = (step_pos_rew * self._pos_coef +
-                            step_ori_rew * self._ori_coef)
-            else:
-                step_rew = 0
 
         # compute position and orientation joint reward based on chosen rew_fn 
         if self.rew_fn == 'lin':
@@ -412,13 +438,19 @@ class PushCubeEnv(gym.Env):
             if self._ori_coef:
                 rew += self._ori_coef * (1 - ori_error**0.4)
         elif self.rew_fn == 'exp':
-            # pos error penalty
+            # pos error penalty/reward
             if pos_error >= self._target_dist:
                 rew = -1
             else:
                 rew = self._pos_coef * np.exp(-pos_error/self._target_dist)
+            # ori error reward
             if self._ori_coef:
                 rew += self._ori_coef * np.exp(-ori_error)
+            # fingertip error reward
+            if self._fingertip_coef:
+                ftip_error = self.compute_fingertip_error(observation)
+                rew += (self._fingertip_coef *
+                        np.exp(-(ftip_error - _CUBOID_HEIGHT) / _CUBOID_HEIGHT)).sum()
         elif self.rew_fn == 'cost':
             rew = self._pos_coef * (-pos_error / self._target_dist)
             if self._ori_coef:
@@ -434,12 +466,11 @@ class PushCubeEnv(gym.Env):
         info['pos_error'] = pos_error
         if self._ori_coef:
             info['ori_error'] = ori_error
+
         total_rew = self._step_coef * step_rew + rew + ac_penalty
-        # if pos and ori error are below threshold 
-        if pos_error < DIST_THRESH or ori_error < ORI_THRESH:
-            return 2.5 * ((pos_error < DIST_THRESH) + (ori_error < ORI_THRESH))
-        return total_rew
-         
+
+        return total_rew + ((pos_error < DIST_THRESH) + (ori_error < ORI_THRESH))
+
     def step(self, action):
         if self.platform is None:
             raise RuntimeError("Call `reset()` before starting to step.")
@@ -503,7 +534,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         # set observation_space and action_space below
         spaces = trifinger_simulation.TriFingerPlatform.spaces
         self._action_space = gym.spaces.Dict({
-            'torque': spaces.robot_torque.gym, 'position': spaces.robot_position.gym})
+            'torque': spaces.robot_torque.gym, 'position': spaces.robot_position.gym}) 
         self._last_action = np.zeros(9)
         self.set_policy(policy)
         self._platform = None
@@ -585,7 +616,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         xyz[2] = ori_error
         val = Rotation.from_euler('xyz', xyz).as_quat()
         return val
-    
+
     def process_observation_rl(self, obs, return_dict=False):
         t = self.step_count
         obs_dict = {}
@@ -835,6 +866,14 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.full_observation_space = gym.spaces.Dict(
                 {'impedance': imp_obs_space, 'rl': rl_obs_space})
         self.impedance_controller = None
+        if robot_interfaces:
+            platform = trifinger_simulation.TriFingerPlatform(
+                visualization=self.visualization,
+                initial_object_pose=initial_object_pose,
+            )
+            self.kinematics = platform.simfinger.kinematics
+        else:
+            self.kinematics = None
 
         if self.goal_env:
             imp_obs_spaces = imp_obs_space.spaces
@@ -891,17 +930,13 @@ class ResidualPolicyWrapper(ObservationWrapper):
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
         object_observation = camera_observation.object_pose
-        try:
+        if self.kinematics is None:
             robot_tip_positions = self.platform.forward_kinematics(
                 robot_observation.position)
-            robot_tip_positions = np.array(robot_tip_positions)
-        except:
-            if self.impedance_controller is not None:
-                robot_tip_positions = self.impedance_controller.custom_pinocchio_utils.forward_kinematics(robot_observation.position)
-            else:
-                print("using wrong tip pos")
-                robot_tip_positions = [0.0, 0.9, -1.7, 0.0, 0.9, -1.7, 0.0, 0.9, -1.7]
-            robot_tip_positions = np.array(robot_tip_positions)
+        else:
+            robot_tip_positions = self.kinematics.forward_kinematics(
+                    robot_observation.position)
+        robot_tip_positions = np.array(robot_tip_positions)
         goal_pose = self.goal
         if not isinstance(goal_pose, dict):
             goal_pose = goal_pose.to_dict()

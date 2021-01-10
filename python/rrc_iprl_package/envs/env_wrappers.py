@@ -1005,7 +1005,7 @@ class StepRewardWrapper(gym.RewardWrapper):
 
 
 class ObservationNoiseParams:
-    def __init__(self, object_pos_std=1., object_ori_std=1., robot_pos_std=0.,
+    def __init__(self, object_pos_std=.001, object_ori_std=0., robot_pos_std=0.,
                  robot_vel_std=0., action_noise_loc=-0.01,
                  action_noise_scale=0.01):
         self.object_pos_std = object_pos_std

@@ -72,13 +72,11 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
 def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
             ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
             ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp4',
-            sample_radius=0.09, ac_wrappers=[], sa_relative=False, ts_relative=False,
+            sample_radius=0.09, sa_relative=False, ts_relative=False,
             goal_relative=False, lim_pen=0., return_wrappers=False,
             goal_env=False, keep_goal=False, use_quat=False,
-            cube_rew=False, step_rew=False):
-    scaled_ac = 'scaled' in ac_wrappers
-    task_space = 'task' in ac_wrappers
-    step_rew = 'step' in ac_wrappers
+            cube_rew=False, step_rew=False, reorient_env=False,
+            scaled_ac=False, task_space=False):
     if goal_env:
         env_str = 'real_robot_challenge_phase_2-v0'
     else:
@@ -97,9 +95,11 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
         rew_wrappers.append(env_wrappers.StepRewardWrapper)
 
     # Reorient wrapper (for is_done flag)
-    rew_wrappers.append(functools.partial(env_wrappers.ReorientWrapper,
-                                          goal_env=goal_env, dist_thresh=dist_thresh,
-                                          ori_thresh=ori_thresh))
+    if reorient_env:
+        rew_wrappers.append(functools.partial(env_wrappers.ReorientWrapper,
+                                              goal_env=goal_env,
+                                              dist_thresh=dist_thresh,
+                                              ori_thresh=ori_thresh))
     # 2. Action wrappers (scaled actions, task space, 
     final_wrappers = []
     if scaled_ac:
