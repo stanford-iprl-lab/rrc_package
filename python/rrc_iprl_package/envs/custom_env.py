@@ -74,7 +74,7 @@ class PushCubeEnv(gym.Env):
         ori_coef=0.5,
         fingertip_coef=0.,
         step_coef=0.,
-        ac_norm_pen=0.2,
+        ac_norm_pen=0.1,
         rew_fn='exp4',
         min_ftip_height=0.01, 
         max_velocity=0.17
@@ -409,8 +409,11 @@ class PushCubeEnv(gym.Env):
 
     def _compute_reward(self, previous_observation, observation):
         goal_pose = self.goal
-        prev_object_pose = move_cube.Pose(position=previous_observation['object_position'],
-                                          orientation=previous_observation['object_orientation'])
+        if previous_observation is None:
+            prev_object_pose = None
+        else:
+            prev_object_pose = move_cube.Pose(position=previous_observation['object_position'],
+                                           orientation=previous_observation['object_orientation'])
         object_pose = move_cube.Pose(position=observation['object_position'],
                                      orientation=observation['object_orientation'])
 
@@ -442,10 +445,11 @@ class PushCubeEnv(gym.Env):
             if pos_error >= self._target_dist:
                 rew = -1
             else:
-                rew = self._pos_coef * np.exp(-pos_error/self._target_dist)
+                rew = self._pos_coef * np.exp(
+                        -np.min(0, pos_error - DIST_THRESH) / self._target_dist)
             # ori error reward
             if self._ori_coef:
-                rew += self._ori_coef * np.exp(-ori_error)
+                rew += self._ori_coef * np.exp(-np.min(0, ori_error - ORI_THRESH))
             # fingertip error reward
             if self._fingertip_coef:
                 ftip_error = self.compute_fingertip_error(observation)
@@ -467,7 +471,7 @@ class PushCubeEnv(gym.Env):
         info['ori_error'] = ori_error
         info['corner_error'] = corner_error
 
-        total_rew = self._step_coef * step_rew + rew + ac_penalty
+        total_rew = rew + ac_penalty + self._step_coef * step_rew
         return total_rew + ((pos_error < DIST_THRESH) + (ori_error < ORI_THRESH))
 
     def step(self, action):
