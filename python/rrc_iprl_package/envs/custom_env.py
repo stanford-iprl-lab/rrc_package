@@ -97,9 +97,9 @@ class PushCubeEnv(gym.Env):
 
         self.initializer = initializer
         if initializer:
-            self.goal = initializer.get_goal().to_dict()
+            self.goal = initializer.get_goal()
         else:
-            self.goal = cube_goal_pose
+            self.goal = move_cube.Pose.from_dict(cube_goal_pose)
         self.info = {'difficulty': initializer.difficulty}
         self.visualization = visualization
 
@@ -145,9 +145,7 @@ class PushCubeEnv(gym.Env):
         )
 
         # verify that the given goal pose is contained in the cube state space
-        goal_pose = self.goal
-        if not isinstance(goal_pose, dict):
-            goal_pose = goal_pose.to_dict()
+        goal_pose = self.goal.to_dict()
         if not object_state_space.contains(goal_pose):
             raise ValueError("Invalid goal pose.")
 
@@ -215,7 +213,7 @@ class PushCubeEnv(gym.Env):
         save_npz = save_npz or self.save_npz
         if save_npz and self.action_log:
             np.savez(save_npz, initial_pose=self.initial_pose.to_dict(),
-                     goal_pose=self.goal, action_log=self.action_log)
+                     goal_pose=self.goal.to_dict(), action_log=self.action_log)
             del self.action_log
         self.action_log = []
 
@@ -249,6 +247,11 @@ class PushCubeEnv(gym.Env):
             self.num_resets += 1
         else:
             self.platform = robot_fingers.TriFingerPlatformFrontend()
+            platform = trifinger_simulation.TriFingerPlatform(
+                visualization=False,
+                initial_object_pose=move_cube.sample_goal(difficulty=-1)
+            )
+            self.kinematics = platform.simfinger.kinematics
 
     def _reset_direct_simulation(self):
         """Reset direct simulation.
@@ -266,16 +269,14 @@ class PushCubeEnv(gym.Env):
             visualization=self.visualization,
             initial_object_pose=initial_object_pose,
         )
+        self.kinematics = self.platform.simfinger.kinematics
 
         # visualize the goal
         if self.visualization:
-            goal_pose = self.goal
-            if not isinstance(goal_pose, dict):
-                goal_pose = self.goal.to_dict()
             self.goal_marker = trifinger_simulation.visual_objects.CuboidMarker(
                 size=move_cube._CUBOID_SIZE,
-                position=goal_pose["position"]+np.array([0,0,.01]),
-                orientation=goal_pose["orientation"],
+                position=self.goal.position,
+                orientation=self.goal.orientation,
                 pybullet_client_id=self.platform.simfinger._pybullet_client_id,
             )
             pbutils.reset_camera()
@@ -288,7 +289,7 @@ class PushCubeEnv(gym.Env):
             self._reset_direct_simulation()
 
         if self.initializer:
-            self.goal = self.initializer.get_goal().to_dict()
+            self.goal = self.initializer.get_goal()
 
         self.info = {"difficulty": self.initializer.difficulty}
         self.step_count = 0
@@ -324,7 +325,7 @@ class PushCubeEnv(gym.Env):
                           self.alpha*cam_pose.position)
 
         try:
-            robot_tip_positions = self.platform.forward_kinematics(
+            robot_tip_positions = self.kinematics.forward_kinematics(
                 robot_observation.position
             )
             robot_tip_positions = np.array(robot_tip_positions)
@@ -332,9 +333,7 @@ class PushCubeEnv(gym.Env):
             robot_tip_positions = np.zeros(9)
 
         # verify that the given goal pose is contained in the cube state space
-        goal_pose = self.goal
-        if not isinstance(goal_pose, dict):
-            goal_pose = goal_pose.to_dict()
+        goal_pose = self.goal.to_dict()
 
         self._obs_dict = observation = {
             "robot_position": robot_observation.position,
@@ -389,41 +388,42 @@ class PushCubeEnv(gym.Env):
     def compute_fingertip_error(self, observation):
         if 'robot_tip_positions' not in observation:
             ftip_pos = observation['robot_position']
-            ftip_pos = self.platform.forward_kinematics(
+            ftip_pos = self.kinematics.forward_kinematics(
                     observation['robot_position']
                 )
-            if self.kinematics is None:
-                robot_tip_positions = self.platform.forward_kinematics(
-                    robot_observation.position)
-            else:
-                robot_tip_positions = self.kinematics.forward_kinematics(
-                        robot_observation.position)
-            ftip_pos = np.array(robot_tip_positions)
         else:
             ftip_pos = observation.get('robot_tip_positions')
         ftip_err = np.linalg.norm(ftip_pos.reshape((3,3))
                         - observation.get('object_position'), axis=1)
         return ftip_err
 
+    def _compute_reward_old(self, previous_observation, observation):
+        goal_pose = self.goal
+        prev_object_pose = move_cube.Pose(position=previous_observation['object_position'],
+                                          orientation=previous_observation['object_orientation'])
+        object_pose = move_cube.Pose(position=observation['object_position'],
+                                     orientation=observation['object_orientation'])
+        corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
+        prev_corner_error = self.compute_corner_error(goal_pose, prev_object_pose)
+        return -corner_error.sum()
+
     def _compute_reward(self, previous_observation, observation):
         goal_pose = self.goal
-        if not isinstance(goal_pose, move_cube.Pose):
-            goal_pose = move_cube.Pose.from_dict(goal_pose)
         prev_object_pose = move_cube.Pose(position=previous_observation['object_position'],
                                           orientation=previous_observation['object_orientation'])
         object_pose = move_cube.Pose(position=observation['object_position'],
                                      orientation=observation['object_orientation'])
 
-        info = self.unwrapped.info
+        info = self.info
         pos_error = self.compute_position_error(goal_pose, object_pose)
         ori_error = self.compute_orientation_error(goal_pose, object_pose)
-        ori_error = self.compute_corner_error(goal_pose, object_pose).sum()
+        corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
 
         # compute previous object pose error
-        if prev_object_pose is not None:
+        if previous_observation:
             prev_pos_error = self.compute_position_error(goal_pose, prev_object_pose)
             prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
-            prev_ori_error = self.compute_corner_error(goal_pose, prev_object_pose).sum()
+            prev_corner_error = self.compute_corner_error(goal_pose, prev_object_pose).sum()
             step_rew = (prev_pos_error - pos_error) + (prev_ori_error - ori_error)
         else:
             step_rew = 0
@@ -464,11 +464,10 @@ class PushCubeEnv(gym.Env):
             info['step_rew'] = step_rew
         info['rew'] = rew
         info['pos_error'] = pos_error
-        if self._ori_coef:
-            info['ori_error'] = ori_error
+        info['ori_error'] = ori_error
+        info['corner_error'] = corner_error
 
         total_rew = self._step_coef * step_rew + rew + ac_penalty
-
         return total_rew + ((pos_error < DIST_THRESH) + (ori_error < ORI_THRESH))
 
     def step(self, action):
@@ -489,6 +488,7 @@ class PushCubeEnv(gym.Env):
             num_steps = max(1, num_steps - excess)
 
         reward = 0.0
+        observation = previous_observation = None
         for _ in range(num_steps):
             self.step_count += 1
             if self.step_count > move_cube.episode_length:
@@ -501,21 +501,20 @@ class PushCubeEnv(gym.Env):
             # Use observations of step t + 1 to follow what would be expected
             # in a typical gym environment.  Note that on the real robot, this
             # will not be possible
-            previous_observation = self._create_observation(t, self._prev_action)
-            observation = self._create_observation(t + 1, action)
+            if previous_observation is None and observation is not None:
+                previous_observation = observation
+            observation = self._create_observation(t, self._prev_action)
 
-            reward += self._compute_reward(
-                previous_observation=previous_observation,
-                observation=observation,
-            )
+        reward += self._compute_reward(
+            previous_observation=previous_observation,
+            observation=observation,
+        )
 
         is_done = self.step_count == move_cube.episode_length
         if self.rew_fn == 'cost':
             is_done = is_done or reward >= 2.5
         if is_done and isinstance(self.initializer, env_wrappers.CurriculumInitializer):
             goal_pose = self.goal
-            if not isinstance(goal_pose, move_cube.Pose):
-                goal_pose = move_cube.Pose.from_dict(goal_pose)
             object_pose = move_cube.Pose.from_dict(dict(
                 position=observation['object_position'].flatten(),
                 orientation=observation['object_orientation'].flatten()))

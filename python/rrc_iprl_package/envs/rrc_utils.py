@@ -78,7 +78,7 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
             cube_rew=False, step_rew=False, reorient_env=False,
             scaled_ac=False, task_space=False):
     if goal_env:
-        env_str = 'real_robot_challenge_phase_2-v0'
+        env_str = 'real_robot_challenge_phase_2-v1'
     else:
         env_str = 'real_robot_challenge_phase_2-v2'
     action_type = cube_env.ActionType.POSITION
@@ -115,9 +115,12 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
                     'final_ori_dist', 'final_ori_scaled']
     p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
                                             info_keys=p2_info_keys)
-    final_wrappers += [functools.partial(wrappers.TimeLimit, max_episode_steps=ep_len),
-                       p2_log_info_wrapper,
-                       wrappers.ClipAction, wrappers.FlattenObservation]
+    final_wrappers.append(functools.partial(wrappers.TimeLimit, max_episode_steps=ep_len))
+    if goal_env:
+        final_wrappers.append(env_wrappers.FlattenGoalWrapper)
+    final_wrappers +=  [p2_log_info_wrapper, wrappers.ClipAction]
+    if not goal_env:
+        final_wrappers.append(wrappers.FlattenObservation)
     ewrappers = []
     if task_space:
         assert not scaled_ac, 'Can only use TaskSpaceWrapper OR ScaledActionWrapper'

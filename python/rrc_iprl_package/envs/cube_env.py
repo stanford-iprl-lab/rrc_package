@@ -41,6 +41,11 @@ class ActionType(enum.Enum):
 
 class RealRobotCubeEnv(gym.GoalEnv):
     """Gym environment for moving cubes with simulated TriFingerPro."""
+    observation_names = ["position",
+            "velocity",
+            "torque",
+            "tip_positions",
+            "action"]
 
     def __init__(
         self,
@@ -150,18 +155,24 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "position": default_position,
             }
         else:
-            raise ValueError("Invalid action_type")
+            raise ValueError("Invalid action_type")    
 
+        observation_state_space = {
+                "position": robot_position_space,
+                "velocity": robot_velocity_space,
+                "torque": robot_torque_space,
+                "action": self.action_space,
+                "tip_positions": gym.spaces.Box(
+                    low=np.concatenate([trifingerpro_limits.object_position.low]*3),
+                    high=np.concatenate([trifingerpro_limits.object_position.high]*3))
+            }
+        observation_state_space = gym.spaces.Dict({
+                k: observation_state_space[k] 
+                    for k in self.observation_names
+            })
         self.observation_space = gym.spaces.Dict(
             {
-                "observation": gym.spaces.Dict(
-                    {
-                        "position": robot_position_space,
-                        "velocity": robot_velocity_space,
-                        "torque": robot_torque_space,
-                    }
-                ),
-                "action": self.action_space,
+                "observation": observation_state_space,
                 "desired_goal": object_state_space,
                 "achieved_goal": object_state_space,
             }
@@ -334,6 +345,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self.num_resets += 1
         else:
             self.platform = robot_fingers.TriFingerPlatformFrontend()
+            platform = trifinger_simulation.TriFingerPlatform(
+                visualization=False,
+                initial_object_pose=self.initial_pose,
+            )
+            self.kinematics = platform.simfinger.kinematics
             self.t_prev = 0
 
     def _reset_direct_simulation(self):
@@ -349,6 +365,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             visualization=self.visualization,
             initial_object_pose=self.initial_pose,
         )
+        self.kinematics = self.platform.simfinger.kinematics
         self.t_prev = 0
 
         # visualize the goal
@@ -393,27 +410,29 @@ class RealRobotCubeEnv(gym.GoalEnv):
         robot_observation = self.platform.get_robot_observation(t)
         camera_observation = self.platform.get_camera_observation(t)
 
-        observation = {
-            "observation": {
+        ftip_pos = np.asarray(self.kinematics.forward_kinematics(
+            robot_observation.position))
+        obs_dict = {
                 "position": robot_observation.position,
                 "velocity": robot_observation.velocity,
                 "torque": robot_observation.torque,
-            },
-            "action": action,
+                "tip_positions": ftip_pos
+            }
+        obs_dict = {k: obs_dict[k] for k in self.observation_names}
+        observation = { 
+            "observation": obs_dict,
             "desired_goal": self.goal,
             "achieved_goal": {
                 "position": camera_observation.object_pose.position,
                 "orientation": camera_observation.object_pose.orientation,
             },
-            "cam0_timestamp": camera_observation.cameras[0].timestamp,
         }
 
-        if osp.exists("/output"):
-            obj_pose = self.get_camera_pose(camera_observation)
-            observation["filtered_achieved_goal"] = {
-                "position": obj_pose.position,
-                "orientation": obj_pose.orientation}
-
+        # if osp.exists("/output"):
+        #     obj_pose = self.get_camera_pose(camera_observation)
+        #     observation["filtered_achieved_goal"] = {
+        #         "position": obj_pose.position,
+        #         "orientation": obj_pose.orientation}
         return observation
 
 
@@ -437,7 +456,7 @@ class CubeEnv(RealRobotCubeEnv):
     def __init__(
         self,
         initializer,
-        goal_difficulty: int,
+        goal_difficulty: int = 1,
         action_type: ActionType = ActionType.POSITION,
         default_position: np.ndarray = np.array([0.0, 0.75, -1.6] * 3),
         visualization: bool = False,
