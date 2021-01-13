@@ -69,11 +69,11 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
         return env
     return env_fn
 
-def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=.09,
+def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
                  ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
-                 ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp4',
-                 sample_radius=.09, sa_relative=False, ts_relative=False,
-                 goal_relative=False, lim_pen=0., return_wrappers=False,
+                 ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
+                 sample_radius=0.09, sa_relative=True, ts_relative=False,
+                 goal_relative=True, lim_pen=0., return_wrappers=False,
                  goal_env=False, keep_goal=False, use_quat=False,
                  cube_rew=False, step_rew=False, reorient_env=False,
                  scaled_ac=False, task_space=False):
@@ -81,6 +81,10 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=.09,
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
         env_str = 'real_robot_challenge_phase_2-v2'
+    custom_env.DIST_THRESH = dist_thresh
+    custom_env.ORI_THRESH = ori_thresh
+    env_wrappers.DIST_THRESH = dist_thresh
+    env_wrappers.ORI_THRESH = ori_thresh
     action_type = cube_env.ActionType.POSITION
 
     # 1. Reward wrappers
@@ -353,7 +357,7 @@ if phase == 2:
                                                        num_levels=2)
     p2_reorient_curr = env_wrappers.CurriculumInitializer(
             initial_dist=0.06, num_levels=3, difficulty=4,
-            fixed_goal=env_wrappers.RandomOrientationInitializer.goal)
+            fixed_goal=env_wrappers.RandomOrientationInitializer.def_goal_pose)
     p2_recenter = env_wrappers.ReorientInitializer(1, 0.09)
 
     p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',

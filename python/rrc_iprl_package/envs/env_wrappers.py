@@ -293,7 +293,7 @@ class RandomGoalOrientationInitializer:
 
 
 class RandomOrientationInitializer:
-    goal = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
+    def_goal_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
 
     def __init__(self, difficulty=4):
         self.difficulty = difficulty
@@ -302,7 +302,7 @@ class RandomOrientationInitializer:
         return move_cube.sample_goal(-1)
 
     def get_goal(self):
-        return self.goal
+        return self.def_goal_pose
 
 
 @configurable(pickleable=True)
@@ -549,7 +549,7 @@ class ReorientWrapper(gym.Wrapper):
                  dist_thresh=0.09, ori_thresh=np.pi/6):
         super(ReorientWrapper, self).__init__(env)
         if not isinstance(self.unwrapped.initializer, ReorientInitializer):
-            initializer = ReorientInitializer(initial_dist=0.1)
+            initializer = ReorientInitializer(initial_dist=np.min(MAX_DIST, 0.01 + dist_thresh))
             self.unwrapped.initializer = initializer
         self.goal_env = goal_env
         self.rew_bonus = rew_bonus
@@ -561,7 +561,7 @@ class ReorientWrapper(gym.Wrapper):
         o, r, d, i = super(ReorientWrapper, self).step(action)
         i['is_success'] = self.is_success(o)
         if not i['is_success'] and d:
-            r -= self.rew_penalty
+            r += self.rew_penalty
         elif i['is_success']:
             r += self.rew_bonus
         return o, r, d, i
