@@ -416,7 +416,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "position": robot_observation.position,
                 "velocity": robot_observation.velocity,
                 "torque": robot_observation.torque,
-                "tip_positions": ftip_pos
+                "tip_positions": ftip_pos,
+                "action": action
             }
         obs_dict = {k: obs_dict[k] for k in self.observation_names}
         observation = { 
