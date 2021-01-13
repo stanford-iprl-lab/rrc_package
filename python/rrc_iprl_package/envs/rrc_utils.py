@@ -69,14 +69,14 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
         return env
     return env_fn
 
-def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
-            ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
-            ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp4',
-            sample_radius=0.09, sa_relative=False, ts_relative=False,
-            goal_relative=False, lim_pen=0., return_wrappers=False,
-            goal_env=False, keep_goal=False, use_quat=False,
-            cube_rew=False, step_rew=False, reorient_env=False,
-            scaled_ac=False, task_space=False):
+def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=.09,
+                 ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
+                 ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp4',
+                 sample_radius=.09, sa_relative=False, ts_relative=False,
+                 goal_relative=False, lim_pen=0., return_wrappers=False,
+                 goal_env=False, keep_goal=False, use_quat=False,
+                 cube_rew=False, step_rew=False, reorient_env=False,
+                 scaled_ac=False, task_space=False):
     if goal_env:
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
@@ -86,10 +86,12 @@ def build_env_fn(pos_coef=1., ori_coef=.5, ori_thresh=np.pi/8, dist_thresh=0.09,
     # 1. Reward wrappers
     rew_wrappers = []
     if cube_rew:
-        rew_wrappers.append(functools.partial(env_wrappers.CubeRewardWrapper,
-                    pos_coef=pos_coef, ori_coef=ori_coef,
-                    ac_norm_pen=ac_norm_pen, fingertip_coef=fingertip_coef,
-                    rew_fn=rew_fn, augment_reward=augment_rew))
+        rew_wrappers.append(
+            functools.partial(
+                env_wrappers.CubeRewardWrapper,
+                pos_coef=pos_coef, ori_coef=ori_coef,
+                ac_norm_pen=ac_norm_pen, fingertip_coef=fingertip_coef,
+                rew_fn=rew_fn, augment_reward=augment_rew))
     # Step reward wrapper
     if step_rew:
         rew_wrappers.append(env_wrappers.StepRewardWrapper)
