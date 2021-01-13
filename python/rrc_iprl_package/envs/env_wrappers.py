@@ -431,7 +431,8 @@ class ScaledActionWrapper(gym.ActionWrapper):
                  lim_penalty=0.0):
         super(ScaledActionWrapper, self).__init__(env)
         self._save_npz = self.unwrapped.save_npz
-        assert self.unwrapped.action_type == ActionType.POSITION, 'position control only'
+        assert self.unwrapped.action_type == ActionType.POSITION, \
+                'position control only'
         self.spaces = TriFingerPlatform.spaces
         self.goal_env = goal_env
         self.relative = relative
@@ -455,7 +456,8 @@ class ScaledActionWrapper(gym.ActionWrapper):
     def reset(self):
         obs = super(ScaledActionWrapper, self).reset()
         self._prev_obs = obs
-        self._clipped_action = self._last_action = np.zeros_like(self.action_space.sample())
+        self._clipped_action = self._last_action = np.zeros_like(
+            self.action_space.sample())
         return obs
 
     def step(self, action):
@@ -473,11 +475,14 @@ class ScaledActionWrapper(gym.ActionWrapper):
         current_position, current_velocity = obs[poskey], obs[velkey]
         if self.relative:
             goal_position = current_position + self.scale * action
-            pos_low, pos_high = self.env.action_space.low, self.env.action_space.high
+            pos_low, pos_high = (self.env.action_space.low,
+                                 self.env.action_space.high)
         else:
-            pos_low, pos_high = self.spaces.robot_position.low, self.spaces.robot_position.high
+            pos_low, pos_high = (self.spaces.robot_position.low,
+                                 self.spaces.robot_position.high)
             pos_low = np.max([current_position - self.scale, pos_low], axis=0)
-            pos_high = np.min([current_position + self.scale, pos_high], axis=0)
+            pos_high = np.min([current_position + self.scale, pos_high],
+                              axis=0)
             goal_position = action
         action = np.clip(goal_position, pos_low, pos_high)
         self._clipped_action = np.abs(action - goal_position)
