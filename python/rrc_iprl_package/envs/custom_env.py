@@ -37,7 +37,7 @@ from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
-DIST_THRESH = 0.02
+DIST_THRESH = 0.05
 _CUBOID_WIDTH = max(move_cube._CUBOID_SIZE)
 _CUBOID_HEIGHT = min(move_cube._CUBOID_SIZE)
 
@@ -446,10 +446,10 @@ class PushCubeEnv(gym.Env):
                 rew = -1
             else:
                 rew = self._pos_coef * np.exp(
-                        -np.min(0, pos_error - DIST_THRESH) / self._target_dist)
+                        -np.min([0, pos_error - DIST_THRESH]) / self._target_dist)
             # ori error reward
             if self._ori_coef:
-                rew += self._ori_coef * np.exp(-np.min(0, ori_error - ORI_THRESH))
+                rew += self._ori_coef * np.exp(-np.min([0, ori_error - ORI_THRESH]))
             # fingertip error reward
             if self._fingertip_coef:
                 ftip_error = self.compute_fingertip_error(observation)
