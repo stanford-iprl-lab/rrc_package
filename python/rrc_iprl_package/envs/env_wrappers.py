@@ -1012,18 +1012,20 @@ class StepRewardWrapper(gym.RewardWrapper):
 class ObservationNoiseParams:
     def __init__(self, object_pos_std=.001, object_ori_std=0., robot_pos_std=0.,
                  robot_vel_std=0., action_noise_loc=-0.01,
-                 action_noise_scale=0.01):
+                 action_noise_scale=0.01, object_mass=0.016):
         self.object_pos_std = object_pos_std
         self.object_ori_std = object_ori_std
         self.robot_pos_std = robot_pos_std
         self.robot_vel_std = robot_vel_std
         self.action_noise_loc = action_noise_loc
         self.action_noise_scale = action_noise_scale
+        self.object_mass = object_mass
 
     def randomize(self):
-        self.action_noise_loc = np.random.randn(self.action_noise_loc.size)*.1
+        self.action_noise_loc = np.random.randn(1)*.1
         if self.action_noise_scale:
             self.action_noise_scale = 10**np.random.uniform(-3, 1)
+        self.object_mass = np.max([0.0075, 0.016 + np.random.randn(1)*.005])
 
 
 class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
@@ -1037,7 +1039,8 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
     def reset(self, randomize=False, **kwargs):
         if randomize:
             self.randomize_params()
-        return super(ObservationNoiseWrapper, self).reset(**kwargs)
+        return super(ObservationNoiseWrapper, self).reset(
+                object_mass=self.noise_params.object_mass, **kwargs)
 
     def step(self, action):
         action = self.action(action)

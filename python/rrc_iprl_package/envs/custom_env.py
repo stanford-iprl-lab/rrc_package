@@ -253,7 +253,7 @@ class PushCubeEnv(gym.Env):
             )
             self.kinematics = platform.simfinger.kinematics
 
-    def _reset_direct_simulation(self):
+    def _reset_direct_simulation(self, object_mass=None):
         """Reset direct simulation.
 
         With this the env can be used without backend.
@@ -268,6 +268,7 @@ class PushCubeEnv(gym.Env):
         self.platform = trifinger_simulation.TriFingerPlatform(
             visualization=self.visualization,
             initial_object_pose=initial_object_pose,
+            object_mass=object_mass
         )
         self.kinematics = self.platform.simfinger.kinematics
 
@@ -281,7 +282,7 @@ class PushCubeEnv(gym.Env):
             )
             pbutils.reset_camera()
 
-    def reset(self):
+    def reset(self, object_mass=None):
         # reset simulation
         if robot_fingers:
             self._reset_platform_frontend()
