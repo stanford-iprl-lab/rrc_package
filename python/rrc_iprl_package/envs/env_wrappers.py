@@ -1,4 +1,4 @@
-"""Custom Gym environment for the Real Robot Challenge Phase 1 (Simulation)."""
+"""Custom Gym environment for the Real Robot Challenge Phase 0 (Simulation)."""
 import numpy as np
 import gym
 import pybullet
@@ -331,7 +331,8 @@ class SparseCubeEnv(CubeEnv):
 
 @configurable(pickleable=True)
 class TaskSpaceWrapper(gym.ActionWrapper):
-    def __init__(self, env, goal_env=False, relative=False, scale=.008, ac_pen=0.01):
+    def __init__(self, env, goal_env=False, relative=False, scale=.008, 
+                 ac_pen=0.):
         super(TaskSpaceWrapper, self).__init__(env)
         self.action_log = []
         self._save_npz = self.unwrapped.save_npz
@@ -348,6 +349,7 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         self.action_space = gym.spaces.Box(low=low, high=high)
         self.scale = scale
         pose = np.zeros(7)
+        pose[2] = _CUBOID_HEIGHT / 2
         pose[-1] = 1
         pose = move_cube.Pose.from_dict(dict(position=pose[:3], orientation=pose[3:]))
         self._platform = TriFingerPlatform(
@@ -363,6 +365,7 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             obs_dict = obs_space.spaces
         else:
             obs_dict = self.observation_space.spaces
+
         if 'action' not in obs_dict:
             obs_dict['action'] = self.action_space
 
@@ -389,11 +392,11 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             r -= self.ac_pen * np.linalg.norm(action)
         else:
             r -= self.ac_pen * np.linalg.norm(self._last_action - action)
-        self._last_action =  action
         obs_dict = o
         if self.goal_env:
             obs_dict = obs_dict['observation']
-        obs_dict['action'] = self._last_action
+        obs_dict['action'] = action
+        self._last_action =  action
         return o, r, d, i
 
     def action(self, action, obs=None):
@@ -402,7 +405,6 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         if self.goal_env:
             obs, poskey, velkey = obs['observation'], 'position', 'velocity'
         current_position, current_velocity = obs[poskey], obs[velkey]
-
         if self.relative:
             fingertip_goals = self.pinocchio_utils.forward_kinematics(current_position.flatten())
             fingertip_goals = np.asarray(fingertip_goals)
@@ -420,8 +422,10 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             ac = np.clip(torque, self.unwrapped.action_space.low,
                              self.unwrapped.action_space.high)
         else:
-            ac, ft_err = self.pinocchio_utils.inverse_kinematics(fingertip_goals,
-                                                                 current_position)
+            ac, ft_err = self.pinocchio_utils.inverse_kinematics(
+                    fingertip_goals, current_position)
+            ac = np.clip(ac, self.unwrapped.action_space.low,
+                         self.unwrapped.action_space.high)
         return ac
 
 

@@ -132,7 +132,7 @@ def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
         assert not scaled_ac, 'Can only use TaskSpaceWrapper OR ScaledActionWrapper'
         ewrappers.append(functools.partial(env_wrappers.TaskSpaceWrapper,
                                            relative=ts_relative))
-        action_type = cube_env.ActionType.TORQUE
+        action_type = cube_env.ActionType.POSITION
     ewrappers += rew_wrappers + final_wrappers
 
     # initializer = env_wrappers.ReorientInitializer(1, sample_radius)
