@@ -288,7 +288,7 @@ class RandomGoalOrientationInitializer:
             goal_xyz = init_xyz[:]
             goal_xyz[1] = goal_y
             goal.orientation = Rotation.from_euler('xyz', goal_xyz).as_quat()
-        goal.position = np.zeros(3)
+        goal.position = np.array([0, 0, _CUBOID_HEIGHT/2])
         return goal
 
 
@@ -1016,7 +1016,7 @@ class StepRewardWrapper(gym.RewardWrapper):
 class ObservationNoiseParams:
     def __init__(self, object_pos_std=.001, object_ori_std=0., robot_pos_std=0.,
                  robot_vel_std=0., action_noise_loc=-0.01,
-                 action_noise_scale=0.01, object_mass=0.016):
+                 action_noise_scale=0.01, object_mass=0.016, ):
         self.object_pos_std = object_pos_std
         self.object_ori_std = object_ori_std
         self.robot_pos_std = robot_pos_std
@@ -1025,24 +1025,33 @@ class ObservationNoiseParams:
         self.action_noise_scale = action_noise_scale
         self.object_mass = object_mass
 
-    def randomize(self):
-        self.action_noise_loc = np.random.randn(1)*.1
-        if self.action_noise_scale:
+    def randomize(self, **kwargs):
+        if 'action_noise_loc' in kwargs:
+            self.action_noise_loc = kwargs.get('action_noise_loc')
+        else:
+            self.action_noise_loc = np.random.randn(1)*.1
+        if 'action_noise_scale' in kwargs:
+            self.action_noise_scale = kwargs.get('action_noise_scale')
+        elif self.action_noise_scale:
             self.action_noise_scale = 10**np.random.uniform(-3, 1)
-        self.object_mass = np.max([0.0075, 0.016 + np.random.randn(1)*.005])
-
+        if 'object_mass' in kwargs:
+            self.object_mass = kwargs.get('object_mass')
+        else:
+            self.object_mass = np.max([0.0075, 0.016 + np.random.randn(1)*.005])
+        return
 
 class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
-    def __init__(self, env, noise_params=None):
+    def __init__(self, env, noise_params=None, goal_env=False):
         super(ObservationNoiseWrapper, self).__init__(env)
         self.noise_params = noise_params or ObservationNoiseParams()
+        self.goal_env = False
 
     def randomize_params(self):
         self.noise_params.randomize()
 
     def reset(self, randomize=False, **kwargs):
         if randomize:
-            self.randomize_params()
+            self.randomize_params(**kwargs)
         return super(ObservationNoiseWrapper, self).reset(
                 object_mass=self.noise_params.object_mass, **kwargs)
 
@@ -1063,19 +1072,38 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
             action = np.clip(action, self.action_space.low, self.action_space.high)
         return action
 
+    def get_key(self, key, obs):
+        if self.goal_env:
+            if 'goal' in key:
+                obs = obs['desired_goal']
+                key = key.lstrip('goal_object_')
+            if 'object' in key:
+                obs = obs['achieved_goal']
+                key = key.lstrip('object_')
+            else:
+                obs = obs['observation']
+            if 'robot' in key:
+                key = key.lstrip('robot_')
+        if key not in obs:
+            return None
+        return obs, key
+
     def observation(self, obs):
-        if 'object_position' in obs and self.noise_params.object_pos_std:
+        if self.get_key('object_position', obs) and self.noise_params.object_pos_std:
             obs['object_position'] += np.random.normal(
                     scale=self.noise_params.object_pos_std,
                     size=obs['object_position'].size
                 )
-        if 'object_orientation' in obs and self.noise_params.object_ori_std:
+        if self.get_key('object_orientation', obs) and self.noise_params.object_ori_std:
+            o, k = self.get_key('object_orientation', obs)
             rot = Rotation.from_quat(obs['object_orientation'])
             xyz = rot.as_euler('xyz')
             xyz += np.random.normal(
                     scale=self.noise_params.object_ori_std,
                     size=3
                 )
+            xyz = xyz % 2*np.pi
+            o[k] = Rotation.from_euler('xyz', xyz).as_quat()
         if 'robot_position' in obs and self.noise_params.robot_pos_std:
             obs['robot_position'] += np.random.normal(
                     scale=self.noise_params.robot_pos_std,

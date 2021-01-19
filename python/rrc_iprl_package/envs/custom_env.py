@@ -34,6 +34,7 @@ from rrc_iprl_package.envs.cube_env import ActionType
 from rrc_iprl_package.envs.env_wrappers import configurable
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
+from dm_control.utils import rewards as dmr
 
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
@@ -362,8 +363,8 @@ class PushCubeEnv(gym.Env):
         goal_pose = move_cube.Pose.from_dict(goal_pose.to_dict())
         actual_pose = move_cube.Pose.from_dict(actual_pose.to_dict())
         # reset goal and actual pose positions to center
-        goal_pose.position = np.array([0., 0., .01])
-        actual_pose.position = np.array([0., 0., .01])
+        # goal_pose.position = np.array([0., 0., .01])
+        # actual_pose.position = np.array([0., 0., .01])
         goal_corners = move_cube.get_cube_corner_positions(goal_pose)
         actual_corners = move_cube.get_cube_corner_positions(actual_pose)
         orientation_errors = np.linalg.norm(goal_corners - actual_corners, axis=1)
@@ -398,17 +399,25 @@ class PushCubeEnv(gym.Env):
                         - observation.get('object_position'), axis=1)
         return ftip_err
 
-    def _compute_reward_old(self, previous_observation, observation):
+    def _compute_reward(self, previous_observation, observation):
         goal_pose = self.goal
-        prev_object_pose = move_cube.Pose(position=previous_observation['object_position'],
-                                          orientation=previous_observation['object_orientation'])
         object_pose = move_cube.Pose(position=observation['object_position'],
                                      orientation=observation['object_orientation'])
+        position_error = self.compute_position_error(goal_pose, object_pose)
+        orientation_error = self.compute_orientation_error(goal_pose, object_pose)
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
-        prev_corner_error = self.compute_corner_error(goal_pose, prev_object_pose)
-        return -corner_error.sum()
+        reward = dmr.tolerance(position_error, (0., DIST_THRESH/2),
+                               margin=DIST_THRESH/2, sigmoid='long_tail')
+        reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
+                                margin=ORI_THRESH/2, sigmoid='long_tail')
+        reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
+                                margin=DIST_THRESH*3, sigmoid='long_tail')
+        self.info['pos_error'] = position_error
+        self.info['ori_error'] = orientation_error
+        self.info['corner_error'] = corner_error
+        return reward
 
-    def _compute_reward(self, previous_observation, observation):
+    def _compute_reward_old(self, previous_observation, observation):
         goal_pose = self.goal
         if previous_observation is None:
             prev_object_pose = None
@@ -820,7 +829,6 @@ class ResidualPolicyWrapper(ObservationWrapper):
             else:
                 self.action_space = gym.spaces.Box(low=-np.ones(9), high=np.ones(9))
                 self._prev_action = np.zeros(9)
-
 
     def make_obs_space(self):
         robot_torque_space = gym.spaces.Box(
