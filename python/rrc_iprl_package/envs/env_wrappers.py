@@ -495,7 +495,7 @@ class ScaledActionWrapper(gym.ActionWrapper):
 
 @configurable(pickleable=True)
 class RelativeGoalWrapper(gym.ObservationWrapper):
-    def __init__(self, env, keep_goal=False, use_quat=False):
+    def __init__(self, env, keep_goal=True, use_quat=False):
         super(RelativeGoalWrapper, self).__init__(env)
         self._observation_keys = list(env.observation_space.spaces.keys())
         assert 'goal_object_position' in self._observation_keys, 'goal_object_position missing in observation'
@@ -1016,7 +1016,7 @@ class StepRewardWrapper(gym.RewardWrapper):
 class ObservationNoiseParams:
     def __init__(self, object_pos_std=.001, object_ori_std=0., robot_pos_std=0.,
                  robot_vel_std=0., action_noise_loc=-0.01,
-                 action_noise_scale=0.01, object_mass=0.016, ):
+                 action_noise_scale=0.01, object_mass=0.016, object_friction=0.5):
         self.object_pos_std = object_pos_std
         self.object_ori_std = object_ori_std
         self.robot_pos_std = robot_pos_std
@@ -1024,6 +1024,7 @@ class ObservationNoiseParams:
         self.action_noise_loc = action_noise_loc
         self.action_noise_scale = action_noise_scale
         self.object_mass = object_mass
+        self.object_friction = object_friction
 
     def randomize(self, **kwargs):
         if 'action_noise_loc' in kwargs:
@@ -1052,8 +1053,14 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
     def reset(self, randomize=False, **kwargs):
         if randomize:
             self.randomize_params(**kwargs)
-        return super(ObservationNoiseWrapper, self).reset(
+        ret = super(ObservationNoiseWrapper, self).reset(
                 object_mass=self.noise_params.object_mass, **kwargs)
+        if self.noise_params.object_friction:
+            lateral_friction = self.noise_params.obj_friction
+            spinning_friction = .001 * self.noise_params.obj_friction
+            pybullet.changeDynamics(self.platform.cube.block_id, -1,
+                    lateral_friction, spinning_friction)
+        return ret
 
     def step(self, action):
         action = self.action(action)
