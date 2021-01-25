@@ -394,8 +394,9 @@ class PushCubeEnv(gym.Env):
                 )
         else:
             ftip_pos = observation.get('robot_tip_positions')
-        ftip_err = np.linalg.norm(ftip_pos.reshape((3,3))
-                        - observation.get('object_position'), axis=1)
+        ftip_err = np.linalg.norm(
+                ftip_pos.reshape((3,3))
+                - observation.get('object_position'), axis=1)
         return ftip_err
 
     def _compute_reward_sigmoid(self, previous_observation, observation):
@@ -405,15 +406,19 @@ class PushCubeEnv(gym.Env):
         position_error = self.compute_position_error(goal_pose, object_pose)
         orientation_error = self.compute_orientation_error(goal_pose, object_pose)
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
+        ftip_error = self.compute_fingertip_error(observation).sum()
         reward = dmr.tolerance(position_error, (0., DIST_THRESH/2),
                                margin=DIST_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
                                 margin=ORI_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
                                 margin=DIST_THRESH*3, sigmoid='long_tail')
+        reward += dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
+                                margin=_CUBOID_HEIGHT/2, sigmoid='long_tail')
         self.info['pos_error'] = position_error
         self.info['ori_error'] = orientation_error
         self.info['corner_error'] = corner_error
+        self.info['ftip_error'] = ftip_error
         return reward
 
     def _compute_reward(self, previous_observation, observation):
@@ -529,6 +534,10 @@ class PushCubeEnv(gym.Env):
         is_done = self.step_count == move_cube.episode_length
         if self.rew_fn == 'cost':
             is_done = is_done or reward >= 2.5
+        else:
+            if self.info['pos_error'] >= self._target_dist:
+                is_done = True
+
         if is_done and isinstance(self.initializer, env_wrappers.CurriculumInitializer):
             goal_pose = self.goal
             object_pose = move_cube.Pose.from_dict(dict(
@@ -811,26 +820,23 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
 class ResidualPolicyWrapper(ObservationWrapper):
     def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False,
-                 rl_cp_params=False,
-                 observation_names=PushCubeEnv.observation_names):
+                 observation_names=None):
         super(ResidualPolicyWrapper, self).__init__(env)
         self.rl_torque = rl_torque
         self.rl_tip_pos = rl_tip_pos
-        self.rl_cp_params = rl_cp_params
         self.goal_env = goal_env
         self.impedance_controller = None
         self._platform = None
-        self.observation_names = PushCubeEnv.observation_names
-        self.make_obs_space()
+        self.observation_names = observation_names or PushCubeEnv.observation_names
         assert env.action_type in [ActionType.TORQUE,
                                    ActionType.TORQUE_AND_POSITION]
+        self._prev_action = np.zeros(9)
         if isinstance(env.action_space, gym.spaces.Dict):
             if self.rl_torque:
                 self.action_space = env.action_space.spaces['torque']
-                self._prev_action = np.zeros(9)
             else:
                 self.action_space = gym.spaces.Box(low=-np.ones(9), high=np.ones(9))
-                self._prev_action = np.zeros(9)
+        self.make_obs_space()
 
     def make_obs_space(self):
         robot_torque_space = gym.spaces.Box(
@@ -880,6 +886,9 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.full_observation_space = gym.spaces.Dict(
                 {'impedance': imp_obs_space, 'rl': rl_obs_space})
         self.impedance_controller = None
+        if not self.goal_env:
+            self.observation_space = rl_obs_space
+
         if robot_interfaces:
             platform = trifinger_simulation.TriFingerPlatform(
                 visualization=self.visualization,
@@ -888,29 +897,6 @@ class ResidualPolicyWrapper(ObservationWrapper):
             self.kinematics = platform.simfinger.kinematics
         else:
             self.kinematics = None
-
-        if self.goal_env:
-            imp_obs_spaces = imp_obs_space.spaces
-            obs_space = Dict(action=imp_obs_spaces['action'],
-                             **imp_obs_spaces['observation'].spaces)
-            self.observation_space = Dict(observation=obs_space,
-                                          desired_goal=imp_obs_spaces['desired_goal'],
-                                          achieved_goal=imp_obs_spaces['achieved_goal'])
-        else:
-            self.observation_space = rl_obs_space
-
-    def reset(self, **platform_kwargs):
-        obs = super(ResidualPolicyWrapper, self).reset(**platform_kwargs)
-        self.init_impedance_controller()
-        obs = self.grasp_object(obs)
-        return obs
-
-    def step(self, action):
-        action = self.action(action)
-        return super(ResidualPolicyWrapper, self).step(action)
-
-    def process_observation_residual(self, observation):
-        return observation
 
     def init_impedance_controller(self):
         init_pose, goal_pose = self.process_obs_init_goal(self._obs_dict['impedance'])
@@ -924,6 +910,21 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller.reset_policy(self._obs_dict['impedance'],
                                                self._platform)
 
+    def reset(self, **platform_kwargs):
+        obs = super(ResidualPolicyWrapper, self).reset(**platform_kwargs)
+        if self.kinematics is None:
+            self.kinematics = self.platform.simfinger.kinematics
+        self.init_impedance_controller()
+        obs = self.grasp_object(obs)
+        return obs
+
+    def step(self, action):
+        action = self.action(action)
+        return super(ResidualPolicyWrapper, self).step(action)
+
+    def process_observation_residual(self, observation):
+        return observation
+
     def grasp_object(self, obs):
         while not self.impedance_controller.mode != TrajMode.REPOSE:
             obs, _, _, _ = self.step(np.zeros(9))
@@ -931,8 +932,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
 
     def observation(self, observation):
         obs_dict = {'impedance': observation}
-        self._obs_dict = obs_dict.copy() 
         rl_obs = self.process_observation_rl(observation)
+        self._obs_dict = {'impedance': observation, 'rl': rl_obs}
         if self.goal_env:
             observation['observation']['action'] = observation.pop('action')
             return observation
@@ -966,7 +967,6 @@ class ResidualPolicyWrapper(ObservationWrapper):
             "goal_object_position": np.asarray(goal_pose["position"]),
             "goal_object_orientation": np.asarray(goal_pose["orientation"]),
         }
-        self._obs_dict['rl'] = observation
         # observation = np.concatenate([observation[k].flatten() for k in self.observation_names])
         return observation
 
@@ -978,19 +978,20 @@ class ResidualPolicyWrapper(ObservationWrapper):
                          'orientation': self._obs_dict['rl']['object_orientation']}
             goal_pose = {'position': self._obs_dict['rl']['goal_object_position'],
                          'orientation': self._obs_dict['rl']['goal_object_orientation']}
-        init_pose = move_cube.Pose.from_dict(init_pose) 
+        init_pose = move_cube.Pose.from_dict(init_pose)
         goal_pose = move_cube.Pose.from_dict(goal_pose)
         return init_pose, goal_pose
 
     def action(self, res_torque=None):
         obs = self._obs_dict['impedance'].copy()
-        if not self.rl_torque:
-            obs['residual_ft_force'] = res_torque
+        if not self.rl_torque:  # residual policy sends residual ftip commands
+            obs['residual_ft_force'] = 0.05 * res_torque
         des_torque = self.impedance_controller.predict(obs)
         if self.rl_torque:
             self._prev_action = action = np.clip(res_torque + des_torque, self.action_space.low, self.action_space.high)
         else:
-            self._prev_action = action = np.clip(des_torque, self.action_space.low, self.action_space.high)
+            self._prev_action = res_torque
+            action = np.clip(des_torque, self.action_space.low, self.action_space.high)
         if self.env.action_type == ActionType.TORQUE_AND_POSITION:
             return {'torque': action, 'position': np.repeat(np.nan, 9)}
         return action

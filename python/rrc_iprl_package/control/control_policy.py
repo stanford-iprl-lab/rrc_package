@@ -172,9 +172,9 @@ class ImpedanceControllerPolicy:
         # Previous object pose and time (for estimating object velocity)
         self.prev_obj_pose = get_pose_from_observation(observation)
         if osp.exists("/output"):
-            self.prev_step_time = observation["cam0_timestamp"]
+            self.prev_step_time = observation["observation"]["cam0_timestamp"]
         else:
-            self.prev_step_time = observation["cam0_timestamp"] / 1000
+            self.prev_step_time = observation["observation"]["cam0_timestamp"] / 1000
         self.prev_vel = np.zeros(6)
         self.filt_vel = np.zeros(6)
 
@@ -555,6 +555,9 @@ class ImpedanceControllerPolicy:
     
         else:
             ft_des_force_wf = None
+
+        if full_observation.get('residual_ft_force') is not None:
+            ft_des_force_wf += full_observation.get('residual_ft_force')
 
         # Compute torque with impedance controller, and clip
         if self.mode == TrajMode.REPOSE:

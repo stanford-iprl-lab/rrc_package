@@ -331,7 +331,7 @@ class SparseCubeEnv(CubeEnv):
 
 @configurable(pickleable=True)
 class TaskSpaceWrapper(gym.ActionWrapper):
-    def __init__(self, env, goal_env=False, relative=False, scale=.008, 
+    def __init__(self, env, goal_env=False, relative=False, scale=.008,
                  ac_pen=0.):
         super(TaskSpaceWrapper, self).__init__(env)
         self.action_log = []
@@ -412,6 +412,7 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         else:
             fingertip_goals = action
         if self.unwrapped.action_type == ActionType.TORQUE:
+            # compute desired velocity
             dt = self.frameskip * .001
             desired_velocity = self.scale * action.reshape((3,3)) / dt
             # TODO: use tip_forces_wf to indicate desired contact with object on fingertip
@@ -1040,6 +1041,7 @@ class ObservationNoiseParams:
         else:
             self.object_mass = np.max([0.0075, 0.016 + np.random.randn(1)*.005])
         return
+
 
 class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
     def __init__(self, env, noise_params=None, goal_env=False):
