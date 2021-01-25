@@ -394,8 +394,9 @@ class PushCubeEnv(gym.Env):
                 )
         else:
             ftip_pos = observation.get('robot_tip_positions')
-        ftip_err = np.linalg.norm(ftip_pos.reshape((3,3))
-                        - observation.get('object_position'), axis=1)
+        ftip_err = np.linalg.norm(
+                ftip_pos.reshape((3,3))
+                - observation.get('object_position'), axis=1)
         return ftip_err
 
     def _compute_reward_sigmoid(self, previous_observation, observation):
@@ -405,15 +406,19 @@ class PushCubeEnv(gym.Env):
         position_error = self.compute_position_error(goal_pose, object_pose)
         orientation_error = self.compute_orientation_error(goal_pose, object_pose)
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
+        ftip_error = self.compute_fingertip_error(observation).sum()
         reward = dmr.tolerance(position_error, (0., DIST_THRESH/2),
                                margin=DIST_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
                                 margin=ORI_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
                                 margin=DIST_THRESH*3, sigmoid='long_tail')
+        reward += dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
+                                margin=_CUBOID_HEIGHT/2, sigmoid='long_tail')
         self.info['pos_error'] = position_error
         self.info['ori_error'] = orientation_error
         self.info['corner_error'] = corner_error
+        self.info['ftip_error'] = ftip_error
         return reward
 
     def _compute_reward(self, previous_observation, observation):
@@ -529,6 +534,10 @@ class PushCubeEnv(gym.Env):
         is_done = self.step_count == move_cube.episode_length
         if self.rew_fn == 'cost':
             is_done = is_done or reward >= 2.5
+        else:
+            if self.info['pos_error'] >= self._target_dist:
+                is_done = True
+
         if is_done and isinstance(self.initializer, env_wrappers.CurriculumInitializer):
             goal_pose = self.goal
             object_pose = move_cube.Pose.from_dict(dict(
