@@ -16,8 +16,21 @@ except ImportError:
 import trifinger_simulation
 import trifinger_simulation.visual_objects
 import rrc_iprl_package.pybullet_utils as pbutils
+from scipy.spatial.transform import Rotation
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
+from dm_control.utils import rewards as dmr
+
+
+DIST_THRESH = 0.05
+_CUBOID_WIDTH = max(move_cube._CUBOID_SIZE)
+_CUBOID_HEIGHT = min(move_cube._CUBOID_SIZE)
+
+ORI_THRESH = np.pi / 8
+REW_BONUS = 10
+REW_PENALTY = -10
+POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
+                      0.203])
 
 
 class ActionType(enum.Enum):
@@ -179,7 +192,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         )
         if osp.exists('/output'):
             self.observation_space.spaces['filtered_achieved_goal'] = object_state_space
-        self.observation_space.spaces['cam0_timestamp'] = gym.spaces.Box(low=0., high=np.inf, shape=())
+        # self.observation_space.spaces['cam0_timestamp'] = gym.spaces.Box(low=0., high=np.inf, shape=())
 
         self.save_npz = save_npz
         self.action_log = []
@@ -187,7 +200,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.filtered_orientation = None
         self.alpha = alpha
 
-    def compute_reward(self, achieved_goal, desired_goal, info):
+    def compute_reward_old(self, achieved_goal, desired_goal, info):
         """Compute the reward for the given achieved and desired goal.
 
         Args:
@@ -213,6 +226,65 @@ class RealRobotCubeEnv(gym.GoalEnv):
             move_cube.Pose.from_dict(achieved_goal),
             info["difficulty"],
         )
+
+    def compute_position_error(self, goal_pose, object_pose):
+        pos_error = np.linalg.norm(object_pose.position - goal_pose.position)
+        return pos_error
+
+    def compute_corner_error(self, goal_pose, actual_pose):
+        # copy goal and actual poses to new Pose objects
+        goal_pose = move_cube.Pose.from_dict(goal_pose.to_dict())
+        actual_pose = move_cube.Pose.from_dict(actual_pose.to_dict())
+        # reset goal and actual pose positions to center
+        # goal_pose.position = np.array([0., 0., .01])
+        # actual_pose.position = np.array([0., 0., .01])
+        goal_corners = move_cube.get_cube_corner_positions(goal_pose)
+        actual_corners = move_cube.get_cube_corner_positions(actual_pose)
+        orientation_errors = np.linalg.norm(goal_corners - actual_corners, axis=1)
+        return orientation_errors
+
+    def compute_orientation_error(self, goal_pose, actual_pose):
+        goal_rot = Rotation.from_quat(goal_pose.orientation)
+        actual_rot = Rotation.from_quat(actual_pose.orientation)
+
+        y_axis = [0, 1, 0]
+        goal_direction_vector = goal_rot.apply(y_axis)
+        actual_direction_vector = actual_rot.apply(y_axis)
+
+        orientation_error = np.arccos(
+            goal_direction_vector.dot(actual_direction_vector)
+        )
+
+        # scale both position and orientation error to be within [0, 1] for
+        # their expected ranges
+        error = orientation_error / np.pi
+        return error
+
+    def compute_fingertip_error(self, ftip_pos, object_pose):
+        ftip_err = np.linalg.norm(ftip_pos.reshape((3,3))
+                                  - object_pose.position, axis=1)
+        return ftip_err
+
+    def compute_reward(self, achieved_goal, desired_goal, info):
+        object_pose = move_cube.Pose.from_dict(achieved_goal)
+        goal_pose = move_cube.Pose.from_dict(desired_goal)
+        position_error = self.compute_position_error(goal_pose, object_pose)
+        orientation_error = self.compute_orientation_error(goal_pose, object_pose)
+        corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
+        ftip_error = self.compute_fingertip_error(info.get('tip_positions'),
+                                                  object_pose).sum()
+        reward = dmr.tolerance(position_error, (0., DIST_THRESH/2),
+                               margin=DIST_THRESH/2, sigmoid='long_tail')
+        reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
+                                margin=ORI_THRESH/2, sigmoid='long_tail')
+        reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
+                                margin=DIST_THRESH*3, sigmoid='long_tail')
+        reward += dmr.tolerance(ftip_error, (0., _CUBOID_HEIGHT*3/2),
+                                margin=_CUBOID_HEIGHT*3/2, sigmoid='long_tail')
+        info['pos_error'] = position_error
+        info['ori_error'] = orientation_error
+        info['corner_error'] = corner_error
+        return reward
 
     def step(self, action):
         """Run one timestep of the environment's dynamics.
@@ -259,17 +331,18 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
             observation = self._create_observation(t, action)
 
-            reward += self.compute_reward(
-                observation["achieved_goal"],
-                observation["desired_goal"],
-                self.info,
-            )
-
             self.step_count += t - self.t_prev
             self.t_prev = t
             # make sure to not exceed the episode length
             if self.step_count >= self.episode_length or self.t_prev == 120*1000 - 1:
                 break
+
+        self.observation = observation['observation']
+        reward += self.compute_reward(
+            observation["achieved_goal"],
+            observation["desired_goal"],
+            self.info,
+        )
 
         is_done = self.step_count >= self.episode_length
         # self.write_action_log(observation, action, reward)
@@ -420,7 +493,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "action": action
             }
         obs_dict = {k: obs_dict[k] for k in self.observation_names}
-        observation = { 
+        self.info.update(obs_dict)
+        observation = {
             "observation": obs_dict,
             "desired_goal": self.goal,
             "achieved_goal": {

@@ -116,9 +116,10 @@ def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
         final_wrappers.append(functools.partial(env_wrappers.ScaledActionWrapper,
                               goal_env=goal_env, relative=sa_relative,
                               lim_penalty=lim_pen))
-    if goal_relative:
-        final_wrappers.append(functools.partial(env_wrappers.RelativeGoalWrapper,
-                                  keep_goal=keep_goal, use_quat=use_quat))
+    if goal_relative and not goal_env:
+        final_wrappers.append(functools.partial(
+            env_wrappers.RelativeGoalWrapper, keep_goal=keep_goal,
+            use_quat=use_quat))
 
     # Adds time limit, logging, action clipping, and flattens observation 
     p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',

@@ -52,7 +52,6 @@ POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
 @configurable(pickleable=True)
 class PushCubeEnv(gym.Env):
     observation_names = ["robot_position",
-            "robot_velocity",
             "robot_tip_positions",
             "object_position",
             "object_orientation",
@@ -76,7 +75,7 @@ class PushCubeEnv(gym.Env):
         fingertip_coef=0.,
         step_coef=0.,
         ac_norm_pen=0.1,
-        rew_fn='exp4',
+        rew_fn='sigmoid',
         min_ftip_height=0.01, 
         max_velocity=0.17
         ):
@@ -400,7 +399,7 @@ class PushCubeEnv(gym.Env):
                 - observation.get('object_position'), axis=1)
         return ftip_err
 
-    def _compute_reward(self, previous_observation, observation):
+    def _compute_reward_sigmoid(self, previous_observation, observation):
         goal_pose = self.goal
         object_pose = move_cube.Pose(position=observation['object_position'],
                                      orientation=observation['object_orientation'])
@@ -422,7 +421,10 @@ class PushCubeEnv(gym.Env):
         self.info['ftip_error'] = ftip_error
         return reward
 
-    def _compute_reward_old(self, previous_observation, observation):
+    def _compute_reward(self, previous_observation, observation):
+        if self.rew_fn == 'sigmoid':
+            return self._compute_reward_sigmoid(previous_observation, observation)
+
         goal_pose = self.goal
         if previous_observation is None:
             prev_object_pose = None
