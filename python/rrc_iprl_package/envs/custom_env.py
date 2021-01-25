@@ -237,7 +237,7 @@ class PushCubeEnv(gym.Env):
 
         return robot_action
 
-    def _reset_platform_frontend(self):
+    def _reset_platform_frontend(self, **platform_kwargs):
         """Reset the platform frontend."""
         logging.debug("Resetting simulation with robot_fingers (frontend-only)")
 
@@ -253,7 +253,7 @@ class PushCubeEnv(gym.Env):
             )
             self.kinematics = platform.simfinger.kinematics
 
-    def _reset_direct_simulation(self, object_mass=None):
+    def _reset_direct_simulation(self, **platform_kwargs):
         """Reset direct simulation.
 
         With this the env can be used without backend.
@@ -282,12 +282,12 @@ class PushCubeEnv(gym.Env):
             )
             pbutils.reset_camera()
 
-    def reset(self, object_mass=None):
+    def reset(self, **platform_kwargs):
         # reset simulation
         if robot_fingers:
-            self._reset_platform_frontend()
+            self._reset_platform_frontend(**platform_kwargs)
         else:
-            self._reset_direct_simulation()
+            self._reset_direct_simulation(**platform_kwargs)
 
         if self.initializer:
             self.goal = self.initializer.get_goal()
@@ -677,7 +677,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         obs = np.concatenate([obs_dict[k] for k in self.rl_observation_names])
         return obs
 
-    def reset(self):
+    def reset(self, **platform_kwargs):
         if self._platform is None:
             initial_object_pose = move_cube.sample_goal(-1)
             self._platform = trifinger_simulation.TriFingerPlatform(
@@ -685,7 +685,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 initial_object_pose=initial_object_pose,
             )
         self.policy.impedance_controller.init_pinocchio_utils(self._platform)
-        obs = super(HierarchicalPolicyWrapper, self).reset()
+        obs = super(HierarchicalPolicyWrapper, self).reset(**platform_kwargs)
         initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
         # initial_object_pose = move_cube.sample_goal(difficulty=-1) 
         self.policy.reset_policy(obs['impedance'], self._platform)
@@ -899,8 +899,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
         else:
             self.observation_space = rl_obs_space
 
-    def reset(self):
-        obs = super(ResidualPolicyWrapper, self).reset()
+    def reset(self, **platform_kwargs):
+        obs = super(ResidualPolicyWrapper, self).reset(**platform_kwargs)
         self.init_impedance_controller()
         obs = self.grasp_object(obs)
         return obs

@@ -10,7 +10,7 @@ import os
 import os.path as osp
 import numpy as np
 
-from rrc_iprl_package.envs import cube_env, custom_env
+from rrc_iprl_package.envs import cube_env, custom_env, env_wrappers
 from trifinger_simulation.tasks import move_cube 
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
@@ -50,13 +50,13 @@ def main():
     else:
         save_path = lambda: 'action_log{}.npz'.format(eps_so_far)
     ep_len = EP_LEN or MAX_STEPS
-    env = cube_env.RealRobotCubeEnv(
+    env = env_wrappers.ObservationNoiseWrapper(cube_env.RealRobotCubeEnv(
         goal, initial_pose.to_dict(), difficulty,
         cube_env.ActionType.TORQUE_AND_POSITION, frameskip=FRAMESKIP,
         num_steps=ep_len, visualization=True, save_npz=None
-    )
+    ))
 
-    if difficulty == 4:
+    if difficulty is None: # == 4:
         # model_path = 'models/ppo-scaled-rew-cuboid/ppo-scaled-rew-cuboid_s0'
         model_path = 'rel-task-goal-reorient-grid/ppo-reorient_kg_acwtask/ppo-reorient_kg_acwtask_s0/'
         if osp.exists('/ws/src/usercode'):
@@ -75,12 +75,11 @@ def main():
                        pos_coef=.1, ori_coef=.1, frameskip=15, ep_len=600, keep_goal=True,
                        use_quat=True)
     env = custom_env.HierarchicalPolicyWrapper(env, policy)
-    import pdb; pdb.set_trace()
     observation = env.reset()
 
     accumulated_reward = 0
     is_done = False
-    old_mode = policy.mode
+    # old_mode = policy.mode
     steps_so_far = 0
     try:
         while not is_done:
@@ -89,9 +88,9 @@ def main():
             old_obs = observation
             observation, reward, is_done, info = env.step(action)
             env.write_action_log(old_obs, action, reward)
-            if old_mode != policy.mode:
+            # if old_mode != policy.mode:
                 #print('mode changed: {} to {}'.format(old_mode, policy.mode))
-                old_mode = policy.mode
+                # old_mode = policy.mode
             #print("reward:", reward)
             accumulated_reward += reward
             steps_so_far += env.frameskip

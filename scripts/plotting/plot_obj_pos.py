@@ -27,6 +27,11 @@ if __name__ == "__main__":
     positions = np.array(
         [observation.object_pose.position for observation in log_reader.data]
     )
+    orientations = np.array(
+        [observation.object_pose.orientation for observation in log_reader.data]
+    )
+
+    np.savez('object_poses.npz', positions=positions, orientations=orientations)
 
     plt.plot(positions[:, 0], c="r", label="x position - observed")
     plt.plot(positions[:, 1], c="g", label="y position - observed")

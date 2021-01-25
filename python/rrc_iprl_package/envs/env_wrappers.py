@@ -1053,11 +1053,10 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
     def reset(self, randomize=False, **kwargs):
         if randomize:
             self.randomize_params(**kwargs)
-        ret = super(ObservationNoiseWrapper, self).reset(
-                object_mass=self.noise_params.object_mass, **kwargs)
+        ret = super(ObservationNoiseWrapper, self).reset(**kwargs)
         if self.noise_params.object_friction:
-            lateral_friction = self.noise_params.obj_friction
-            spinning_friction = .001 * self.noise_params.obj_friction
+            lateral_friction = self.noise_params.object_friction
+            spinning_friction = .001 * self.noise_params.object_friction
             pybullet.changeDynamics(self.platform.cube.block_id, -1,
                     lateral_friction, spinning_friction)
         return ret

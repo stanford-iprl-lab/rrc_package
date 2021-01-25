@@ -20,7 +20,6 @@ from trifinger_simulation.tasks import move_cube
 from trifinger_simulation import pinocchio_utils
 from trifinger_simulation import visual_objects
 
-from rrc_iprl_package.envs import rrc_utils
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
@@ -629,6 +628,7 @@ class HierarchicalControllerPolicy:
         self.traj_initialized = False
         self.rl_retries = int(self.start_mode == PolicyMode.RL_PUSH)
         self.difficulty = difficulty
+        self.rl_env = None
 
     def reset_policy(self, observation, platform=None):
         self.mode = self.start_mode
@@ -676,8 +676,6 @@ class HierarchicalControllerPolicy:
     def load_spinup_policy(self, load_dir, load_itr='last', deterministic=False,
                           **load_kwargs):
         self.rl_env, self.rl_policy = load_policy_and_env(load_dir, load_itr, deterministic)
-        if self.rl_env is None:
-            self.rl_env = rrc_utils.build_env_fn(**load_kwargs)()
         self.rl_frameskip = self.rl_env.frameskip
         self.observation_names = list(self.rl_env.env.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
