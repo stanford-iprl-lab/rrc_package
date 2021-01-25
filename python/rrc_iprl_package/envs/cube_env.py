@@ -58,7 +58,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
             "velocity",
             "torque",
             "tip_positions",
-            "action"]
+            "action",
+            "cam0_timestamp"]
 
     def __init__(
         self,
@@ -174,10 +175,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "position": robot_position_space,
                 "velocity": robot_velocity_space,
                 "torque": robot_torque_space,
-                "action": self.action_space,
                 "tip_positions": gym.spaces.Box(
                     low=np.concatenate([trifingerpro_limits.object_position.low]*3),
-                    high=np.concatenate([trifingerpro_limits.object_position.high]*3))
+                    high=np.concatenate([trifingerpro_limits.object_position.high]*3)),
+                "action": self.action_space,
+                "cam0_timestamp": gym.spaces.Box(low=0., high=np.inf, shape=())
             }
         observation_state_space = gym.spaces.Dict({
                 k: observation_state_space[k] 
@@ -371,6 +373,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
+        self.resetting = True
         if robot_fingers is not None:
             self._reset_platform_frontend()
         else:
@@ -399,7 +402,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         cur_pos = observation["observation"]["position"]
         if self.num_resets != -1:
             # import pdb; pdb.set_trace()
-            while not all(vel < 0.01 for vel in cur_vel) or \
+            while not all(np.abs(vel) < 0.01 for vel in cur_vel) or \
                     np.abs(cur_pos - self.default_position).max() >= .05:
                 observation, reward, _, _ = self.step(self._initial_action)
                 cur_vel = observation["observation"]["velocity"]
@@ -409,6 +412,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self.frameskip = temp_frameskip
 
         self.filtered_position = self.filtered_orientation = None
+        self.resetting = False
         return observation
 
     def _reset_platform_frontend(self):
@@ -490,7 +494,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "velocity": robot_observation.velocity,
                 "torque": robot_observation.torque,
                 "tip_positions": ftip_pos,
-                "action": action
+                "action": action,
+                "cam0_timestamp": camera_observation.cameras[0].timestamp
             }
         obs_dict = {k: obs_dict[k] for k in self.observation_names}
         self.info.update(obs_dict)
@@ -510,11 +515,13 @@ class RealRobotCubeEnv(gym.GoalEnv):
         #         "orientation": obj_pose.orientation}
         return observation
 
-
     def _gym_action_to_robot_action(self, gym_action):
         # construct robot action depending on action type
         if self.action_type == ActionType.TORQUE:
-            robot_action = Action(torque=gym_action, position=np.repeat(np.nan, 9))
+            if self.resetting:
+                robot_action = Action(torque=gym_action, position=self.default_position)
+            else:
+                robot_action = Action(torque=gym_action, position=np.array([np.nan]*9))
         elif self.action_type == ActionType.POSITION:
             robot_action = Action(position=gym_action, torque=np.zeros(9))
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
