@@ -58,6 +58,18 @@ def random_xy(sample_radius_min=0., sample_radius_max=None):
     return x, y
 
 
+class RandomInitializer:
+    """Initializer that returns random initial pose and goal."""
+    def __init__(self, difficulty):
+        self.difficulty = difficulty
+
+    def get_initial_state(self):
+        return move_cube.sample_goal(difficulty=-1)
+
+    def get_goal(self):
+        return move_cube.sample_goal(difficulty=self.difficulty)
+
+
 @configurable(pickleable=True)
 class FixedInitializer:
     """Initializer that uses fixed values for initial pose and goal."""
