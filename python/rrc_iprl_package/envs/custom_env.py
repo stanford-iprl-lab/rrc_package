@@ -31,7 +31,7 @@ from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy, T
 from rrc_iprl_package.envs import env_wrappers
 from rrc_iprl_package.envs import cube_env
 from rrc_iprl_package.envs.cube_env import ActionType
-from rrc_iprl_package.envs.env_wrappers import configurable
+from rrc_iprl_package.envs.env_utils import configurable
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 from dm_control.utils import rewards as dmr
@@ -237,7 +237,7 @@ class PushCubeEnv(gym.Env):
 
         return robot_action
 
-    def _reset_platform_frontend(self):
+    def _reset_platform_frontend(self, **platform_kwargs):
         """Reset the platform frontend."""
         logging.debug("Resetting simulation with robot_fingers (frontend-only)")
 
@@ -253,7 +253,7 @@ class PushCubeEnv(gym.Env):
             )
             self.kinematics = platform.simfinger.kinematics
 
-    def _reset_direct_simulation(self, object_mass=None):
+    def _reset_direct_simulation(self, **platform_kwargs):
         """Reset direct simulation.
 
         With this the env can be used without backend.
@@ -268,7 +268,7 @@ class PushCubeEnv(gym.Env):
         self.platform = trifinger_simulation.TriFingerPlatform(
             visualization=self.visualization,
             initial_object_pose=initial_object_pose,
-            object_mass=object_mass
+            object_mass=platform_kwargs.get('object_mass')
         )
         self.kinematics = self.platform.simfinger.kinematics
 
@@ -282,12 +282,12 @@ class PushCubeEnv(gym.Env):
             )
             pbutils.reset_camera()
 
-    def reset(self, object_mass=None):
+    def reset(self, **platform_kwargs):
         # reset simulation
         if robot_fingers:
-            self._reset_platform_frontend()
+            self._reset_platform_frontend(**platform_kwargs)
         else:
-            self._reset_direct_simulation()
+            self._reset_direct_simulation(**platform_kwargs)
 
         if self.initializer:
             self.goal = self.initializer.get_goal()
@@ -686,7 +686,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         obs = np.concatenate([obs_dict[k] for k in self.rl_observation_names])
         return obs
 
-    def reset(self):
+    def reset(self, **platform_kwargs):
         if self._platform is None:
             initial_object_pose = move_cube.sample_goal(-1)
             self._platform = trifinger_simulation.TriFingerPlatform(
@@ -694,7 +694,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 initial_object_pose=initial_object_pose,
             )
         self.policy.impedance_controller.init_pinocchio_utils(self._platform)
-        obs = super(HierarchicalPolicyWrapper, self).reset()
+        obs = super(HierarchicalPolicyWrapper, self).reset(**platform_kwargs)
         initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
         # initial_object_pose = move_cube.sample_goal(difficulty=-1) 
         self.policy.reset_policy(obs['impedance'], self._platform)
@@ -910,8 +910,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller.reset_policy(self._obs_dict['impedance'],
                                                self._platform)
 
-    def reset(self):
-        obs = super(ResidualPolicyWrapper, self).reset()
+    def reset(self, **platform_kwargs):
+        obs = super(ResidualPolicyWrapper, self).reset(**platform_kwargs)
         if self.kinematics is None:
             self.kinematics = self.platform.simfinger.kinematics
         self.init_impedance_controller()

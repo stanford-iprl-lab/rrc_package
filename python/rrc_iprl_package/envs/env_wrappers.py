@@ -2,7 +2,6 @@
 import numpy as np
 import gym
 import pybullet
-import inspect
 
 from gym import wrappers
 from gym.spaces import Box
@@ -14,6 +13,7 @@ from gym.spaces import Dict
 from gym.spaces import utils
 
 from rrc_iprl_package.control import controller_utils as c_utils
+from rrc_iprl_package.envs.env_utils import configurable
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.envs.cube_env import CubeEnv, ActionType
 
@@ -56,69 +56,6 @@ def random_xy(sample_radius_min=0., sample_radius_max=None):
     x = radius * np.cos(theta)
     y = radius * np.sin(theta)
     return x, y
-
-
-def configurable(pickleable: bool = False):
-    """Class decorator to allow injection of constructor arguments.
-
-    Example usage:
-    >>> @configurable()
-    ... class A:
-    ...     def __init__(self, b=None, c=2, d='Wow'):
-    ...         ...
-
-    >>> set_env_params(A, {'b': 10, 'c': 20})
-    >>> a = A()      # b=10, c=20, d='Wow'
-    >>> a = A(b=30)  # b=30, c=20, d='Wow'
-
-    Args:
-        pickleable: Whether this class is pickleable. If true, causes the pickle
-            state to include the constructor arguments.
-    """
-    # pylint: disable=protected-access,invalid-name
-
-    def cls_decorator(cls):
-        assert inspect.isclass(cls)
-
-        # Overwrite the class constructor to pass arguments from the config.
-        base_init = cls.__init__
-
-        def __init__(self, *args, **kwargs):
-
-            if pickleable:
-                self._pkl_env_args = args
-                self._pkl_env_kwargs = kwargs
-
-            base_init(self, *args, **kwargs)
-
-        cls.__init__ = __init__
-
-        # If the class is pickleable, overwrite the state methods to save
-        # the constructor arguments
-        if pickleable:
-            # Use same pickle keys as gym.utils.ezpickle for backwards compat.
-            PKL_ARGS_KEY = '_ezpickle_args'
-            PKL_KWARGS_KEY = '_ezpickle_kwargs'
-            def __getstate__(self):
-                return {
-                   PKL_ARGS_KEY: self._pkl_env_args,
-                    PKL_KWARGS_KEY: self._pkl_env_kwargs,
-                }
-            cls.__getstate__ = __getstate__
-
-            def __setstate__(self, data):
-                saved_args = data[PKL_ARGS_KEY]
-                saved_kwargs = data[PKL_KWARGS_KEY]
-
-                inst = type(self)(*saved_args, **saved_kwargs)
-                self.__dict__.update(inst.__dict__)
-
-            cls.__setstate__ = __setstate__
-
-        return cls
-
-    # pylint: enable=protected-access,invalid-name
-    return cls_decorator
 
 
 @configurable(pickleable=True)
@@ -1055,11 +992,10 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
     def reset(self, randomize=False, **kwargs):
         if randomize:
             self.randomize_params(**kwargs)
-        ret = super(ObservationNoiseWrapper, self).reset(
-                object_mass=self.noise_params.object_mass, **kwargs)
+        ret = super(ObservationNoiseWrapper, self).reset(**kwargs)
         if self.noise_params.object_friction:
-            lateral_friction = self.noise_params.obj_friction
-            spinning_friction = .001 * self.noise_params.obj_friction
+            lateral_friction = self.noise_params.object_friction
+            spinning_friction = .001 * self.noise_params.object_friction
             pybullet.changeDynamics(self.platform.cube.block_id, -1,
                     lateral_friction, spinning_friction)
         return ret

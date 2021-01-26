@@ -16,6 +16,8 @@ except ImportError:
 import trifinger_simulation
 import trifinger_simulation.visual_objects
 import rrc_iprl_package.pybullet_utils as pbutils
+from rrc_iprl_package.envs.env_utils import configurable
+
 from scipy.spatial.transform import Rotation
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
@@ -52,6 +54,7 @@ class ActionType(enum.Enum):
     TORQUE_AND_POSITION = enum.auto()
 
 
+@configurable(pickleable=True)
 class RealRobotCubeEnv(gym.GoalEnv):
     """Gym environment for moving cubes with simulated TriFingerPro."""
     observation_names = ["position",
@@ -89,9 +92,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         # Basic initialization
         # ====================
 
-        self.goal = cube_goal_pose
-        if not isinstance(cube_goal_pose, dict):
-            self.goal = cube_goal_pose.as_dict()
+        self.goal = move_cube.Pose.from_dict(cube_goal_pose)
         self.info = {"difficulty": goal_difficulty}
         if cube_initial_pose:
             self.initial_pose = move_cube.Pose.from_dict(cube_initial_pose)
@@ -145,7 +146,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.save_npz = save_npz
 
         # verify that the given goal pose is contained in the cube state space
-        if not object_state_space.contains(self.goal):
+        if not object_state_space.contains(self.goal.to_dict()):
             raise ValueError("Invalid goal pose.")
 
         self.default_position = default_position
@@ -194,8 +195,6 @@ class RealRobotCubeEnv(gym.GoalEnv):
         )
         if osp.exists('/output'):
             self.observation_space.spaces['filtered_achieved_goal'] = object_state_space
-        # self.observation_space.spaces['cam0_timestamp'] = gym.spaces.Box(low=0., high=np.inf, shape=())
-
         self.save_npz = save_npz
         self.action_log = []
         self.filtered_position = None
@@ -347,6 +346,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         )
 
         is_done = self.step_count >= self.episode_length
+        if self.info['pos_error'] >= 0.166:
+            is_done = True
+
+
         # self.write_action_log(observation, action, reward)
         self.info['num_steps'] = self.step_count
 
@@ -364,20 +367,20 @@ class RealRobotCubeEnv(gym.GoalEnv):
         save_npz = save_npz or self.save_npz
         if save_npz and self.action_log:
             np.savez(save_npz, initial_pose=self.initial_pose.to_dict(),
-                     goal_pose=self.goal, action_log=self.action_log)
+                     goal_pose=self.goal.to_dict(), action_log=self.action_log)
             del self.action_log
         self.action_log = []
 
-    def reset(self):
+    def reset(self, **platform_kwargs):
         # By changing the `_reset_*` method below you can switch between using
         # the platform frontend, which is needed for the submission system, and
         # the direct simulation, which may be more convenient if you want to
         # pre-train locally in simulation.
         self.resetting = True
         if robot_fingers is not None:
-            self._reset_platform_frontend()
+            self._reset_platform_frontend(**platform_kwargs)
         else:
-            self._reset_direct_simulation()
+            self._reset_direct_simulation(**platform_kwargs)
 
         self.step_count = 0
         if self.num_resets * self.episode_length >= 120*1000:
@@ -415,7 +418,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.resetting = False
         return observation
 
-    def _reset_platform_frontend(self):
+    def _reset_platform_frontend(self, **platform_kwargs):
         """Reset the platform frontend."""
         # reset is not really possible
         if self.platform is not None:
@@ -429,7 +432,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self.kinematics = platform.simfinger.kinematics
             self.t_prev = 0
 
-    def _reset_direct_simulation(self):
+    def _reset_direct_simulation(self, **platform_kwargs):
         """Reset direct simulation.
 
         With this the env can be used without backend.
@@ -441,6 +444,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.platform = trifinger_simulation.TriFingerPlatform(
             visualization=self.visualization,
             initial_object_pose=self.initial_pose,
+            **platform_kwargs,
         )
         self.kinematics = self.platform.simfinger.kinematics
         self.t_prev = 0
@@ -449,8 +453,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
         if self.visualization:
             self.goal_marker = trifinger_simulation.visual_objects.CuboidMarker(
                 size=move_cube._CUBOID_SIZE,
-                position=self.goal["position"],
-                orientation=self.goal["orientation"],
+                position=self.goal.position,
+                orientation=self.goal.orientation,
                 pybullet_client_id=self.platform.simfinger._pybullet_client_id,
             )
             pbutils.reset_camera()
@@ -501,7 +505,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.info.update(obs_dict)
         observation = {
             "observation": obs_dict,
-            "desired_goal": self.goal,
+            "desired_goal": self.goal.to_dict(),
             "achieved_goal": {
                 "position": camera_observation.object_pose.position,
                 "orientation": camera_observation.object_pose.orientation,
@@ -534,6 +538,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         return robot_action
 
 
+@configurable(pickleable=True)
 class CubeEnv(RealRobotCubeEnv):
     def __init__(
         self,
@@ -567,7 +572,7 @@ class CubeEnv(RealRobotCubeEnv):
 
     def reset(self): 
         self.initial_pose = self.initializer.get_initial_state()
-        self.goal = self.initializer.get_goal().to_dict()
+        self.goal = self.initializer.get_goal()
         return super(CubeEnv, self).reset()
 
 

@@ -48,7 +48,7 @@ class StaticObjectOpt:
 
     # Formulate nlp
     problem = {"x":self.z, "f":self.cost, "g":self.g, "p":self.p}
-    options = {"ipopt.print_level":5,
+    options = {"ipopt.print_level":0,
                "ipopt.max_iter":10000,
                 "ipopt.tol": 1e-4,
                 "print_time": 0

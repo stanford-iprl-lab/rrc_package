@@ -20,15 +20,16 @@ from trifinger_simulation.tasks import move_cube
 from trifinger_simulation import pinocchio_utils
 from trifinger_simulation import visual_objects
 
-from rrc_iprl_package.envs import rrc_utils
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control import controller_utils as c_utils
 from rrc_iprl_package.control.controller_utils import PolicyMode
 
 try:
     import torch
+    from spinup.utils.mpi_tools import proc_id
 except ImportError:
     torch = None
+    proc_id = None
 
 
 class TrajMode(enum.Enum):
@@ -82,6 +83,7 @@ class ImpedanceControllerPolicy:
         self.goal_face = None
         self.platform = None
         self.custom_pinocchio_utils = None
+        """
         print("USE_FILTERED_POSE: {}".format(self.USE_FILTERED_POSE))
         print("KP: {}".format(self.KP))
         print("KV: {}".format(self.KV))
@@ -89,6 +91,7 @@ class ImpedanceControllerPolicy:
         print("KV_REPOSE: {}".format(self.KV_REPOSE))
         print("KP_OBJ: {}".format(self.KP_OBJ))
         print("KV_OBJ: {}".format(self.KV_OBJ))
+        """
         
         self.initialize_logging()
 
@@ -101,6 +104,8 @@ class ImpedanceControllerPolicy:
             self.control_policy_log_filepath = "/output/control_policy_log"
         else:
             time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            if proc_id is not None:
+                time_str = time_str + str(-proc_id())
             if not osp.exists("./output/{}".format(time_str)):
                 os.makedirs("./output/{}".format(time_str))
             self.csv_filepath           = "./output/{}/control_policy_data.csv".format(time_str)
@@ -235,10 +240,12 @@ class ImpedanceControllerPolicy:
         if self.difficulty == 4:
             x_goal[0, -4:] = self.goal_pose.orientation
 
+        """
         print("Object pose position: {}".format(obj_pose.position))
         print("Object pose orientation: {}".format(obj_pose.orientation))
         print("Traj lift x0: {}".format(repr(x0)))
         print("Traj lift x_goal: {}".format(repr(x_goal)))
+        """
     
         # Get current joint positions
         current_position, _ = get_robot_position_velocity(observation)
@@ -504,9 +511,9 @@ class ImpedanceControllerPolicy:
         # Estimate object velocity based on previous and current object pose
         # TODO: this might cause an issue if observed object poses are the same across steps?
         if osp.exists("/output"):
-            timestamp = full_observation["cam0_timestamp"]
+            timestamp = observation["cam0_timestamp"]
         else:
-            timestamp = full_observation["cam0_timestamp"] / 1000
+            timestamp = observation["cam0_timestamp"] / 1000
         obj_vel = self.get_obj_vel(self.filtered_obj_pose, timestamp)
         
         # Get current fingertip position
@@ -632,6 +639,7 @@ class HierarchicalControllerPolicy:
         self.traj_initialized = False
         self.rl_retries = int(self.start_mode == PolicyMode.RL_PUSH)
         self.difficulty = difficulty
+        self.rl_env = None
 
     def reset_policy(self, observation, platform=None):
         self.mode = self.start_mode
@@ -679,12 +687,10 @@ class HierarchicalControllerPolicy:
     def load_spinup_policy(self, load_dir, load_itr='last', deterministic=False,
                           **load_kwargs):
         self.rl_env, self.rl_policy = load_policy_and_env(load_dir, load_itr, deterministic)
-        if self.rl_env is None:
-            self.rl_env = rrc_utils.build_env_fn(**load_kwargs)()
         self.rl_frameskip = self.rl_env.frameskip
         self.observation_names = list(self.rl_env.env.observation_space.spaces.keys())
         self.rl_observation_space = self.rl_env.observation_space
-        print('loaded policy from {}'.format(load_dir))
+        # print('loaded policy from {}'.format(load_dir))
 
     def activate_rl(self, obj_pose, goal_pose):
         if self.start_mode != PolicyMode.RL_PUSH or self.rl_retries == self.MAX_RETRIES:
