@@ -31,7 +31,7 @@ from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy, T
 from rrc_iprl_package.envs import env_wrappers
 from rrc_iprl_package.envs import cube_env
 from rrc_iprl_package.envs.cube_env import ActionType
-from rrc_iprl_package.envs.env_wrappers import configurable
+from rrc_iprl_package.envs.env_utils import configurable
 from rrc_iprl_package.control.controller_utils import PolicyMode
 from rrc_iprl_package.control.control_policy import HierarchicalControllerPolicy
 from dm_control.utils import rewards as dmr

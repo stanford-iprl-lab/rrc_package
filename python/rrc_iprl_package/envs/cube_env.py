@@ -16,6 +16,8 @@ except ImportError:
 import trifinger_simulation
 import trifinger_simulation.visual_objects
 import rrc_iprl_package.pybullet_utils as pbutils
+from rrc_iprl_package.envs.env_utils import configurable
+
 from scipy.spatial.transform import Rotation
 from trifinger_simulation import trifingerpro_limits
 from trifinger_simulation.tasks import move_cube
@@ -52,6 +54,7 @@ class ActionType(enum.Enum):
     TORQUE_AND_POSITION = enum.auto()
 
 
+@configurable(pickleable=True)
 class RealRobotCubeEnv(gym.GoalEnv):
     """Gym environment for moving cubes with simulated TriFingerPro."""
     observation_names = ["position",
@@ -535,6 +538,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         return robot_action
 
 
+@configurable(pickleable=True)
 class CubeEnv(RealRobotCubeEnv):
     def __init__(
         self,
