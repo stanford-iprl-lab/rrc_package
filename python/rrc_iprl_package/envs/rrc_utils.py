@@ -72,13 +72,13 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
 def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
                  ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
                  ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
-                 action_type='pos',
-                 sample_radius=0.09, sa_relative=True, ts_relative=False,
+                 action_type='pos', sample_radius=0.09,
+                 residual=False, sa_relative=True, ts_relative=False,
                  goal_relative=True, lim_pen=0., return_wrappers=False,
                  goal_env=False, keep_goal=False, use_quat=False,
                  cube_rew=False, step_rew=False, reorient_env=False,
                  scaled_ac=False, task_space=False):
-    if goal_env:
+    if goal_env or residual:
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
         env_str = 'real_robot_challenge_phase_2-v2'
@@ -86,7 +86,7 @@ def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
     custom_env.ORI_THRESH = ori_thresh
     env_wrappers.DIST_THRESH = dist_thresh
     env_wrappers.ORI_THRESH = ori_thresh
-    if action_type == 'pos':
+    if action_type == 'pos' and not residual:
         action_type = cube_env.ActionType.POSITION
     else:
         action_type = cube_env.ActionType.TORQUE
@@ -107,19 +107,22 @@ def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
     # Reorient wrapper (for is_done flag)
     if reorient_env:
         rew_wrappers.append(functools.partial(env_wrappers.ReorientWrapper,
-                                              goal_env=goal_env,
+                                              goal_env=(goal_env or residual),
                                               dist_thresh=dist_thresh,
                                               ori_thresh=ori_thresh))
-    # 2. Action wrappers (scaled actions, task space, 
+    # 2. Action wrappers (scaled actions, task space, relative goal)
     final_wrappers = []
-    if scaled_ac:
-        final_wrappers.append(functools.partial(env_wrappers.ScaledActionWrapper,
-                              goal_env=goal_env, relative=sa_relative,
-                              lim_penalty=lim_pen))
-    if goal_relative and not goal_env:
-        final_wrappers.append(functools.partial(
-            env_wrappers.RelativeGoalWrapper, keep_goal=keep_goal,
-            use_quat=use_quat))
+    if residual:
+        final_wrappers.append(custom_env.ResidualPolicyWrapper)
+    else:
+        if scaled_ac:
+            final_wrappers.append(functools.partial(env_wrappers.ScaledActionWrapper,
+                                  goal_env=goal_env, relative=sa_relative,
+                                  lim_penalty=lim_pen))
+        if goal_relative and not goal_env:
+            final_wrappers.append(functools.partial(
+                env_wrappers.RelativeGoalWrapper, keep_goal=keep_goal,
+                use_quat=use_quat))
 
     # Adds time limit, logging, action clipping, and flattens observation 
     p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',
@@ -127,6 +130,7 @@ def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
     p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
                                             info_keys=p2_info_keys)
     final_wrappers.append(functools.partial(wrappers.TimeLimit, max_episode_steps=ep_len))
+
     if action_type == cube_env.ActionType.TORQUE:
         final_wrappers.append(functools.partial(
             wrappers.RescaleAction, a=-1, b=1))
@@ -146,7 +150,7 @@ def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
     # initializer = env_wrappers.ReorientInitializer(1, sample_radius)
     initializer = env_wrappers.RandomGoalOrientationInitializer()
 
-    if goal_env:
+    if goal_env or residual:
         ret = make_env_fn(env_str, ewrappers,
                           initializer=initializer,
                           action_type=action_type,

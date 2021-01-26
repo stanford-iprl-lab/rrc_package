@@ -268,7 +268,7 @@ class PushCubeEnv(gym.Env):
         self.platform = trifinger_simulation.TriFingerPlatform(
             visualization=self.visualization,
             initial_object_pose=initial_object_pose,
-            object_mass=object_mass
+            object_mass=platform_kwargs.get('object_mass')
         )
         self.kinematics = self.platform.simfinger.kinematics
 

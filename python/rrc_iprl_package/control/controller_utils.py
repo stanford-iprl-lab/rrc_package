@@ -112,8 +112,8 @@ def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     dx_delta = np.concatenate((dp_delta, do_delta))
     W = Kp @ x_delta + Kv @ dx_delta - OBJ_MASS * g
     
-    print("x_delta: {}".format(x_delta))
-    print("dx_delta: {}".format(dx_delta))
+    # print("x_delta: {}".format(x_delta))
+    # print("dx_delta: {}".format(dx_delta))
 
     #print(W)
 
@@ -375,6 +375,8 @@ def get_cp_of_from_cp_param(cp_param, use_obj_size_offset = False):
         quat = (1, 0, 0, 0)
     elif z_param == -1:
         quat = (np.sqrt(2)/2, 0, -np.sqrt(2)/2, 0)
+    else:
+        quat = (0, 0, 1, 0)
 
     cp = ContactPoint(cp_of, quat)
     return cp
@@ -532,7 +534,7 @@ def get_lifting_cp_params(obj_pose):
     face = assign_faces_to_fingers(obj_pose, [curr_finger_id], free_faces)[curr_finger_id]
     finger_assignments[face].append(curr_finger_id)
 
-    print("finger assignments: {}".format(finger_assignments))
+    # print("finger assignments: {}".format(finger_assignments))
     
     # Set contact point params for two long faces
     cp_params = [None, None, None]
@@ -547,6 +549,7 @@ def get_lifting_cp_params(obj_pose):
             nearest_short_faces = assign_faces_to_fingers(obj_pose,
                                                           finger_id_list,
                                                           CUBOID_SHORT_FACES.copy())
+            # print("nearest short faces: {}".format(nearest_short_faces))
     
             for f_i, short_face in nearest_short_faces.items():
                 new_param = param.copy()
@@ -555,7 +558,7 @@ def get_lifting_cp_params(obj_pose):
                 
         else:
             cp_params[finger_id_list[0]] = param
-    print("LIFT CP PARAMS: {}".format(cp_params))
+    # print("LIFT CP PARAMS: {}".format(cp_params))
 
     return cp_params
 
@@ -596,6 +599,9 @@ def assign_faces_to_fingers(obj_pose, finger_id_list, free_faces):
         if f_i not in finger_id_list:
             xy_distances[f_i, :] = np.nan
             continue
+        if len(free_faces) == 1:
+            assignments[f_i] = free_faces[0]
+            return assignments
         furthest_axis = max_ind[1]
         x_dist = xy_distances[f_i, 0]
         y_dist = xy_distances[f_i, 1]
@@ -627,7 +633,8 @@ def assign_faces_to_fingers(obj_pose, finger_id_list, free_faces):
         assignments[f_i] = face
 
         xy_distances[f_i, :] = np.nan
-        free_faces.remove(face)
+        if face in free_faces:
+            free_faces.remove(face)
 
     return assignments
 

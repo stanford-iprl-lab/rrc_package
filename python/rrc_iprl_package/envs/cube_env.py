@@ -343,6 +343,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
         )
 
         is_done = self.step_count >= self.episode_length
+        if self.info['pos_error'] >= 0.166:
+            is_done = True
+
+
         # self.write_action_log(observation, action, reward)
         self.info['num_steps'] = self.step_count
 
