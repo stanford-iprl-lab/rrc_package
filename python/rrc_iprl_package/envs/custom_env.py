@@ -935,7 +935,6 @@ class ResidualPolicyWrapper(ObservationWrapper):
         rl_obs = self.process_observation_rl(observation)
         self._obs_dict = {'impedance': observation, 'rl': rl_obs}
         if self.goal_env:
-            observation['observation']['action'] = observation.pop('action')
             return observation
         else:
             return rl_obs
