@@ -1,17 +1,36 @@
 import gym
 import numpy as np
+import os.path as osp
 
 from rrc_iprl_package.envs import rrc_utils, custom_env, cube_env, env_wrappers
+from rrc_iprl_package.envs.cube_env import ActionType
+from spinup.utils.test_policy import load_policy_and_env
 
 
-def run_eval(n_episodes=10, level=1, policy=None, gamma=.99,
+def run_eval(
+        n_episodes,
+        level,
+        env=None,
+        policy=None,
+        gamma=1.,
+        visualize=False,
+        residual=False,
+        randomize=False,
         info_kwargs=[]):
     initializer = env_wrappers.RandomInitializer(level)
-    env = cube_env.CubeEnv(initializer, goal_difficulty=level)
+    if env is None:
+        action_type = ActionType.POSITION if not residual else ActionType.TORQUE
+        env = cube_env.CubeEnv(initializer, goal_difficulty=level,
+                               action_type=action_type)
+    if residual:
+        env = custom_env.ResidualPolicyWrapper(env)
+    if randomize:
+        env = env_wrappers.ObservationNoiseWrapper(env)
+    env.unwrapped.visualization = visualize
     if policy is None:
         predict_fn = lambda x: np.zeros(9)
     else:
-        predict_fn = policy.predict
+        predict_fn = policy
 
     done = False
     total_rew = 0
@@ -43,5 +62,28 @@ def run_eval(n_episodes=10, level=1, policy=None, gamma=.99,
         print("{} std: {}".format(k, np.std(info_sum[k])))
 
 
+def load_policy(load_path, itr='last', deterministic=True):
+    if load_path and osp.exists(osp.expanduser(load_path)):
+        return load_policy_and_env(load_path, itr, deterministic)
+    return None, None
+
+
+def main(args):
+    env, policy = load_policy(args.load_path)
+    run_eval(n_episodes=args.num_episodes, level=args.level, env=env,
+             policy=policy, visualize=args.visualize, residual=args.residual,
+             randomize=args.randomize)
+
+
 if __name__ == '__main__':
-    run_eval()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--load_path', type=str)
+    parser.add_argument('--steps_per_epoch', type=int, default=None)
+    parser.add_argument('--num_episodes', '-n', type=int, default=10)
+    parser.add_argument('--level', type=int, default=4)
+    parser.add_argument('--visualize', '-v', action='store_true')
+    parser.add_argument('--residual', '--res', action='store_true')
+    parser.add_argument('--randomize', action='store_true')
+    args = parser.parse_args()
+    main(args)

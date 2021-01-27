@@ -268,7 +268,8 @@ class PushCubeEnv(gym.Env):
         self.platform = trifinger_simulation.TriFingerPlatform(
             visualization=self.visualization,
             initial_object_pose=initial_object_pose,
-            object_mass=platform_kwargs.get('object_mass')
+            object_mass=platform_kwargs.get('object_mass'),
+            joint_friction=platform_kwargs.get('joint_friction'),
         )
         self.kinematics = self.platform.simfinger.kinematics
 
@@ -535,7 +536,7 @@ class PushCubeEnv(gym.Env):
         if self.rew_fn == 'cost':
             is_done = is_done or reward >= 2.5
         else:
-            if self.info['pos_error'] >= self._target_dist:
+            if np.linalg.norm(observation['object_position'][:2]) >= self._target_dist:
                 is_done = True
 
         if is_done and isinstance(self.initializer, env_wrappers.CurriculumInitializer):
@@ -687,6 +688,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         return obs
 
     def reset(self, **platform_kwargs):
+        self.resetting = True
         if self._platform is None:
             initial_object_pose = move_cube.sample_goal(-1)
             self._platform = trifinger_simulation.TriFingerPlatform(
@@ -699,6 +701,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         # initial_object_pose = move_cube.sample_goal(difficulty=-1) 
         self.policy.reset_policy(obs['impedance'], self._platform)
         self._prev_action = np.zeros(9)
+        self.resetting = False
         return obs
 
     def _step(self, action):
@@ -926,8 +929,11 @@ class ResidualPolicyWrapper(ObservationWrapper):
         return observation
 
     def grasp_object(self, obs):
+        frameskip = self.unwrapped.frameskip
+        self.unwrapped.frameskip = 1
         while self.impedance_controller.mode != TrajMode.REPOSE:
             obs, _, _, _ = self.step(np.zeros(9))
+        self.unwrapped.frameskip = frameskip
         return obs
 
     def observation(self, observation):

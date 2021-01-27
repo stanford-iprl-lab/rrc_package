@@ -71,7 +71,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         goal_difficulty: int = 1,
         action_type: ActionType = ActionType.POSITION,
         default_position: np.ndarray = np.array([0.0, 0.75, -1.6] * 3),
-        visualization: bool = True,
+        visualization: bool = False,
         frameskip: int = 1,
         num_steps: int = None,
         save_npz: str = None,
@@ -346,7 +346,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         )
 
         is_done = self.step_count >= self.episode_length
-        if self.info['pos_error'] >= 0.166:
+        if np.linalg.norm(observation['achieved_goal']['position'][:2]) >= 0.156:
             is_done = True
 
 
@@ -394,7 +394,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         else:
             temp_frameskip = None
 
-        observation, reward, _, _ = self.step(self._initial_action)
+        observation, reward, _, _ = self.step(self._initial_action.copy())
 
         # set the initial pose to what is returned from first call to 
         # create_observation
@@ -404,10 +404,9 @@ class RealRobotCubeEnv(gym.GoalEnv):
         cur_vel = observation["observation"]["velocity"]
         cur_pos = observation["observation"]["position"]
         if self.num_resets != -1:
-            # import pdb; pdb.set_trace()
             while not all(np.abs(vel) < 0.01 for vel in cur_vel) or \
                     np.abs(cur_pos - self.default_position).max() >= .05:
-                observation, reward, _, _ = self.step(self._initial_action)
+                observation, reward, _, _ = self.step(self._initial_action.copy())
                 cur_vel = observation["observation"]["velocity"]
                 cur_pos = observation["observation"]["position"]
 
@@ -444,7 +443,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.platform = trifinger_simulation.TriFingerPlatform(
             visualization=self.visualization,
             initial_object_pose=self.initial_pose,
-            **platform_kwargs,
+            object_mass=platform_kwargs.get('object_mass'),
+            joint_friction=platform_kwargs.get('joint_friction'),
         )
         self.kinematics = self.platform.simfinger.kinematics
         self.t_prev = 0
@@ -570,9 +570,9 @@ class CubeEnv(RealRobotCubeEnv):
             action_type=action_type, default_position=default_position, visualization=visualization,
             frameskip=frameskip, num_steps=num_steps, save_npz=save_npz)
 
-    def reset(self): 
+    def reset(self, **kwargs):
         self.initial_pose = self.initializer.get_initial_state()
         self.goal = self.initializer.get_goal()
-        return super(CubeEnv, self).reset()
+        return super(CubeEnv, self).reset(**kwargs)
 
 

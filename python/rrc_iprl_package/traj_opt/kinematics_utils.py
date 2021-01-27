@@ -64,6 +64,29 @@ H_4_wrt_3 = Matrix([
 
 H_4_wrt_0 = H_0_wrt_base @ H_1_wrt_0 @ H_2_wrt_1 @ H_3_wrt_2 @ H_4_wrt_3
 
+# Reference frame 5 attached to very end of fingertip
+# Transformation from frame 4 to 5
+# Fixed
+H_5_wrt_4 = Matrix([
+                  [1, 0, 0, 0],
+                  [0, 1, 0, 0],
+                  [0, 0, 1, -0.0095], # TODO HARDCODED
+                  [0, 0, 0, 1],
+                  ])
+
+H_5_wrt_0 = H_4_wrt_0 @ H_5_wrt_4
+
+# Compose rotations to get orientation of frame 4 w.r.t frame 0
+R_0_wrt_base = H_0_wrt_base[:3,:3]
+R_1_wrt_0 = H_1_wrt_0[:3,:3]
+R_2_wrt_1 = H_2_wrt_1[:3,:3]
+R_3_wrt_2 = H_3_wrt_2[:3,:3]
+R_4_wrt_3 = H_4_wrt_3[:3,:3]
+
+R_4_wrt_0 = R_0_wrt_base @ R_1_wrt_0 @ R_2_wrt_1 @ R_3_wrt_2 @ R_4_wrt_3
+
+print("{}".format(R_4_wrt_0).replace("cos", "np.cos").replace("sin", "np.sin").replace("theta_base", "theta"))
+
 p = np.array([[0],[0],[0],[1]])
 
 """
@@ -71,7 +94,8 @@ Compute forward kinematics for all fingers given joint positions q
 """
 def FK(q):
     ft_pos = []
-    for f_i, angle in enumerate(BASE_ANGLE_DEGREES):
+    for fplit
+i, angle in enumerate(BASE_ANGLE_DEGREES):
         theta = angle * (np.pi/180)
         q1_val = q[3*f_i + 0]
         q2_val = q[3*f_i + 1]
@@ -81,6 +105,31 @@ def FK(q):
         p_wf = eef_wf.subs({"q1": q1_val, "q2": q2_val, "q3": q3_val, "theta_base": theta})
         ft_pos += flatten(p_wf)
     return ft_pos
+
+def get_H_5_wrt_0(q):
+    H_list = []
+    for f_i, angle in enumerate(BASE_ANGLE_DEGREES):
+        theta = angle * (np.pi/180)
+        q1_val = q[3*f_i + 0]
+        q2_val = q[3*f_i + 1]
+        q3_val = q[3*f_i + 2]
+        H = H_5_wrt_0.subs({"q1": q1_val, "q2": q2_val, "q3": q3_val, "theta_base": theta})
+        H_list.append(H)
+    return H_list
+
+"""
+Get fingertip reference frame orientation for all fingers
+"""
+def get_ft_R_sympy(q):
+    R_list = []
+    for f_i, angle in enumerate(BASE_ANGLE_DEGREES):
+        theta = angle * (np.pi/180)
+        q1_val = q[3*f_i + 0]
+        q2_val = q[3*f_i + 1]
+        q3_val = q[3*f_i + 2]
+        R = R_4_wrt_0.subs({"q1": q1_val, "q2": q2_val, "q3": q3_val, "theta_base": theta})
+        R_list.append(R)
+    return R_list
 
 #dq1 = eef_wf.diff(q1)
 #dq2 = eef_wf.diff(q2)
