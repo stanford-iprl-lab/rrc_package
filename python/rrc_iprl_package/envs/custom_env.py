@@ -926,7 +926,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         return observation
 
     def grasp_object(self, obs):
-        while not self.impedance_controller.mode != TrajMode.REPOSE:
+        while self.impedance_controller.mode != TrajMode.REPOSE:
             obs, _, _, _ = self.step(np.zeros(9))
         return obs
 

@@ -69,7 +69,7 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
         return env
     return env_fn
 
-def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
+def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
                  ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
                  ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
                  action_type='pos', sample_radius=0.09,
@@ -116,7 +116,8 @@ def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
         final_wrappers.append(custom_env.ResidualPolicyWrapper)
     else:
         if scaled_ac:
-            final_wrappers.append(functools.partial(env_wrappers.ScaledActionWrapper,
+            final_wrappers.append(
+                functools.partial(env_wrappers.ScaledActionWrapper,
                                   goal_env=goal_env, relative=sa_relative,
                                   lim_penalty=lim_pen))
         if goal_relative and not goal_env:
@@ -125,15 +126,16 @@ def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
                 use_quat=use_quat))
 
     # Adds time limit, logging, action clipping, and flattens observation 
+    final_wrappers.append(functools.partial(wrappers.TimeLimit,
+            max_episode_steps=ep_len))
+
     p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',
                     'final_ori_dist', 'final_ori_scaled']
     p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
                                             info_keys=p2_info_keys)
-    final_wrappers.append(functools.partial(wrappers.TimeLimit, max_episode_steps=ep_len))
-
     if action_type == cube_env.ActionType.TORQUE:
-        final_wrappers.append(functools.partial(
-            wrappers.RescaleAction, a=-1, b=1))
+        final_wrappers.append(
+                functools.partial(wrappers.RescaleAction, a=-1, b=1))
     final_wrappers +=  [p2_log_info_wrapper, wrappers.ClipAction]
     if not goal_env:
         final_wrappers.append(wrappers.FlattenObservation)
@@ -141,14 +143,18 @@ def build_env_fn(pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
         final_wrappers.append(env_wrappers.FlattenGoalWrapper)
     ewrappers = []
     if task_space:
-        assert not scaled_ac, 'Can only use TaskSpaceWrapper OR ScaledActionWrapper'
+        assert not scaled_ac, 'Can only use TaskSpaceWrapper OR ' \
+                              'ScaledActionWrapper'
         ewrappers.append(functools.partial(env_wrappers.TaskSpaceWrapper,
                                            relative=ts_relative))
         action_type = cube_env.ActionType.POSITION
     ewrappers += rew_wrappers + final_wrappers
 
     # initializer = env_wrappers.ReorientInitializer(1, sample_radius)
-    initializer = env_wrappers.RandomGoalOrientationInitializer()
+    if residual:
+        initializer = env_wrappers.RandomInitializer(difficulty=difficulty)
+    else:
+        initializer = env_wrappers.RandomGoalOrientationInitializer()
 
     if goal_env or residual:
         ret = make_env_fn(env_str, ewrappers,
