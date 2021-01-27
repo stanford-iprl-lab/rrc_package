@@ -990,7 +990,7 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
     def __init__(self, env, noise_params=None, goal_env=False):
         super(ObservationNoiseWrapper, self).__init__(env)
         self.noise_params = noise_params or ObservationNoiseParams()
-        self.goal_env = False
+        self.goal_env = goal_env
 
     def randomize_params(self):
         self.noise_params.randomize()
@@ -1043,7 +1043,7 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
                 scale=self.noise_params.object_pos_std,
                 size=3
             )
-        rot = Rotation.from_quat(obs['object_orientation'])
+        rot = Rotation.from_quat(object_dict[object_orientation_key])
         xyz = rot.as_euler('xyz')
         xyz += np.random.normal(
                 scale=self.noise_params.object_ori_std,

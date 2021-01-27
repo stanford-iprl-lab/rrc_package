@@ -931,7 +931,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
     def grasp_object(self, obs):
         frameskip = self.unwrapped.frameskip
         self.unwrapped.frameskip = 1
-        while self.impedance_controller.mode != TrajMode.REPOSE:
+        while (self.impedance_controller.mode not in 
+               [TrajMode.ROTATE_X, TrajMode.ROTATE_Z, TrajMode.REPOSITION]):
             obs, _, _, _ = self.step(np.zeros(9))
         self.unwrapped.frameskip = frameskip
         return obs

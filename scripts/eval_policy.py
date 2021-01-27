@@ -2,6 +2,7 @@ import gym
 import numpy as np
 import os.path as osp
 
+from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.envs import rrc_utils, custom_env, cube_env, env_wrappers
 from rrc_iprl_package.envs.cube_env import ActionType
 from spinup.utils.test_policy import load_policy_and_env
@@ -16,16 +17,17 @@ def run_eval(
         visualize=False,
         residual=False,
         randomize=False,
-        info_kwargs=[]):
+        info_kwargs=['is_success']):
     initializer = env_wrappers.RandomInitializer(level)
     if env is None:
         action_type = ActionType.POSITION if not residual else ActionType.TORQUE
         env = cube_env.CubeEnv(initializer, goal_difficulty=level,
-                               action_type=action_type)
+                               action_type=action_type, frameskip=1)
     if randomize:
-        env = env_wrappers.ObservationNoiseWrapper(env)
+        goal_env = isinstance(env, gym.GoalEnv)
+        env = env_wrappers.ObservationNoiseWrapper(env, goal_env=goal_env)
     if residual:
-        env = custom_env.ResidualPolicyWrapper(env)
+        env = custom_env.ResidualPolicyWrapper(env, goal_env=True)
     env.unwrapped.visualization = visualize
     if policy is None:
         predict_fn = lambda x: np.zeros(9)
@@ -33,28 +35,36 @@ def run_eval(
         predict_fn = policy
 
     done = False
-    total_rew = 0
+    total_score = total_rew = 0
     info_kwargs = {k: [] for k in info_kwargs}
     info_sum = {k: [] for k in info_kwargs}
     returns = []
     for ep in range(n_episodes):
         obs = env.reset()
+        ep_len = 0 
         while not done:
             obs, r, done, i = env.step(predict_fn(obs))
             total_rew = total_rew * gamma + r
+            reached, goal = obs['achieved_goal'], obs['desired_goal']
+            reached = move_cube.Pose.from_dict(reached)
+            goal = move_cube.Pose.from_dict(goal)
+            total_score += move_cube.evaluate_state(goal, reached, level)
             for k in info_kwargs:
-                if 'Final' not in k:
+                if 'Final' not in k and k in i:
                     info_kwargs[k].append(i.get(k))
+            ep_len += 1
         print("Episode {} total return: {}".format(ep, total_rew))
+        print("total score: {}, ep len: {}".format(total_score, ep_len))
         for k in info_kwargs:
             if "Final" == k[-5:]:
                 shortk = k[:-5]
-                info_sum[k].append(info_kwargs[shortk][-1])
-            else:
+                if shortk in i:
+                    info_sum[k].append(info_kwargs[shortk][-1])
+            elif k in i:
                 info_sum[k].append(np.mean(info_kwargs[k]))
         info_kwargs = {k: [] for k in info_kwargs}
         returns.append(total_rew)
-        total_rew = 0
+        total_score = total_rew = 0
         done = False
 
     for k in info_sum:
