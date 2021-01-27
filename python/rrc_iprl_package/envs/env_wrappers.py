@@ -535,6 +535,7 @@ class ReorientWrapper(gym.Wrapper):
         return obj_dist < self.dist_thresh and ori_dist < self.ori_thresh
 
 
+@configurable(pickleable=True)
 class FlattenGoalWrapper(gym.ObservationWrapper):
     """Wrapper to make rrc env baselines and VDS compatible"""
     def __init__(self, env):
@@ -671,6 +672,7 @@ class DistRewardWrapper(gym.RewardWrapper):
         return goal_dist
 
 
+@configurable(pickleable=True)
 class CubeRewardWrapper(gym.Wrapper):
     def __init__(self, env, target_dist=0.156, pos_coef=1., ori_coef=0.,
                  fingertip_coef=0., ac_norm_pen=0.2, goal_env=False, rew_fn='exp',
@@ -875,6 +877,7 @@ class CubeRewardWrapper(gym.Wrapper):
         return pos_error
 
 
+@configurable(pickleable=True)
 class LogInfoWrapper(gym.Wrapper):
     valid_keys = ['dist', 'score', 'ori_dist', 'ori_scaled',
                   'is_success', 'is_success_ori', 'is_success_ori_dist']
@@ -948,6 +951,7 @@ class LogInfoWrapper(gym.Wrapper):
         return o, r, d, self.info
 
 
+@configurable(pickleable=True)
 class StepRewardWrapper(gym.RewardWrapper):
     def __init__(self, env):
         super(StepRewardWrapper, self).__init__(env)
@@ -963,6 +967,7 @@ class StepRewardWrapper(gym.RewardWrapper):
         return step_reward
 
 
+@configurable(pickleable=True)
 class ObservationNoiseParams:
     def __init__(self, object_pos_std=.01, object_ori_std=0.,
                  robot_pos_std=0., robot_vel_std=0., action_noise_loc=-0.01,
@@ -986,6 +991,7 @@ class ObservationNoiseParams:
         return
 
 
+@configurable(pickleable=True)
 class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
     def __init__(self, env, noise_params=None, goal_env=False):
         super(ObservationNoiseWrapper, self).__init__(env)

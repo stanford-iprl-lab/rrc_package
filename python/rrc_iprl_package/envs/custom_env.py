@@ -550,6 +550,7 @@ class PushCubeEnv(gym.Env):
         return observation, reward, is_done, self.info
 
 
+@configurable(pickleable=True)
 class HierarchicalPolicyWrapper(ObservationWrapper):
     def __init__(self, env, policy):
         assert isinstance(env.unwrapped, cube_env.RealRobotCubeEnv), \
@@ -821,6 +822,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
         return goal_pose, object_pose
 
 
+@configurable(pickleable=True)
 class ResidualPolicyWrapper(ObservationWrapper):
     def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False,
                  observation_names=None):
