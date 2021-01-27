@@ -969,10 +969,10 @@ class StepRewardWrapper(gym.RewardWrapper):
 
 @configurable(pickleable=True)
 class ObservationNoiseParams:
-    def __init__(self, object_pos_std=.001, object_ori_std=0.,
+    def __init__(self, object_pos_std=.01, object_ori_std=0.,
                  robot_pos_std=0., robot_vel_std=0., action_noise_loc=-0.01,
-                 action_noise_scale=0.01, object_mass=0.016,
-                 object_friction=0.5, joint_friction_scale=0.01):
+                 action_noise_scale=0.005, object_mass=0.016,
+                 object_friction=1., joint_friction_scale=0.01):
         self.object_pos_std = object_pos_std
         self.object_ori_std = object_ori_std
         self.robot_pos_std = robot_pos_std
@@ -1010,8 +1010,11 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
         if self.noise_params.object_friction:
             lateral_friction = self.noise_params.object_friction
             spinning_friction = .001 * self.noise_params.object_friction
-            pybullet.changeDynamics(self.platform.cube.block_id, -1,
-                    lateral_friction, spinning_friction)
+            pybullet.changeDynamics(
+                    bodyUniqueId=self.platform.cube.block_id, 
+                    linkIndex=-1,
+                    lateralFriction=lateral_friction,
+                    spinningFriction=spinning_friction)
         return ret
 
     def step(self, action):
