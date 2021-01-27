@@ -22,10 +22,10 @@ def run_eval(
         action_type = ActionType.POSITION if not residual else ActionType.TORQUE
         env = cube_env.CubeEnv(initializer, goal_difficulty=level,
                                action_type=action_type)
-    if residual:
-        env = custom_env.ResidualPolicyWrapper(env)
     if randomize:
         env = env_wrappers.ObservationNoiseWrapper(env)
+    if residual:
+        env = custom_env.ResidualPolicyWrapper(env)
     env.unwrapped.visualization = visualize
     if policy is None:
         predict_fn = lambda x: np.zeros(9)
