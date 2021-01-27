@@ -1004,8 +1004,11 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
         if self.noise_params.object_friction:
             lateral_friction = self.noise_params.object_friction
             spinning_friction = .001 * self.noise_params.object_friction
-            pybullet.changeDynamics(self.platform.cube.block_id, -1,
-                    lateral_friction, spinning_friction)
+            pybullet.changeDynamics(
+                    bodyUniqueId=self.platform.cube.block_id, 
+                    linkIndex=-1,
+                    lateralFriction=lateral_friction,
+                    spinningFriction=spinning_friction)
         return ret
 
     def step(self, action):
