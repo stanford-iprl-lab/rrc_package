@@ -360,6 +360,7 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             fingertip_goals = fingertip_goals + self.scale * action.reshape((3,3))
         else:
             fingertip_goals = action
+        fingertip_goals = fingertip_goals.reshape((3,3))
         if self.unwrapped.action_type == ActionType.TORQUE:
             # compute desired velocity
             dt = self.frameskip * .001
@@ -449,7 +450,7 @@ class RelativeGoalWrapper(gym.ObservationWrapper):
         super(RelativeGoalWrapper, self).__init__(env)
         self._observation_keys = list(env.observation_space.spaces.keys())
         assert 'goal_object_position' in self._observation_keys, 'goal_object_position missing in observation'
-        self.position_only = 'goal_orientation' not in self._observation_keys
+        self.position_only = False # 'goal_orientation' not in self._observation_keys
         self.use_quat = use_quat
         self.observation_names =  [k for k in self._observation_keys if 'goal_object' not in k]
         self.observation_names.append('relative_goal_object_position')
