@@ -824,15 +824,16 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 
 @configurable(pickleable=True)
 class ResidualPolicyWrapper(ObservationWrapper):
-    def __init__(self, env, goal_env=False, rl_torque=True, rl_tip_pos=False,
+    def __init__(self, env, goal_env=False, rl_torque=True,
                  observation_names=None):
         super(ResidualPolicyWrapper, self).__init__(env)
         self.rl_torque = rl_torque
-        self.rl_tip_pos = rl_tip_pos
         self.goal_env = goal_env
         self.impedance_controller = None
         self._platform = None
         self.observation_names = observation_names or PushCubeEnv.observation_names
+        self.observation_names.remove('action')
+        self.observation_names.extend(['applied_torque', 'desired_torque'])
         assert env.action_type in [ActionType.TORQUE,
                                    ActionType.TORQUE_AND_POSITION]
         self._prev_action = np.zeros(9)
@@ -879,7 +880,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
                 "robot_torque": robot_torque_space,
                 "robot_tip_positions": gym.spaces.Box(low=p_low, high=p_high),
                 "robot_tip_forces": gym.spaces.Box(low=np.zeros(3), high=np.ones(3)),
-                "action": self.action_space,
+                "applied_torque": self.action_space,
+                "desired_torque": self.action_space,
                 "goal_object_position": object_state_space.spaces['position'],
                 "goal_object_orientation": object_state_space.spaces['orientation'],
                 "object_position": object_state_space.spaces['position'],
@@ -916,6 +918,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
                                                self._platform)
 
     def reset(self, **platform_kwargs):
+        self._des_torque = np.zeros(9)
         obs = super(ResidualPolicyWrapper, self).reset(**platform_kwargs)
         if self.kinematics is None:
             self.kinematics = self.platform.simfinger.kinematics
@@ -925,10 +928,11 @@ class ResidualPolicyWrapper(ObservationWrapper):
 
     def step(self, action):
         action = self.action(action)
-        return super(ResidualPolicyWrapper, self).step(action)
-
-    def process_observation_residual(self, observation):
-        return observation
+        obs, r, d, i = super(ResidualPolicyWrapper, self).step(action)
+        if not d:
+            self._des_torque = self.impedance_controller.predict(
+                    self._obs_dict['impedance'])
+        return obs, r, d, i
 
     def grasp_object(self, obs):
         frameskip = self.unwrapped.frameskip
@@ -969,13 +973,14 @@ class ResidualPolicyWrapper(ObservationWrapper):
             "robot_velocity": robot_observation.velocity,
             "robot_tip_positions": robot_tip_positions,
             "robot_tip_forces": robot_observation.tip_force,
-            "action": self._prev_action,
+            "applied_torque": self._prev_action,
+            "desired_torque": self._des_torque,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
             "goal_object_position": np.asarray(goal_pose["position"]),
             "goal_object_orientation": np.asarray(goal_pose["orientation"]),
         }
-        # observation = np.concatenate([observation[k].flatten() for k in self.observation_names])
+        observation = {k: observation[k] for k in self.observation_names}
         return observation
 
     def process_obs_init_goal(self, observation):
@@ -992,14 +997,14 @@ class ResidualPolicyWrapper(ObservationWrapper):
 
     def action(self, res_torque=None):
         obs = self._obs_dict['impedance'].copy()
-        if not self.rl_torque:  # residual policy sends residual ftip commands
-            obs['residual_ft_force'] = 0.05 * res_torque
-        des_torque = self.impedance_controller.predict(obs)
         if self.rl_torque:
-            self._prev_action = action = np.clip(res_torque + des_torque, self.action_space.low, self.action_space.high)
+            self._prev_action = action = np.clip(
+                    res_torque + self._des_torque, 
+                    self.action_space.low, self.action_space.high)
         else:
             self._prev_action = res_torque
-            action = np.clip(des_torque, self.action_space.low, self.action_space.high)
+            action = np.clip(self._des_torque, self.action_space.low, 
+                             self.action_space.high)
         if self.env.action_type == ActionType.TORQUE_AND_POSITION:
             return {'torque': action, 'position': np.repeat(np.nan, 9)}
         return action

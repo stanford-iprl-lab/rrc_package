@@ -626,7 +626,7 @@ class ImpedanceControllerPolicy:
         return filt_vel
         return cur_vel
 
-    def predict(self, full_observation):
+    def predict(self, full_observation, residual_ft_force=None):
         self.step_count += 1
         observation = full_observation['observation']
         current_position, current_velocity = observation['position'], observation['velocity']
@@ -685,6 +685,11 @@ class ImpedanceControllerPolicy:
     
         else:
             ft_des_force_wf = None
+
+        if ft_des_force_wf is not None and residual_ft_force is not None:
+            ft_des_force_wf += residual_ft_force
+        elif residual_ft_force is not None:
+            ft_des_force_wf = residual_ft_force
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(ft_pos_goal_list,
