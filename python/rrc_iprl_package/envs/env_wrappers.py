@@ -355,12 +355,12 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             obs, poskey, velkey = obs['observation'], 'position', 'velocity'
         current_position, current_velocity = obs[poskey], obs[velkey]
         if self.relative:
-            fingertip_goals = self.pinocchio_utils.forward_kinematics(current_position.flatten())
+            fingertip_goals = self.pinocchio_utils.forward_kinematics(
+                    current_position.flatten())
             fingertip_goals = np.asarray(fingertip_goals)
             fingertip_goals = fingertip_goals + self.scale * action.reshape((3,3))
         else:
             fingertip_goals = action
-        fingertip_goals = fingertip_goals.reshape((3,3))
         if self.unwrapped.action_type == ActionType.TORQUE:
             # compute desired velocity
             dt = self.frameskip * .001
@@ -374,8 +374,8 @@ class TaskSpaceWrapper(gym.ActionWrapper):
                              self.unwrapped.action_space.high)
         else:
             ac, ft_err = self.pinocchio_utils.inverse_kinematics(
-                    fingertip_goals, current_position)
-            ac = np.clip(ac, self.unwrapped.action_space.low,
+                    fingertip_goals.reshape((3,3)), current_position)
+            ac = np.clip(ac.flatten(), self.unwrapped.action_space.low,
                          self.unwrapped.action_space.high)
         return ac
 
