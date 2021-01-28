@@ -21,7 +21,8 @@ class PolicyMode(enum.Enum):
 # Object properties
 OBJ_MASS = 0.016 # 16 grams
 OBJ_SIZE = move_cube._CUBOID_SIZE
-OBJ_SIZE_OFFSET = 0.012
+OBJ_SIZE_OFFSET = 0
+#OBJ_SIZE_OFFSET = 0.012
 OBJ_MU = 1
 
 # Here, hard code the base position of the fingers (as angle on the arena)
@@ -112,8 +113,8 @@ def track_obj_traj_controller(x_des, dx_des, x_cur, dx_cur, Kp, Kv):
     dx_delta = np.concatenate((dp_delta, do_delta))
     W = Kp @ x_delta + Kv @ dx_delta - OBJ_MASS * g
     
-    # print("x_delta: {}".format(x_delta))
-    # print("dx_delta: {}".format(dx_delta))
+    #print("x_delta: {}".format(x_delta))
+    #print("dx_delta: {}".format(dx_delta))
 
     #print(W)
 
@@ -328,6 +329,8 @@ def get_cp_pos_wf_from_cp_param(cp_param, cube_pos_wf, cube_quat_wf, use_obj_siz
     rotation = Rotation.from_quat(cube_quat_wf)
     translation = np.asarray(cube_pos_wf)
 
+    #print("WF")
+    #print(rotation.apply(cp.pos_of) + translation)
     return rotation.apply(cp.pos_of) + translation
 
 """
@@ -375,8 +378,6 @@ def get_cp_of_from_cp_param(cp_param, use_obj_size_offset = False):
         quat = (1, 0, 0, 0)
     elif z_param == -1:
         quat = (np.sqrt(2)/2, 0, -np.sqrt(2)/2, 0)
-    else:
-        quat = (0, 0, 1, 0)
 
     cp = ContactPoint(cp_of, quat)
     return cp
@@ -432,19 +433,109 @@ def get_of_from_wf(p, obj_pose):
 
     return rotation_inv.apply(p) + translation_inv
 
+"""
+Project y axis of goal_pose onto XY plane and get difference between y axis of obj_pose
+"""
+def get_y_axis_delta(obj_pose, goal_pose):
+    ground_face = get_closest_ground_face(obj_pose)
+    goal_rot = Rotation.from_quat(goal_pose.orientation)
+    actual_rot = Rotation.from_quat(obj_pose.orientation)
+
+    y_axis = [0, 1, 0]
+
+    actual_direction_vector = actual_rot.apply(y_axis)
+
+    goal_direction_vector = goal_rot.apply(y_axis)
+    N = np.array([0, 0, 1]) # normal vector of ground plane
+    proj = goal_direction_vector - goal_direction_vector.dot(N) * N
+    goal_direction_vector = proj / np.linalg.norm(proj) # normalize projection
+
+    # Always in [0, pi] range
+    orientation_error = np.arccos(
+        goal_direction_vector.dot(actual_direction_vector)
+    )
+
+    # Determine direction of rotation
+    if ground_face in [5]: # TODO ???
+        direction = -1
+    else:
+        direction = 1
+    rot = Rotation.from_euler("z", direction * orientation_error)
+    new_rot = rot * actual_rot
+
+    # Check new error, if larger, rotate the other way
+    new_direction_vector = new_rot.apply(y_axis)
+    new_orientation_error = np.arccos(
+        goal_direction_vector.dot(new_direction_vector)
+    )
+
+    if new_orientation_error < orientation_error:
+        return direction * orientation_error
+    else:
+        return -1 * direction * orientation_error
+
+"""
+Get orientation that is parallel to ground, with specified ground face down
+"""
+def get_ground_aligned_orientation(obj_pose):
+    z_axis = [0, 0, 1]
+    ground_face = get_closest_ground_face(obj_pose)
+    actual_rot = Rotation.from_quat(obj_pose.orientation)
+
+    #print("GROUND FACE: {}".format(ground_face))
+
+    pose_up_vector = actual_rot.apply(OBJ_FACES_INFO[ground_face]["up_axis"])
+    #print(pose_up_vector)
+
+    orientation_error = np.arccos(
+        pose_up_vector.dot(z_axis)
+    )
+
+    # Rotate by orientation error 
+    align_rot = Rotation.from_euler("y", orientation_error)
+    new_rot = align_rot.inv() * actual_rot
+    
+    # Check new error, if larger, rotate the other way
+    pose_up_vector = new_rot.apply(OBJ_FACES_INFO[ground_face]["up_axis"])
+    new_orientation_error = np.arccos(
+        pose_up_vector.dot(z_axis)
+    )
+
+    if new_orientation_error > orientation_error:
+        align_rot = Rotation.from_euler("y", -orientation_error)
+        new_rot = align_rot.inv() * actual_rot
+
+    return new_rot.as_quat()
+
+def get_aligned_pose(obj_pose):
+    #print("Observed pose:")
+    #print(obj_pose.position, obj_pose.orientation)
+
+    # Clip obj z coord to half width of cube
+    clipped_pos = obj_pose.position.copy()
+    clipped_pos[2] = 0.01 # TODO hardcoded
+    aligned_quat = get_ground_aligned_orientation(obj_pose)
+
+    obj_pose.position = clipped_pos
+    obj_pose.orientation = aligned_quat
+
+    #print("Aligned pose:")
+    #print(obj_pose.position, obj_pose.orientation)
+    
+    return obj_pose
+
 ##############################################################################
 # Lift mode functions
 ##############################################################################
 """
 Run trajectory optimization
-obj_pose: current object pose (for getting contact points)
 current_position: current joint positions of robot
 x0: object initial position for traj opt
 x_goal: object goal position for traj opt
 nGrid: number of grid points
 dt: delta t
 """
-def run_fixed_cp_traj_opt(obj_pose, cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, npz_filepath = None):
+def run_fixed_cp_traj_opt(cp_params, current_position, custom_pinocchio_utils, x0, x_goal, nGrid, dt, npz_filepath = None):
 
     cp_params_on_obj = []
     for cp in cp_params:
@@ -534,7 +625,7 @@ def get_lifting_cp_params(obj_pose):
     face = assign_faces_to_fingers(obj_pose, [curr_finger_id], free_faces)[curr_finger_id]
     finger_assignments[face].append(curr_finger_id)
 
-    # print("finger assignments: {}".format(finger_assignments))
+    #print("finger assignments: {}".format(finger_assignments))
     
     # Set contact point params for two long faces
     cp_params = [None, None, None]
@@ -549,7 +640,6 @@ def get_lifting_cp_params(obj_pose):
             nearest_short_faces = assign_faces_to_fingers(obj_pose,
                                                           finger_id_list,
                                                           CUBOID_SHORT_FACES.copy())
-            # print("nearest short faces: {}".format(nearest_short_faces))
     
             for f_i, short_face in nearest_short_faces.items():
                 new_param = param.copy()
@@ -558,7 +648,7 @@ def get_lifting_cp_params(obj_pose):
                 
         else:
             cp_params[finger_id_list[0]] = param
-    # print("LIFT CP PARAMS: {}".format(cp_params))
+    #print("LIFT CP PARAMS: {}".format(cp_params))
 
     return cp_params
 
@@ -599,9 +689,6 @@ def assign_faces_to_fingers(obj_pose, finger_id_list, free_faces):
         if f_i not in finger_id_list:
             xy_distances[f_i, :] = np.nan
             continue
-        if len(free_faces) == 1:
-            assignments[f_i] = free_faces[0]
-            return assignments
         furthest_axis = max_ind[1]
         x_dist = xy_distances[f_i, 0]
         y_dist = xy_distances[f_i, 1]
@@ -630,9 +717,14 @@ def assign_faces_to_fingers(obj_pose, finger_id_list, free_faces):
                 else:
                     face = OBJ_FACES_INFO[ground_face]["adjacent_faces"][3] # 5
 
+        # Assign first face in free_faces
+        if face not in free_faces:
+            face = free_faces[0]
+
         assignments[f_i] = face
 
         xy_distances[f_i, :] = np.nan
+
         if face in free_faces:
             free_faces.remove(face)
 
@@ -640,7 +732,7 @@ def assign_faces_to_fingers(obj_pose, finger_id_list, free_faces):
 
 def get_pre_grasp_ft_goal(obj_pose, fingertips_current_wf, cp_params):
     ft_goal = np.zeros(9)
-    incr = 0.03
+    incr = 0.04
 
     # Get list of desired fingertip positions
     cp_wf_list = get_cp_pos_wf_from_cp_params(cp_params, obj_pose.position, obj_pose.orientation, use_obj_size_offset = True)

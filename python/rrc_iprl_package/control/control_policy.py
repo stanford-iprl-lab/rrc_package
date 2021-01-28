@@ -85,11 +85,11 @@ class ImpedanceControllerPolicy:
         self.init_face = None
         self.goal_face = None
         self.platform = None
-        print("USE_FILTERED_POSE: {}".format(self.USE_FILTERED_POSE))
-        print("KP: {}".format(self.KP))
-        print("KV: {}".format(self.KV))
-        print("KP_OBJ: {}".format(self.KP_OBJ))
-        print("KV_OBJ: {}".format(self.KV_OBJ))
+        # print("USE_FILTERED_POSE: {}".format(self.USE_FILTERED_POSE))
+        # print("KP: {}".format(self.KP))
+        # print("KV: {}".format(self.KV))
+        # print("KP_OBJ: {}".format(self.KP_OBJ))
+        # print("KV_OBJ: {}".format(self.KV_OBJ))
         
         self.initialize_logging()
 
@@ -237,7 +237,7 @@ class ImpedanceControllerPolicy:
 
         # Get z error between goal and current object orientation
         theta_z = c_utils.get_y_axis_delta(obj_pose, self.goal_pose)
-        print("THETA_Z delta: {}".format(theta_z))
+        # print("THETA_Z delta: {}".format(theta_z))
 
         # Set repose mode to ROTATE_z, ROTATE_X, or REPOSITION
         if self.difficulty != 4:
@@ -272,9 +272,9 @@ class ImpedanceControllerPolicy:
         self.traj_waypoint_counter = 0
         qnum = 3
             
-        print("Compute repose traj for MODE {}".format(self.mode))
-        print("Traj lift x0: {}".format(repr(x0)))
-        print("Traj lift x_goal: {}".format(repr(x_goal)))
+        # print("Compute repose traj for MODE {}".format(self.mode))
+        # print("Traj lift x0: {}".format(repr(x0)))
+        # print("Traj lift x_goal: {}".format(repr(x_goal)))
     
         # Get current joint positions
         current_position, _ = get_robot_position_velocity(observation)
