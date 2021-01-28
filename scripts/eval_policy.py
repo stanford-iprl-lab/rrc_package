@@ -1,6 +1,7 @@
 import gym
 import numpy as np
 import os.path as osp
+import time
 
 from trifinger_simulation.tasks import move_cube
 from rrc_iprl_package.envs import rrc_utils, custom_env, cube_env, env_wrappers
@@ -40,7 +41,10 @@ def run_eval(
     info_sum = {k: [] for k in info_kwargs}
     returns = []
     for ep in range(n_episodes):
-        obs = env.reset()
+        start = time.time()
+        obs = env.reset(timed=False)
+        end = time.time()
+        print(str(start - end), 'seconds')
         ep_len = 0 
         while not done:
             obs, r, done, i = env.step(predict_fn(obs))

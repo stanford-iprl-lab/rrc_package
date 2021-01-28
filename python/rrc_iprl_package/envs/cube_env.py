@@ -61,6 +61,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             "velocity",
             "torque",
             "tip_positions",
+            "tip_forces",
             "action",
             "cam0_timestamp"]
 
@@ -179,6 +180,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "tip_positions": gym.spaces.Box(
                     low=np.concatenate([trifingerpro_limits.object_position.low]*3),
                     high=np.concatenate([trifingerpro_limits.object_position.high]*3)),
+                "tip_forces": gym.spaces.Box(low=np.zeros(3), high=np.ones(3)),
                 "action": self.action_space,
                 "cam0_timestamp": gym.spaces.Box(low=0., high=np.inf, shape=())
             }
@@ -272,16 +274,18 @@ class RealRobotCubeEnv(gym.GoalEnv):
         position_error = self.compute_position_error(goal_pose, object_pose)
         orientation_error = self.compute_orientation_error(goal_pose, object_pose)
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
-        ftip_error = self.compute_fingertip_error(info.get('tip_positions'),
-                                                  object_pose).sum()
-        reward = dmr.tolerance(position_error, (0., DIST_THRESH/2),
+        #ftip_error = self.compute_fingertip_error(info.get('tip_positions'),
+        #                                          object_pose).sum()
+        reward = 2*dmr.tolerance(position_error, (0., DIST_THRESH/2),
                                margin=DIST_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
                                 margin=ORI_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
                                 margin=DIST_THRESH*3, sigmoid='long_tail')
-        reward += dmr.tolerance(ftip_error, (0., _CUBOID_HEIGHT*3/2),
-                                margin=_CUBOID_HEIGHT*3/2, sigmoid='long_tail')
+        if info.get('tip_forces') is not None:
+            reward += 1/3 * (info.get('tip_forces') > 0.3).sum()
+        #reward += dmr.tolerance(ftip_error, (0., _CUBOID_HEIGHT*3/2),
+        #                        margin=_CUBOID_HEIGHT*3/2, sigmoid='long_tail')
         info['pos_error'] = position_error
         info['ori_error'] = orientation_error
         info['corner_error'] = corner_error
@@ -348,11 +352,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
         is_done = self.step_count >= self.episode_length
         if np.linalg.norm(observation['achieved_goal']['position'][:2]) >= 0.156:
             is_done = True
+            reward = -5
             self.info['is_success'] = False
-        # end early if pos_error within 1 cm
-        if self.info['pos_error'] <= 0.01:
-            is_done = self.info['is_success'] = True
-
 
         # self.write_action_log(observation, action, reward)
         self.info['num_steps'] = self.step_count
@@ -502,6 +503,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "velocity": robot_observation.velocity,
                 "torque": robot_observation.torque,
                 "tip_positions": ftip_pos,
+                "tip_forces": robot_observation.tip_force,
                 "action": action,
                 "cam0_timestamp": camera_observation.cameras[0].timestamp
             }

@@ -6,6 +6,9 @@ import os.path as osp
 import logging
 import pdb
 
+import signal
+from contextlib import contextmanager
+
 from scipy.spatial.transform import Rotation
 from collections import deque
 from gym import wrappers
@@ -47,6 +50,20 @@ REW_BONUS = 10
 REW_PENALTY = -10
 POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
                       0.203])
+
+
+class TimeoutException(Exception): pass
+
+@contextmanager
+def time_limit(seconds):
+    def signal_handler(signum, frame):
+        raise TimeoutException("Timed out!")
+    signal.signal(signal.SIGALRM, signal_handler)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
 
 
 @configurable(pickleable=True)
@@ -407,19 +424,19 @@ class PushCubeEnv(gym.Env):
         position_error = self.compute_position_error(goal_pose, object_pose)
         orientation_error = self.compute_orientation_error(goal_pose, object_pose)
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
-        ftip_error = self.compute_fingertip_error(observation).sum()
+        #ftip_error = self.compute_fingertip_error(observation).sum()
         reward = dmr.tolerance(position_error, (0., DIST_THRESH/2),
                                margin=DIST_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
                                 margin=ORI_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
                                 margin=DIST_THRESH*3, sigmoid='long_tail')
-        reward += dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
-                                margin=_CUBOID_HEIGHT/2, sigmoid='long_tail')
+        # reward += dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
+        #                         margin=_CUBOID_HEIGHT/2, sigmoid='long_tail')
         self.info['pos_error'] = position_error
         self.info['ori_error'] = orientation_error
         self.info['corner_error'] = corner_error
-        self.info['ftip_error'] = ftip_error
+        # self.info['ftip_error'] = ftip_error
         return reward
 
     def _compute_reward(self, previous_observation, observation):
@@ -833,7 +850,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self._platform = None
         self.observation_names = observation_names or PushCubeEnv.observation_names
         self.observation_names.remove('action')
-        self.observation_names.extend(['applied_torque', 'desired_torque'])
+        self.observation_names.extend(['applied_torque', 'desired_torque',
+                                       'robot_tip_forces'])
         assert env.action_type in [ActionType.TORQUE,
                                    ActionType.TORQUE_AND_POSITION]
         self._prev_action = np.zeros(9)
@@ -909,6 +927,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
         init_pose, goal_pose = self.process_obs_init_goal(self._obs_dict['impedance'])
         self.impedance_controller = ImpedanceControllerPolicy(
                 self.action_space, init_pose, goal_pose)
+        #else:
+        #    self.impedance_controller.set_init_goal(init_pose, goal_pose)
         if self._platform is None:
             self._platform = trifinger_simulation.TriFingerPlatform(
                 visualization=False,
@@ -917,13 +937,27 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller.reset_policy(self._obs_dict['impedance'],
                                                self._platform)
 
-    def reset(self, **platform_kwargs):
-        self._des_torque = np.zeros(9)
+    def _reset(self, **platform_kwargs):
         obs = super(ResidualPolicyWrapper, self).reset(**platform_kwargs)
         if self.kinematics is None:
             self.kinematics = self.platform.simfinger.kinematics
         self.init_impedance_controller()
         obs = self.grasp_object(obs)
+        return obs
+
+    def reset(self, timed=True, **platform_kwargs):
+        self._des_torque = np.zeros(9)
+        finished = False
+        if not timed:
+            obs = self._reset(**platform_kwargs)
+        else:
+            while not finished:
+                try:
+                    with time_limit(20):
+                        obs = self._reset(**platform_kwargs)
+                    finished = True
+                except TimeoutException:
+                    print('resetting again, timed out')
         return obs
 
     def step(self, action):
@@ -999,7 +1033,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         obs = self._obs_dict['impedance'].copy()
         if self.rl_torque:
             self._prev_action = action = np.clip(
-                    res_torque + self._des_torque, 
+                    .1*res_torque + self._des_torque, 
                     self.action_space.low, self.action_space.high)
         else:
             self._prev_action = res_torque

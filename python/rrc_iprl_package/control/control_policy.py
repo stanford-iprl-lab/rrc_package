@@ -102,6 +102,8 @@ class ImpedanceControllerPolicy:
             self.control_policy_log_filepath = "/output/control_policy_log"
         else:
             time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            if proc_id is not None:
+                time_str = time_str + '-' + str(proc_id())
             if not osp.exists("./output/{}".format(time_str)):
                 os.makedirs("./output/{}".format(time_str))
             self.csv_filepath           = "./output/{}/control_policy_data.csv".format(time_str)

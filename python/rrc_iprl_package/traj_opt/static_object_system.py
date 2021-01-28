@@ -17,7 +17,7 @@ class StaticObjectSystem:
                obj_shape = None,
                log_file  = None,
               ):
-    print("Initialize static object system")
+    # print("Initialize static object system")
     
     # Time parameters
     self.nGrid = nGrid

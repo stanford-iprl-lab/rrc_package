@@ -18,7 +18,7 @@ elif phase == 2:
 registered_envs = [spec.id for spec in gym.envs.registry.all()]
 
 FRAMESKIP = 10
-EPLEN = 120 * 1000 // FRAMESKIP  # 15 seconds
+EPLEN = 15 * 1000 // FRAMESKIP  # 15 seconds
 EPLEN_SHORT = 5 * 1000 // FRAMESKIP  # 5 seconds, 500 total timesteps
 
 if phase == 1:
@@ -152,7 +152,7 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
 
     # initializer = env_wrappers.ReorientInitializer(1, sample_radius)
     initializer = env_wrappers.RandomInitializer(difficulty=difficulty)
-    # initializer = env_wrappers.RandomGoalOrientationInitializer()
+    #initializer = env_wrappers.RandomGoalOrientationInitializer()
 
     if goal_env or residual:
         ret = make_env_fn(env_str, ewrappers,
