@@ -428,8 +428,13 @@ class PushCubeEnv(gym.Env):
         #ftip_error = self.compute_fingertip_error(observation).sum()
         reward = dmr.tolerance(position_error, (0., DIST_THRESH/2),
                                margin=DIST_THRESH/2, sigmoid='long_tail')
-        reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
-                                margin=ORI_THRESH/2, sigmoid='long_tail')
+        if reward > .5:
+            reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
+                                    margin=ORI_THRESH/2, sigmoid='long_tail')
+        else:
+            reward += .5*dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
+                                    margin=ORI_THRESH/2, sigmoid='long_tail')
+
         reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
                                 margin=DIST_THRESH*3, sigmoid='long_tail')
         # reward += dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),

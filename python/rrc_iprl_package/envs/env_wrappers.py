@@ -280,7 +280,7 @@ class SparseCubeEnv(CubeEnv):
 
 @configurable(pickleable=True)
 class TaskSpaceWrapper(gym.ActionWrapper):
-    def __init__(self, env, goal_env=False, relative=False, scale=.008,
+    def __init__(self, env, goal_env=False, relative=False, scale=.01,
                  ac_pen=0.):
         super(TaskSpaceWrapper, self).__init__(env)
         self.action_log = []

@@ -18,6 +18,7 @@ def run_eval(
         visualize=False,
         residual=False,
         randomize=False,
+        task_space=False,
         info_kwargs=['is_success']):
     initializer = env_wrappers.RandomInitializer(level)
     if env is None:
@@ -29,36 +30,35 @@ def run_eval(
         env = env_wrappers.ObservationNoiseWrapper(env, goal_env=goal_env)
     if residual:
         env = custom_env.ResidualPolicyWrapper(env, goal_env=True)
+    elif task_space:
+        env = rrc_utils.build_env_fn(task_space=True, ts_relative=True,
+                                     goal_relative=True, action_type='pos'
+                                     ep_len=600, frameskip=25)()
     env.unwrapped.visualization = visualize
     if policy is None:
-        predict_fn = lambda x: np.zeros(9)
+        predict_fn = lambda x: env.action_space.sample()
     else:
         predict_fn = policy
 
     done = False
-    total_score = total_rew = 0
+    total_rew = 0
     info_kwargs = {k: [] for k in info_kwargs}
     info_sum = {k: [] for k in info_kwargs}
     returns = []
     for ep in range(n_episodes):
         start = time.time()
-        obs = env.reset(timed=False)
+        obs = env.reset()
         end = time.time()
         print(str(start - end), 'seconds')
         ep_len = 0 
         while not done:
             obs, r, done, i = env.step(predict_fn(obs))
             total_rew = total_rew * gamma + r
-            reached, goal = obs['achieved_goal'], obs['desired_goal']
-            reached = move_cube.Pose.from_dict(reached)
-            goal = move_cube.Pose.from_dict(goal)
-            total_score += move_cube.evaluate_state(goal, reached, level)
             for k in info_kwargs:
                 if 'Final' not in k and k in i:
                     info_kwargs[k].append(i.get(k))
             ep_len += 1
         print("Episode {} total return: {}".format(ep, total_rew))
-        print("total score: {}, ep len: {}".format(total_score, ep_len))
         for k in info_kwargs:
             if "Final" == k[-5:]:
                 shortk = k[:-5]
@@ -68,7 +68,7 @@ def run_eval(
                 info_sum[k].append(np.mean(info_kwargs[k]))
         info_kwargs = {k: [] for k in info_kwargs}
         returns.append(total_rew)
-        total_score = total_rew = 0
+        total_rew = 0
         done = False
 
     for k in info_sum:
@@ -86,7 +86,7 @@ def main(args):
     env, policy = load_policy(args.load_path)
     run_eval(n_episodes=args.num_episodes, level=args.level, env=env,
              policy=policy, visualize=args.visualize, residual=args.residual,
-             randomize=args.randomize)
+             randomize=args.randomize, task_space=args.task_space)
 
 
 if __name__ == '__main__':
@@ -99,5 +99,6 @@ if __name__ == '__main__':
     parser.add_argument('--visualize', '-v', action='store_true')
     parser.add_argument('--residual', '--res', action='store_true')
     parser.add_argument('--randomize', action='store_true')
+    parser.add_argument('--task_space', action='store_true')
     args = parser.parse_args()
     main(args)
