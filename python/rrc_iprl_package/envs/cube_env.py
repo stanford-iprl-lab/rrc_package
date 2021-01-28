@@ -343,7 +343,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 break
 
         self.observation = observation['observation']
-        reward += self.compute_reward(
+        reward += self.compute_reward_old(
             observation["achieved_goal"],
             observation["desired_goal"],
             self.info,

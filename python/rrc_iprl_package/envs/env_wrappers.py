@@ -360,6 +360,7 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             fingertip_goals = fingertip_goals + self.scale * action.reshape((3,3))
         else:
             fingertip_goals = action
+        fingertip_goals = fingertip_goals.reshape((3,3))
         if self.unwrapped.action_type == ActionType.TORQUE:
             # compute desired velocity
             dt = self.frameskip * .001

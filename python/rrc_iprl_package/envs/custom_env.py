@@ -69,6 +69,7 @@ def time_limit(seconds):
 @configurable(pickleable=True)
 class PushCubeEnv(gym.Env):
     observation_names = ["robot_position",
+            "robot_velocity",
             "robot_tip_positions",
             "object_position",
             "object_orientation",
