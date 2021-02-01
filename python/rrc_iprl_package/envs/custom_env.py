@@ -714,7 +714,6 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
                 visualization=False,
                 initial_object_pose=initial_object_pose,
             )
-        self.policy.impedance_controller.init_pinocchio_utils(self._platform)
         obs = super(HierarchicalPolicyWrapper, self).reset(**platform_kwargs)
         initial_object_pose = move_cube.Pose.from_dict(obs['impedance']['achieved_goal'])
         # initial_object_pose = move_cube.sample_goal(difficulty=-1) 
@@ -1034,7 +1033,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
         obs = self._obs_dict['impedance'].copy()
         if self.rl_torque:
             self._prev_action = action = np.clip(
-                    .1*res_torque + self._des_torque, 
+                    res_torque + self._des_torque, 
                     self.action_space.low, self.action_space.high)
         else:
             self._prev_action = res_torque

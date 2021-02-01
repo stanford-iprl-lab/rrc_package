@@ -151,8 +151,8 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
     ewrappers += rew_wrappers + final_wrappers
 
     # initializer = env_wrappers.ReorientInitializer(1, sample_radius)
-    #initializer = env_wrappers.RandomInitializer(difficulty=difficulty)
-    initializer = env_wrappers.RandomGoalOrientationInitializer()
+    initializer = env_wrappers.RandomInitializer(difficulty=difficulty)
+    # initializer = env_wrappers.RandomGoalOrientationInitializer()
 
     if goal_env or residual:
         ret = make_env_fn(env_str, ewrappers,
