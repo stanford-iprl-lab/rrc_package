@@ -863,11 +863,10 @@ class ResidualPolicyWrapper(ObservationWrapper):
         assert env.action_type in [ActionType.TORQUE,
                                    ActionType.TORQUE_AND_POSITION]
         self._prev_action = np.zeros(9)
-        if isinstance(env.action_space, gym.spaces.Dict):
-            if self.rl_torque:
-                self.action_space = env.action_space.spaces['torque']
-            else:
-                self.action_space = gym.spaces.Box(low=-np.ones(9), high=np.ones(9))
+        if self.rl_torque:
+            self.action_space = env.action_space.spaces['torque']
+        else:
+            self.action_space = gym.spaces.Box(low=-np.ones(9), high=np.ones(9))
         self.make_obs_space()
 
     def make_obs_space(self):
@@ -986,6 +985,9 @@ class ResidualPolicyWrapper(ObservationWrapper):
             self._des_torque = self.impedance_controller.predict(
                     self._obs_dict['impedance'], 
                     residual_ft_force=res_ft_force)
+            self._des_torque = np.clip(
+                    self._des_torque, self.env.action_space.low,
+                    self.env.action_space.high)
             if (not self.rl_torque and self.impedance_controller.l_wf_traj is not None
                     and self.impedance_controller.traj_waypoint_counter 
                     < self.impedance_controller.l_wf_traj.shape[0]):
