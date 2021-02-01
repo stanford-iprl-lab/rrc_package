@@ -77,7 +77,7 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
                  goal_relative=True, lim_pen=0., return_wrappers=False,
                  goal_env=False, keep_goal=False, use_quat=False,
                  cube_rew=False, step_rew=False, reorient_env=False,
-                 scaled_ac=False, task_space=False):
+                 scaled_ac=False, task_space=False, res_torque=True):
     if goal_env or residual:
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
@@ -113,7 +113,8 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
     # 2. Action wrappers (scaled actions, task space, relative goal)
     final_wrappers = []
     if residual:
-        final_wrappers.append(custom_env.ResidualPolicyWrapper)
+        final_wrappers.append(custom_env.ResidualPolicyWrapper, 
+                              rl_torque=res_torque)
     else:
         if scaled_ac:
             final_wrappers.append(
