@@ -854,13 +854,12 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller = None
         self._platform = None
         self.observation_names = observation_names or PushCubeEnv.observation_names
-        self.observation_names.remove('action', "robot_torque")
+        self.observation_names.remove('action')
         self.observation_names.extend(['robot_torque', 'desired_torque',
                                        'robot_tip_forces'])
         if not self.rl_torque:
             self.observation_names.extend(['residual_tip_forces', 
-                                           'desired_tip_forces',
-                                           'robot_tip_forces'])
+                                           'desired_tip_forces'])
         assert env.action_type in [ActionType.TORQUE,
                                    ActionType.TORQUE_AND_POSITION]
         self._prev_action = np.zeros(9)
@@ -913,6 +912,13 @@ class ResidualPolicyWrapper(ObservationWrapper):
                 "object_position": object_state_space.spaces['position'],
                 "object_orientation": object_state_space.spaces['orientation'],
             }
+        if not self.rl_torque:
+                rl_obs_spaces.update({
+                    "residual_tip_forces": gym.spaces.Box(low=-np.ones(9), 
+                                                          high=np.ones(9)),
+                    "desired_tip_forces": gym.spaces.Box(low=-np.ones(9)*.2,
+                                                         high=np.ones(9)*.2)})
+
 
         rl_obs_space = gym.spaces.Dict(
                 {k: rl_obs_spaces[k] for k in self.observation_names})
@@ -971,18 +977,18 @@ class ResidualPolicyWrapper(ObservationWrapper):
 
     def step(self, action):
         action = self.action(action)
+        if not self.rl_torque:
+            res_ft_force, action = action * 0.1, self._des_torque
+        else:
+            res_ft_force = None
         obs, r, d, i = super(ResidualPolicyWrapper, self).step(action)
         if not d:
-            if not self.rl_torque:
-                res_ft_force = action * 0.1
-            else:
-                res_ft_force = None
             self._des_torque = self.impedance_controller.predict(
                     self._obs_dict['impedance'], 
                     residual_ft_force=res_ft_force)
-            if (not self.rl_torque 
+            if (not self.rl_torque and self.impedance_controller.l_wf_traj is not None
                     and self.impedance_controller.traj_waypoint_counter 
-                    < self.impedance_controller.ft_pos_traj.shape[0]):
+                    < self.impedance_controller.l_wf_traj.shape[0]):
                 self._des_ft_force = self.impedance_controller.l_wf_traj[
                         self.impedance_controller.traj_waypoint_counter]
         return obs, r, d, i

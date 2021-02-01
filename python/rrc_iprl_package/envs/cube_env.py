@@ -350,7 +350,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         )
 
         is_done = self.step_count >= self.episode_length
-        if np.linalg.norm(observation['achieved_goal']['position'][:2]) >= 0.156:
+        if np.linalg.norm(observation['achieved_goal']['position'][:2]) >= 0.166:
             is_done = True
             reward = -5
             self.info['is_success'] = False

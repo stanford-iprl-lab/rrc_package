@@ -18,6 +18,7 @@ def run_eval(
         visualize=False,
         residual=False,
         randomize=False,
+        res_torque=False,
         task_space=False,
         info_kwargs=['is_success']):
     initializer = env_wrappers.RandomInitializer(level)
@@ -29,10 +30,11 @@ def run_eval(
         goal_env = isinstance(env, gym.GoalEnv)
         env = env_wrappers.ObservationNoiseWrapper(env, goal_env=goal_env)
     if residual:
-        env = custom_env.ResidualPolicyWrapper(env, goal_env=True)
+        env = custom_env.ResidualPolicyWrapper(env, goal_env=True, 
+                rl_torque=res_torque)
     elif task_space:
         env = rrc_utils.build_env_fn(task_space=True, ts_relative=True,
-                                     goal_relative=True, action_type='pos'
+                                     goal_relative=True, action_type='pos',
                                      ep_len=600, frameskip=25)()
     env.unwrapped.visualization = visualize
     if policy is None:
