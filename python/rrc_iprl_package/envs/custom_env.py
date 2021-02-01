@@ -1067,7 +1067,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
                     self.action_space.low, self.action_space.high)
         else:
             self._prev_action = res_torque
-            action = np.clip(self._des_torque, self.action_space.low, 
+            action = np.clip(res_torque, self.action_space.low, 
                              self.action_space.high)
         if self.env.action_type == ActionType.TORQUE_AND_POSITION:
             return {'torque': action, 'position': np.repeat(np.nan, 9)}

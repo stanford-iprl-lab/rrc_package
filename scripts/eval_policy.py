@@ -38,7 +38,7 @@ def run_eval(
                                      ep_len=600, frameskip=25)()
     env.unwrapped.visualization = visualize
     if policy is None:
-        predict_fn = lambda x: env.action_space.sample()
+        predict_fn = lambda x: 0*env.action_space.sample()
     else:
         predict_fn = policy
 
@@ -49,7 +49,10 @@ def run_eval(
     returns = []
     for ep in range(n_episodes):
         start = time.time()
-        obs = env.reset()
+        if residual:
+            obs = env.reset(timed=False)
+        else:
+            obs = env.reset()
         end = time.time()
         print(str(start - end), 'seconds')
         ep_len = 0 
