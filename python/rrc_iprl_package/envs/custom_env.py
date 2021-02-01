@@ -849,9 +849,13 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller = None
         self._platform = None
         self.observation_names = observation_names or PushCubeEnv.observation_names
-        self.observation_names.remove('action')
-        self.observation_names.extend(['applied_torque', 'desired_torque',
+        self.observation_names.remove('action', "robot_torque")
+        self.observation_names.extend(['robot_torque', 'desired_torque',
                                        'robot_tip_forces'])
+        if not self.rl_torque:
+            self.observation_names.extend(['residual_tip_forces', 
+                                           'desired_tip_forces',
+                                           'robot_tip_forces'])
         assert env.action_type in [ActionType.TORQUE,
                                    ActionType.TORQUE_AND_POSITION]
         self._prev_action = np.zeros(9)
@@ -889,7 +893,6 @@ class ResidualPolicyWrapper(ObservationWrapper):
         )
         p_low = np.concatenate([object_state_space.spaces['position'].low for _ in range(3)])
         p_high = np.concatenate([object_state_space.spaces['position'].high for _ in range(3)])
-
 
         imp_obs_space = self.env.observation_space
         rl_obs_spaces = {
@@ -947,6 +950,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
 
     def reset(self, timed=True, **platform_kwargs):
         self._des_torque = np.zeros(9)
+        self._des_ft_force = np.zeros(9)
         finished = False
         if not timed:
             obs = self._reset(**platform_kwargs)
@@ -964,8 +968,18 @@ class ResidualPolicyWrapper(ObservationWrapper):
         action = self.action(action)
         obs, r, d, i = super(ResidualPolicyWrapper, self).step(action)
         if not d:
+            if not self.rl_torque:
+                res_ft_force = action * 0.1
+            else:
+                res_ft_force = None
             self._des_torque = self.impedance_controller.predict(
-                    self._obs_dict['impedance'])
+                    self._obs_dict['impedance'], 
+                    residual_ft_force=res_ft_force)
+            if (not self.rl_torque 
+                    and self.impedance_controller.traj_waypoint_counter 
+                    < self.impedance_controller.ft_pos_traj.shape[0]):
+                self._des_ft_force = self.impedance_controller.l_wf_traj[
+                        self.impedance_controller.traj_waypoint_counter]
         return obs, r, d, i
 
     def grasp_object(self, obs):
@@ -1005,15 +1019,20 @@ class ResidualPolicyWrapper(ObservationWrapper):
         observation = {
             "robot_position": robot_observation.position,
             "robot_velocity": robot_observation.velocity,
+            "robot_torque": robot_observation.torque,
             "robot_tip_positions": robot_tip_positions,
             "robot_tip_forces": robot_observation.tip_force,
-            "applied_torque": self._prev_action,
-            "desired_torque": self._des_torque,
             "object_position": object_observation.position,
             "object_orientation": object_observation.orientation,
             "goal_object_position": np.asarray(goal_pose["position"]),
             "goal_object_orientation": np.asarray(goal_pose["orientation"]),
+            "desired_torque": self._des_torque,
         }
+        if not self.rl_torque:
+            observation.update({
+                "residual_tip_forces": self._prev_action,
+                "desired_tip_forces": self._des_ft_force})
+
         observation = {k: observation[k] for k in self.observation_names}
         return observation
 
