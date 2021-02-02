@@ -847,12 +847,13 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 @configurable(pickleable=True)
 class ResidualPolicyWrapper(ObservationWrapper):
     def __init__(self, env, goal_env=False, rl_torque=True,
-                 observation_names=None):
+                 observation_names=None, save_path=None):
         super(ResidualPolicyWrapper, self).__init__(env)
         self.rl_torque = rl_torque
         self.goal_env = goal_env
         self.impedance_controller = None
         self._platform = None
+        self.save_path = save_path
         self.observation_names = observation_names or PushCubeEnv.observation_names
         self.observation_names.remove('action')
         self.observation_names.extend(['robot_torque', 'desired_torque',
@@ -940,7 +941,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
     def init_impedance_controller(self):
         init_pose, goal_pose = self.process_obs_init_goal(self._obs_dict['impedance'])
         self.impedance_controller = ImpedanceControllerPolicy(
-                self.action_space, init_pose, goal_pose)
+                self.action_space, init_pose, goal_pose, save_path=self.save_path)
         #else:
         #    self.impedance_controller.set_init_goal(init_pose, goal_pose)
         if self._platform is None:

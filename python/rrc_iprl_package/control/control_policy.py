@@ -74,7 +74,7 @@ class ImpedanceControllerPolicy:
     FT_RADIUS   = 0.0075
 
     def __init__(self, action_space=None, initial_pose=None, goal_pose=None,
-                 npz_file=None, debug_waypoints=False, difficulty=None):
+                 debug_waypoints=False, difficulty=None, save_path=None):
         if difficulty == 4:
             self.difficulty = 4
         else:
@@ -91,25 +91,34 @@ class ImpedanceControllerPolicy:
         # print("KP_OBJ: {}".format(self.KP_OBJ))
         # print("KV_OBJ: {}".format(self.KV_OBJ))
         
-        self.initialize_logging()
+        self.initialize_logging(save_path)
 
-    def initialize_logging(self):
+    def initialize_logging(self, save_path=None):
         # CSV logging file path # need leading / for singularity image
         if osp.exists("/output"):
             self.csv_filepath           = "/output/control_policy_data.csv"
             self.grasp_trajopt_filepath = "/output/grasp_trajopt_data"
             self.lift_trajopt_filepath  = "/output/lift_trajopt_data"
             self.control_policy_log_filepath = "/output/control_policy_log"
-        else:
+        elif save_path:
             time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
             if proc_id is not None:
                 time_str = time_str + '-' + str(proc_id())
-            if not osp.exists("./output/{}".format(time_str)):
-                os.makedirs("./output/{}".format(time_str))
-            self.csv_filepath           = "./output/{}/control_policy_data.csv".format(time_str)
-            self.grasp_trajopt_filepath = "./output/{}/grasp_trajopt_data".format(time_str)
-            self.lift_trajopt_filepath  = "./output/{}/lift_trajopt_data".format(time_str)
-            self.control_policy_log_filepath = "./output/{}/control_policy_log".format(time_str)
+            save_path = osp.join('./output', save_path, time_str)
+            if not osp.exists(save_path):
+                os.makedirs(save_path)
+            self.csv_filepath = osp.join(save_path, 'control_policy_data.csv')
+            self.grasp_trajopt_filepath = osp.join(
+                    save_path, 'grasp_trajopt_data')
+            self.lift_trajopt_filepath = osp.join(
+                    save_path, 'lift_trajopt_data')
+            self.control_policy_log_filepath = osp.join(
+                    save_path, 'control_policy_log')
+        else:
+            self.csv_filepath = None
+            self.grasp_trajopt_filepath = None
+            self.lift_trajopt_filepath = None
+            self.control_policy_log_filepath = None
 
         # Lists for logging data
         # Rows correspond to step_count / timestamp
@@ -135,22 +144,23 @@ class ImpedanceControllerPolicy:
     Store logs in npz file
     """
     def save_log(self):
-        np.savez(self.control_policy_log_filepath,
-                 step_count       = np.asarray(self.l_step_count),
-                 timestamp        = np.asarray(self.l_timestamp),
-                 desired_ft_pos   = np.asarray(self.l_desired_ft_pos),
-                 desired_ft_vel   = np.asarray(self.l_desired_ft_vel),
-                 actual_ft_pos    = np.asarray(self.l_actual_ft_pos),
-                 desired_obj_pose = np.squeeze(np.asarray(self.l_desired_obj_pose)),
-                 desired_obj_vel = np.squeeze(np.asarray(self.l_desired_obj_vel)),
-                 observed_obj_pose = np.squeeze(np.asarray(self.l_observed_obj_pose)),
-                 observed_filt_obj_pose = np.squeeze(np.asarray(self.l_observed_filt_obj_pose)),
-                 observed_obj_vel = np.squeeze(np.asarray(self.l_observed_obj_vel)),
-                 desired_ft_force = np.squeeze(np.asarray(self.l_desired_ft_force)),
-                 desired_torque   = np.squeeze(np.asarray(self.l_desired_torque)),
-                 dquat            = np.squeeze(np.asarray(self.l_dquat)),
-                 desired_obj_w    = np.squeeze(np.asarray(self.l_desired_obj_w)),
-                )
+        if self.control_policy_log_filepath:
+            np.savez(self.control_policy_log_filepath,
+                     step_count       = np.asarray(self.l_step_count),
+                     timestamp        = np.asarray(self.l_timestamp),
+                     desired_ft_pos   = np.asarray(self.l_desired_ft_pos),
+                     desired_ft_vel   = np.asarray(self.l_desired_ft_vel),
+                     actual_ft_pos    = np.asarray(self.l_actual_ft_pos),
+                     desired_obj_pose = np.squeeze(np.asarray(self.l_desired_obj_pose)),
+                     desired_obj_vel = np.squeeze(np.asarray(self.l_desired_obj_vel)),
+                     observed_obj_pose = np.squeeze(np.asarray(self.l_observed_obj_pose)),
+                     observed_filt_obj_pose = np.squeeze(np.asarray(self.l_observed_filt_obj_pose)),
+                     observed_obj_vel = np.squeeze(np.asarray(self.l_observed_obj_vel)),
+                     desired_ft_force = np.squeeze(np.asarray(self.l_desired_ft_force)),
+                     desired_torque   = np.squeeze(np.asarray(self.l_desired_torque)),
+                     dquat            = np.squeeze(np.asarray(self.l_dquat)),
+                     desired_obj_w    = np.squeeze(np.asarray(self.l_desired_obj_w)),
+                    )
 
     def reset_policy(self, observation, platform=None):
         if platform:
