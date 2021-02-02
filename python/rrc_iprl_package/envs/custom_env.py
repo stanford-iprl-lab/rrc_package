@@ -864,7 +864,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
                                    ActionType.TORQUE_AND_POSITION]
         self._prev_action = np.zeros(9)
         if self.rl_torque:
-            self.action_space = env.action_space.spaces['torque']
+            if isinstance(env.action_space, Dict):
+                self.action_space = env.action_space.spaces['torque']
         else:
             self.action_space = gym.spaces.Box(low=-np.ones(9), high=np.ones(9))
         self.make_obs_space()
