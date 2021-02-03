@@ -847,12 +847,13 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
 @configurable(pickleable=True)
 class ResidualPolicyWrapper(ObservationWrapper):
     def __init__(self, env, goal_env=False, rl_torque=True,
-                 observation_names=None):
+                 observation_names=None, save_path=None):
         super(ResidualPolicyWrapper, self).__init__(env)
         self.rl_torque = rl_torque
         self.goal_env = goal_env
         self.impedance_controller = None
         self._platform = None
+        self.save_path = save_path
         self.observation_names = observation_names or PushCubeEnv.observation_names
         if 'action' in self.observation_names:
             self.observation_names.remove('action')
@@ -864,11 +865,11 @@ class ResidualPolicyWrapper(ObservationWrapper):
         assert env.action_type in [ActionType.TORQUE,
                                    ActionType.TORQUE_AND_POSITION]
         self._prev_action = np.zeros(9)
-        if isinstance(env.action_space, gym.spaces.Dict):
-            if self.rl_torque:
+        if self.rl_torque:
+            if isinstance(env.action_space, Dict):
                 self.action_space = env.action_space.spaces['torque']
-            else:
-                self.action_space = gym.spaces.Box(low=-np.ones(9), high=np.ones(9))
+        else:
+            self.action_space = gym.spaces.Box(low=-np.ones(9), high=np.ones(9))
         self.make_obs_space()
 
     def make_obs_space(self):
@@ -941,7 +942,7 @@ class ResidualPolicyWrapper(ObservationWrapper):
     def init_impedance_controller(self):
         init_pose, goal_pose = self.process_obs_init_goal(self._obs_dict['impedance'])
         self.impedance_controller = ImpedanceControllerPolicy(
-                self.action_space, init_pose, goal_pose)
+                self.action_space, init_pose, goal_pose, save_path=self.save_path)
         #else:
         #    self.impedance_controller.set_init_goal(init_pose, goal_pose)
         if self._platform is None:
@@ -987,6 +988,9 @@ class ResidualPolicyWrapper(ObservationWrapper):
             self._des_torque = self.impedance_controller.predict(
                     self._obs_dict['impedance'], 
                     residual_ft_force=res_ft_force)
+            self._des_torque = np.clip(
+                    self._des_torque, self.env.action_space.low,
+                    self.env.action_space.high)
             if (not self.rl_torque and self.impedance_controller.l_wf_traj is not None
                     and self.impedance_controller.traj_waypoint_counter 
                     < self.impedance_controller.l_wf_traj.shape[0]):

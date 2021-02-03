@@ -113,8 +113,8 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
     # 2. Action wrappers (scaled actions, task space, relative goal)
     final_wrappers = []
     if residual:
-        final_wrappers.append(custom_env.ResidualPolicyWrapper, 
-                              rl_torque=res_torque)
+        final_wrappers.append(functools.partial(custom_env.ResidualPolicyWrapper, 
+                              rl_torque=res_torque))
     else:
         if scaled_ac:
             final_wrappers.append(
@@ -134,7 +134,7 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
                     'final_ori_dist', 'final_ori_scaled']
     p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
                                             info_keys=p2_info_keys)
-    if action_type == cube_env.ActionType.TORQUE:
+    if action_type == cube_env.ActionType.TORQUE and (not residual or res_torque):
         final_wrappers.append(
                 functools.partial(wrappers.RescaleAction, a=-1, b=1))
     final_wrappers +=  [p2_log_info_wrapper, wrappers.ClipAction]
