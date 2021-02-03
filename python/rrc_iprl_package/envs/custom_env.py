@@ -854,7 +854,8 @@ class ResidualPolicyWrapper(ObservationWrapper):
         self.impedance_controller = None
         self._platform = None
         self.observation_names = observation_names or PushCubeEnv.observation_names
-        self.observation_names.remove('action')
+        if 'action' in self.observation_names:
+            self.observation_names.remove('action')
         self.observation_names.extend(['robot_torque', 'desired_torque',
                                        'robot_tip_forces'])
         if not self.rl_torque:
