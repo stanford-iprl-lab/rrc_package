@@ -562,7 +562,7 @@ class PushCubeEnv(gym.Env):
             if np.linalg.norm(observation['object_position'][:2]) >= self._target_dist:
                 is_done = True
 
-        if is_done and isinstance(self.initializer, env_wrappers.CurriculumInitializer):
+        if is_done and isinstance(self.initializer, initializers.CurriculumInitializer):
             goal_pose = self.goal
             object_pose = move_cube.Pose.from_dict(dict(
                 position=observation['object_position'].flatten(),

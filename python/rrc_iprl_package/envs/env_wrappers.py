@@ -4,18 +4,12 @@ import gym
 import pybullet
 
 from gym import wrappers
-from gym.spaces import Box
-from gym.spaces import Discrete
-from gym.spaces import MultiDiscrete
-from gym.spaces import MultiBinary
-from gym.spaces import Tuple
-from gym.spaces import Dict
-from gym.spaces import utils
 
 from rrc_iprl_package.control import controller_utils as c_utils
-from rrc_iprl_package.envs.env_utils import configurable
+from rrc_iprl_package.envs.env_utils import configurable, flatten_space
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.envs.cube_env import CubeEnv, ActionType
+from rrc_iprl_package.envs.initializers import *
 
 from trifinger_simulation import TriFingerPlatform
 from trifinger_simulation import visual_objects
@@ -34,224 +28,6 @@ REW_BONUS = 10
 REW_PENALTY = -10
 POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
                       0.203])
-
-
-def reset_camera():
-    camera_pos = (0.,0.2,-0.2)
-    camera_dist = 1.0
-    pitch = -45.
-    yaw = 0.
-    if pybullet.isConnected() != 0:
-        pybullet.resetDebugVisualizerCamera(cameraDistance=camera_dist,
-                                    cameraYaw=yaw,
-                                    cameraPitch=pitch,
-                                    cameraTargetPosition=camera_pos)
-
-
-def random_xy(sample_radius_min=0., sample_radius_max=None):
-    # sample uniform position in circle (https://stackoverflow.com/a/50746409)
-    radius = np.random.uniform(sample_radius_min, sample_radius_max)
-    theta = np.random.uniform(0, 2 * np.pi)
-    # x,y-position of the cube
-    x = radius * np.cos(theta)
-    y = radius * np.sin(theta)
-    return x, y
-
-
-class RandomInitializer:
-    """Initializer that returns random initial pose and goal."""
-    def __init__(self, difficulty):
-        self.difficulty = difficulty
-
-    def get_initial_state(self):
-        return move_cube.sample_goal(difficulty=-1)
-
-    def get_goal(self):
-        return move_cube.sample_goal(difficulty=self.difficulty)
-
-
-@configurable(pickleable=True)
-class FixedInitializer:
-    """Initializer that uses fixed values for initial pose and goal."""
-
-    def __init__(self, difficulty, initial_state, goal):
-        """Initialize.
-
-        Args:
-            difficulty (int):  Difficulty level of the goal.  This is still
-                needed even for a fixed goal, as it is also used for computing
-                the reward (the cost function is different for the different
-                levels).
-            initial_state (move_cube.Pose):  Initial pose of the object.
-            goal (move_cube.Pose):  Goal pose of the object.
-
-        Raises:
-            Exception:  If initial_state or goal are not valid.  See
-            :meth:`move_cube.validate_goal` for more information.
-        """
-        move_cube.validate_goal(initial_state)
-        move_cube.validate_goal(goal)
-        self.difficulty = difficulty
-        self.initial_state = initial_state
-        self.goal = goal
-
-    def get_initial_state(self):
-        """Get the initial state that was set in the constructor."""
-        return self.initial_state
-
-    def get_goal(self):
-        """Get the goal that was set in the constructor."""
-        return self.goal
-
-
-@configurable(pickleable=True)
-class CurriculumInitializer:
-    """Initializer that samples random initial states and goals."""
-
-    def __init__(self, difficulty=1, initial_dist=_CUBOID_HEIGHT,
-                 num_levels=4, buffer_size=5, fixed_goal=None):
-        """Initialize.
-
-        Args:
-            initial_dist (float): Distance from center of arena
-            num_levels (int): Number of steps to maximum radius
-            buffer_size (int): Number of episodes to compute mean over
-        """
-        self.difficulty = difficulty
-        self.num_levels = num_levels
-        self._current_level = 0
-        self.levels = np.linspace(initial_dist, MAX_DIST, num_levels)
-        self.final_dist = np.array([np.inf for _ in range(buffer_size)])
-        if difficulty == 4:
-            self.final_ori = np.array([np.inf for _ in range(buffer_size)])
-        self.fixed_goal = fixed_goal
-
-    @property
-    def current_level(self):
-        return min(self.num_levels - 1, self._current_level)
-
-    def random_xy(self, sample_radius_min=0., sample_radius=None):
-        # sample uniform position in circle (https://stackoverflow.com/a/50746409)
-        sample_radius_max = sample_radius or self.levels[self.current_level]
-        return random_xy(sample_radius_min, sample_radius_max)
-
-    def update_initializer(self, final_pose, goal_pose):
-        assert np.all(goal_pose.position == self.goal_pose.position)
-        self.final_dist = np.roll(self.final_dist, 1)
-        final_dist = np.linalg.norm(goal_pose.position - final_pose.position)
-        self.final_dist[0] = final_dist
-        if self.difficulty == 4:
-            self.final_ori = np.roll(self.final_ori, 1)
-            self.final_ori[0] = compute_orientation_error(goal_pose, final_pose)
-
-        update_level = np.mean(self.final_dist) < DIST_THRESH
-        if self.difficulty == 4:
-            update_level = update_level and np.mean(self.final_ori) < ORI_THRESH
-
-        if update_level and self._current_level < self.num_levels - 1:
-            pre_sample_dist = self.goal_sample_radius
-            self._current_level += 1
-            post_sample_dist = self.goal_sample_radius
-            print("Old sampling distances: {}/New sampling distances: {}".format(
-                pre_sample_dist, post_sample_dist))
-
-    def get_initial_state(self):
-        """Get a random initial object pose (always on the ground)."""
-        x, y = self.random_xy()
-        self.initial_pose = move_cube.sample_goal(difficulty=-1)
-        z = self.initial_pose.position[-1]
-        self.initial_pose.position = np.array((x, y, z))
-        return self.initial_pose
-
-    @property
-    def goal_sample_radius(self):
-        if self.fixed_goal:
-            goal_dist = np.linalg.norm(self.fixed_goal.position)
-            return (goal_dist, goal_dist)
-        sample_radius_min = 0.
-        sample_radius_max = self.levels[min(self.num_levels - 1, self._current_level + 1)]
-        return (sample_radius_min, sample_radius_max)
-
-    def get_goal(self):
-        """Get a random goal depending on the difficulty."""
-        if self.fixed_goal:
-            self.goal_pose = self.fixed_goal
-            return self.fixed_goal
-        # goal_sample_radius is further than past distances
-        sample_radius_min, sample_radius_max = self.goal_sample_radius
-        x, y = self.random_xy(sample_radius_min, sample_radius_max)
-        self.goal_pose = move_cube.sample_goal(difficulty=self.difficulty)
-        self.goal_pose.position = np.array((x, y, self.goal_pose.position[-1]))
-        return self.goal_pose
-
-
-@configurable(pickleable=True)
-class ReorientInitializer:
-    """Initializer that samples random initial states and goals."""
-    def_goal_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
-
-    def __init__(self, difficulty=1, initial_dist=_CUBOID_HEIGHT, seed=None):
-        self.difficulty = difficulty
-        self.initial_dist = initial_dist
-        self.goal_pose = self.def_goal_pose
-        self.set_seed(seed)
-
-    def set_seed(self, seed):
-        self.random = np.random.RandomState(seed=seed)
-
-    def get_initial_state(self):
-        """Get a random initial object pose (always on the ground)."""
-        x, y = random_xy(self.initial_dist, MAX_DIST)
-        self.initial_pose = move_cube.sample_goal(difficulty=-1)
-        z = self.initial_pose.position[-1]
-        self.initial_pose.position = np.array((x, y, z))
-        return self.initial_pose
-
-    def get_goal(self):
-        """Get a random goal depending on the difficulty."""
-        if self.difficulty >= 2:
-            self.goal_pose = move_cube.sample_goal(self.difficulty)
-        return self.goal_pose
-
-
-class RandomGoalOrientationInitializer:
-    init_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
-
-    def __init__(self, max_dist=np.pi, difficulty=1):
-        self.difficulty = difficulty
-        self.max_dist = max_dist
-        self.random = np.random.RandomState()
-
-    def get_initial_state(self):
-        self.init_pose = move_cube.sample_goal(-1)
-        return self.init_pose
-
-    def get_goal(self):
-        goal =  move_cube.sample_goal(-1)
-        if self.max_dist:
-            init_rot = Rotation.from_quat(self.init_pose.orientation)
-            init_xyz = init_rot.as_euler('xyz')
-            goal_y = init_xyz[1] + self.max_dist * np.random.uniform(-1, 1)
-            if np.abs(goal_y) > 2*np.pi:
-                goal_y -= np.sign(goal_y)*2*np.pi
-            goal_xyz = init_xyz[:]
-            goal_xyz[1] = goal_y
-            goal.orientation = Rotation.from_euler('xyz', goal_xyz).as_quat()
-        goal.position = np.array([0, 0, _CUBOID_HEIGHT/2])
-        return goal
-
-
-class RandomOrientationInitializer:
-    def_goal_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
-
-    def __init__(self, difficulty=4):
-        self.difficulty = difficulty
-
-    def get_initial_state(self):
-        return move_cube.sample_goal(-1)
-
-    def get_goal(self):
-        return self.def_goal_pose
 
 
 @configurable(pickleable=True)
@@ -411,8 +187,7 @@ class ScaledActionWrapper(gym.ActionWrapper):
     def reset(self):
         obs = super(ScaledActionWrapper, self).reset()
         self._prev_obs = obs
-        self._clipped_action = self._last_action = np.zeros_like(
-            self.action_space.sample())
+        self._clipped_action = self._last_action = 0*self.action_space.sample()
         return obs
 
     def step(self, action):
@@ -440,6 +215,7 @@ class ScaledActionWrapper(gym.ActionWrapper):
                               axis=0)
             goal_position = action
         action = np.clip(goal_position, pos_low, pos_high)
+        assert action in self.env.action_space, f'action {action} not in action_space'
         self._clipped_action = np.abs(action - goal_position)
         return action
 
@@ -556,30 +332,30 @@ class FlattenGoalWrapper(gym.ObservationWrapper):
 
     @property
     def goal(self):
-        return np.concatenate([self.unwrapped.goal['position'],
-                               self.unwrapped.goal['orientation']])
+        return np.concatenate([self.unwrapped.goal.position,
+                               self.unwrapped.goal.orientation])
 
     @goal.setter
     def goal(self, g):
         if isinstance(g, dict):
-            self.unwrapped.goal = g
+            self.unwrapped.goal = move_cube.Pose(**g)
             return
-        pos, ori = g[...,:3], g[...,3:]
-        self.unwrapped.goal = {'position': pos, 'orientation': ori}
+        pos, ori = g[...,4:], g[...,:4]
+        self.unwrapped.goal = move_cube.Pose(pos, ori)
 
     def compute_reward(self, achieved_goal, desired_goal, info):
         if len(achieved_goal.shape) > 1:
             r = []
             info = {"difficulty": self.initializer.difficulty}
             for i in range(achieved_goal.shape[0]):
-                pos, ori = achieved_goal[i,:3], achieved_goal[i,3:]
+                pos, ori = achieved_goal[i,4:], achieved_goal[i,:4]
                 ag = dict(position=pos, orientation=ori)
-                pos, ori = desired_goal[i,:3], desired_goal[i,3:]
+                pos, ori = desired_goal[i,4:], desired_goal[i,:4]
                 dg = dict(position=pos, orientation=ori)
                 r.append(self.env.compute_reward(ag, dg, info))
             return np.array(r)
-        achieved_goal = dict(position=achieved_goal[...,:3], orientation=achieved_goal[...,3:])
-        desired_goal = dict(position=desired_goal[...,:3], orientation=desired_goal[...,3:])
+        achieved_goal = dict(position=achieved_goal[...,4:], orientation=achieved_goal[...,:4])
+        desired_goal = dict(position=desired_goal[...,4:], orientation=desired_goal[...,:4])
         return self.env.compute_reward(achieved_goal, desired_goal, info)
 
     def _sample_goal(self):
@@ -1120,61 +896,6 @@ def compute_orientation_error_old(goal_pose, actual_pose, scale=False,
         orientation_error = orientation_error / np.pi
     return orientation_error
 
-
-def flatten_space(space):
-    """Flatten a space into a single ``Box``.
-    This is equivalent to ``flatten()``, but operates on the space itself. The
-    result always is a `Box` with flat boundaries. The box has exactly
-    ``flatdim(space)`` dimensions. Flattening a sample of the original space
-    has the same effect as taking a sample of the flattenend space.
-    Raises ``NotImplementedError`` if the space is not defined in
-    ``gym.spaces``.
-    Example::
-        >>> box = Box(0.0, 1.0, shape=(3, 4, 5))
-        >>> box
-        Box(3, 4, 5)
-        >>> flatten_space(box)
-        Box(60,)
-        >>> flatten(box, box.sample()) in flatten_space(box)
-        True
-    Example that flattens a discrete space::
-        >>> discrete = Discrete(5)
-        >>> flatten_space(discrete)
-        Box(5,)
-        >>> flatten(box, box.sample()) in flatten_space(box)
-        True
-    Example that recursively flattens a dict::
-        >>> space = Dict({"position": Discrete(2),
-        ...               "velocity": Box(0, 1, shape=(2, 2))})
-        >>> flatten_space(space)
-        Box(6,)
-        >>> flatten(space, space.sample()) in flatten_space(space)
-        True
-    """
-    if isinstance(space, Box):
-        return Box(space.low.flatten(), space.high.flatten())
-    if isinstance(space, Discrete):
-        return Box(low=0, high=1, shape=(space.n, ))
-    if isinstance(space, Tuple):
-        space = [flatten_space(s) for s in space.spaces]
-        return Box(
-            low=np.concatenate([s.low for s in space]),
-            high=np.concatenate([s.high for s in space]),
-        )
-    if isinstance(space, Dict):
-        space = [flatten_space(s) for s in space.spaces.values()]
-        return Box(
-            low=np.concatenate([s.low for s in space]),
-            high=np.concatenate([s.high for s in space]),
-        )
-    if isinstance(space, MultiBinary):
-        return Box(low=0, high=1, shape=(space.n, ))
-    if isinstance(space, MultiDiscrete):
-        return Box(
-            low=np.zeros_like(space.nvec),
-            high=space.nvec,
-        )
-    raise NotImplementedError
 
 
 def get_theta_z_wf(goal_rot, actual_rot):

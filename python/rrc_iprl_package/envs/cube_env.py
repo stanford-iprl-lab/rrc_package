@@ -8,7 +8,7 @@ try:
     import robot_interfaces
     import robot_fingers
     import trifinger_cameras
-    from robot_interfaces.py_trifinger_types import Action 
+    from robot_interfaces.py_trifinger_types import Action
 except ImportError:
     robot_interfaces = robot_fingers = None
     from trifinger_simulation.action import Action
@@ -17,6 +17,7 @@ import trifinger_simulation
 import trifinger_simulation.visual_objects
 import rrc_iprl_package.pybullet_utils as pbutils
 from rrc_iprl_package.envs.env_utils import configurable
+from rrc_iprl_package.envs import initializers
 
 from scipy.spatial.transform import Rotation
 from trifinger_simulation import trifingerpro_limits
@@ -203,7 +204,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.filtered_orientation = None
         self.alpha = alpha
 
-    def compute_reward_old(self, achieved_goal, desired_goal, info):
+    def compute_reward(self, achieved_goal, desired_goal, info):
         """Compute the reward for the given achieved and desired goal.
 
         Args:
@@ -224,9 +225,17 @@ class RealRobotCubeEnv(gym.GoalEnv):
                     info,
                 )
         """
+        object_pose = move_cube.Pose.from_dict(achieved_goal)
+        goal_pose = move_cube.Pose.from_dict(desired_goal)
+        position_error = self.compute_position_error(goal_pose, object_pose)
+        orientation_error = self.compute_orientation_error(goal_pose, object_pose)
+        corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
+        info['pos_error'] = position_error
+        info['ori_error'] = orientation_error
+        info['corner_error'] = corner_error
         return -move_cube.evaluate_state(
-            move_cube.Pose.from_dict(desired_goal),
-            move_cube.Pose.from_dict(achieved_goal),
+            goal_pose,
+            object_pose,
             info["difficulty"],
         )
 
@@ -268,7 +277,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                                   - object_pose.position, axis=1)
         return ftip_err
 
-    def compute_reward(self, achieved_goal, desired_goal, info):
+    def compute_reward_new(self, achieved_goal, desired_goal, info):
         object_pose = move_cube.Pose.from_dict(achieved_goal)
         goal_pose = move_cube.Pose.from_dict(desired_goal)
         position_error = self.compute_position_error(goal_pose, object_pose)
@@ -317,7 +326,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 
         if not self.action_space.contains(action):
             raise ValueError(
-                "Given action is not contained in the action space."
+                f"Given action {action} is not contained in the action space."
             )
 
         num_steps = self.frameskip
@@ -343,11 +352,14 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 break
 
         self.observation = observation['observation']
-        reward += self.compute_reward_old(
+        reward += self.compute_reward(
             observation["achieved_goal"],
             observation["desired_goal"],
             self.info,
         )
+        self.info['is_success'] = self.info.get('pos_error') < .01
+        if self.info.get('difficulty') == 4:
+            self.info['is_success'] = self.info['is_success'] and self.info.get('ori_error' < 1/6)
 
         is_done = self.step_count >= self.episode_length
         if np.linalg.norm(observation['achieved_goal']['position'][:2]) >= 0.186:
@@ -356,7 +368,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self.info['is_success'] = False
 
         # self.write_action_log(observation, action, reward)
-        self.info['num_steps'] = self.step_count
+        # self.info['num_steps'] = self.step_count
 
         return observation, reward, is_done, self.info
 
@@ -508,7 +520,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "cam0_timestamp": camera_observation.cameras[0].timestamp
             }
         obs_dict = {k: obs_dict[k] for k in self.observation_names}
-        self.info.update(obs_dict)
+        # self.info.update(obs_dict)
         observation = {
             "observation": obs_dict,
             "desired_goal": self.goal.to_dict(),
@@ -548,7 +560,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
 class CubeEnv(RealRobotCubeEnv):
     def __init__(
         self,
-        initializer,
+        initializer=initializers.RandomInitializer,
         goal_difficulty: int = 1,
         action_type: ActionType = ActionType.POSITION,
         default_position: np.ndarray = np.array([0.0, 0.75, -1.6] * 3),
@@ -569,7 +581,7 @@ class CubeEnv(RealRobotCubeEnv):
             frameskip (int):  Number of actual control steps to be performed in
                 one call of step().
         """
-        self.initializer = initializer
+        self.initializer = initializer(goal_difficulty)
         initial_pose = self.initializer.get_initial_state().to_dict()
         goal_pose = self.initializer.get_goal().to_dict()
         super().__init__(goal_pose, initial_pose, goal_difficulty,
@@ -580,5 +592,4 @@ class CubeEnv(RealRobotCubeEnv):
         self.initial_pose = self.initializer.get_initial_state()
         self.goal = self.initializer.get_goal()
         return super(CubeEnv, self).reset(**kwargs)
-
 
