@@ -332,8 +332,8 @@ class FlattenGoalWrapper(gym.ObservationWrapper):
 
     @property
     def goal(self):
-        return np.concatenate([self.unwrapped.goal.position,
-                               self.unwrapped.goal.orientation])
+        return np.concatenate([self.unwrapped.goal.orientation,
+                               self.unwrapped.goal.position])
 
     @goal.setter
     def goal(self, g):
@@ -354,12 +354,13 @@ class FlattenGoalWrapper(gym.ObservationWrapper):
                 dg = dict(position=pos, orientation=ori)
                 r.append(self.env.compute_reward(ag, dg, info))
             return np.array(r)
-        achieved_goal = dict(position=achieved_goal[...,4:], orientation=achieved_goal[...,:4])
-        desired_goal = dict(position=desired_goal[...,4:], orientation=desired_goal[...,:4])
+        achieved_goal = dict(position=achieved_goal[4:], orientation=achieved_goal[:4])
+        desired_goal = dict(position=desired_goal[4:], orientation=desired_goal[:4])
         return self.env.compute_reward(achieved_goal, desired_goal, info)
 
     def _sample_goal(self):
-        return np.concatenate(list(self.initializer.get_goal().to_dict().values()))
+        goal = self.initializer.get_goal().to_dict()
+        return np.concatenate([goal['orientation'], goal['position']]))
 
     def observation(self, observation):
         observation = {k: gym.spaces.flatten(self.env.observation_space[k], v)
