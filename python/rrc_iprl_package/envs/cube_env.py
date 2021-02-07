@@ -77,7 +77,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         frameskip: int = 1,
         num_steps: int = None,
         save_npz: str = None,
-        alpha: float = 0.01
+        sparse: bool = False
     ):
         """Initialize.
 
@@ -145,7 +145,6 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 ),
             }
         )
-        self.save_npz = save_npz
 
         # verify that the given goal pose is contained in the cube state space
         if not object_state_space.contains(self.goal.to_dict()):
@@ -202,7 +201,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.action_log = []
         self.filtered_position = None
         self.filtered_orientation = None
-        self.alpha = alpha
+        self.sparse = sparse
 
     def compute_reward(self, achieved_goal, desired_goal, info):
         """Compute the reward for the given achieved and desired goal.
@@ -285,6 +284,11 @@ class RealRobotCubeEnv(gym.GoalEnv):
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
         #ftip_error = self.compute_fingertip_error(info.get('tip_positions'),
         #                                          object_pose).sum()
+        if self.sparse:
+            reward = float(position_error <= DIST_THRESH)
+            if info.get('difficulty') == 4:
+                reward = reward + float(orientation_error <= ORI_THRESH)
+            return reward
         reward = 2*dmr.tolerance(position_error, (0., DIST_THRESH/2),
                                margin=DIST_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
@@ -567,7 +571,8 @@ class CubeEnv(RealRobotCubeEnv):
         visualization: bool = False,
         frameskip: int = 1,
         num_steps: int = None,
-        save_npz: str = None
+        save_npz: str = None,
+        sparse: bool = False
     ):
         """Initialize.
 
@@ -586,7 +591,7 @@ class CubeEnv(RealRobotCubeEnv):
         goal_pose = self.initializer.get_goal().to_dict()
         super().__init__(goal_pose, initial_pose, goal_difficulty,
             action_type=action_type, default_position=default_position, visualization=visualization,
-            frameskip=frameskip, num_steps=num_steps, save_npz=save_npz)
+            frameskip=frameskip, num_steps=num_steps, save_npz=save_npz, sparse=sparse)
 
     def reset(self, **kwargs):
         self.initial_pose = self.initializer.get_initial_state()

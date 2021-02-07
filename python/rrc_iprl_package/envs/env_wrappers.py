@@ -360,7 +360,7 @@ class FlattenGoalWrapper(gym.ObservationWrapper):
 
     def _sample_goal(self):
         goal = self.initializer.get_goal().to_dict()
-        return np.concatenate([goal['orientation'], goal['position']]))
+        return np.concatenate([goal['orientation'], goal['position']])
 
     def observation(self, observation):
         observation = {k: gym.spaces.flatten(self.env.observation_space[k], v)

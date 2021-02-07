@@ -12,7 +12,7 @@ if phase == 1:
 elif phase == 2:
     from rrc_iprl_package.envs import cube_env
     from rrc_iprl_package.envs import custom_env
-    from rrc_iprl_package.envs import env_wrappers
+    from rrc_iprl_package.envs import env_wrappers, initializers
 
 
 registered_envs = [spec.id for spec in gym.envs.registry.all()]
@@ -152,14 +152,14 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
     ewrappers += rew_wrappers + final_wrappers
 
     # initializer = env_wrappers.ReorientInitializer(1, sample_radius)
-    initializer = env_wrappers.RandomInitializer(difficulty=difficulty)
-    # initializer = env_wrappers.RandomGoalOrientationInitializer()
+    # initializer = env_wrappers.RandomInitializer(difficulty=difficulty)
+    initializer = initializers.RandomGoalOrientationInitializer
 
     if goal_env or residual:
         ret = make_env_fn(env_str, ewrappers,
                           initializer=initializer,
                           action_type=action_type,
-                          frameskip=frameskip)
+                          frameskip=frameskip, goal_difficulty=difficulty)
     else:
         ret = make_env_fn(env_str, ewrappers,
                           initializer=initializer,
@@ -367,15 +367,15 @@ if phase == 2:
     p2_env_str = "real_robot_challenge_phase_2-v2"
 
     # INITIALIZERS
-    p2_fixed_reorient = env_wrappers.RandomGoalOrientationInitializer()
-    p2_push_curr = env_wrappers.CurriculumInitializer(initial_dist=0.,
+    p2_fixed_reorient = initializers.RandomGoalOrientationInitializer()
+    p2_push_curr = initializers.CurriculumInitializer(initial_dist=0.,
                                                       num_levels=5)
-    p2_push_fixed = env_wrappers.CurriculumInitializer(initial_dist=0.,
+    p2_push_fixed = initializers.CurriculumInitializer(initial_dist=0.,
                                                        num_levels=2)
-    p2_reorient_curr = env_wrappers.CurriculumInitializer(
+    p2_reorient_curr = initializers.CurriculumInitializer(
             initial_dist=0.06, num_levels=3, difficulty=4,
-            fixed_goal=env_wrappers.RandomOrientationInitializer.def_goal_pose)
-    p2_recenter = env_wrappers.ReorientInitializer(1, 0.09)
+            fixed_goal=initializers.RandomOrientationInitializer.def_goal_pose)
+    p2_recenter = initializers.ReorientInitializer(1, 0.09)
 
     p2_info_keys = ['is_success', 'is_success_ori', 'final_dist', 'final_score',
                     'final_ori_dist', 'final_ori_scaled']

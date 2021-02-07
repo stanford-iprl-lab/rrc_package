@@ -974,6 +974,17 @@ class ResidualPolicyWrapper(ObservationWrapper):
                         obs = self._reset(**platform_kwargs)
                     finished = True
                 except TimeoutException:
+                    i = 0
+                    fpath = 'failed_init_goal_pose{}.npz'
+                    if self.save_path:
+                        fpath = osp.join(self.save_npz, fpath)
+                    while osp.exists(fpath.format(i)): i+= 1
+                    fpath = fpath.format(i)
+                    np.savez(fpath,
+                             initial_position=self.initial_pose.position, 
+                             initial_orientation=self.initial_pose.orientation,
+                             goal_position=self.goal.position,
+                             goal_orientation=self.goal.orientation)
                     print('resetting again, timed out')
         return obs
 
