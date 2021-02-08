@@ -21,21 +21,13 @@ def random_xy(sample_radius_min=0., sample_radius_max=None):
     return x, y
 
 
-class RandomInitializer:
-    """Initializer that returns random initial pose and goal."""
-    def __init__(self, difficulty):
-        self.difficulty = difficulty
-
-    def get_initial_state(self):
-        return move_cube.sample_goal(difficulty=-1)
-
-    def get_goal(self):
-        return move_cube.sample_goal(difficulty=self.difficulty)
-
-
 @configurable(pickleable=True)
 class FixedInitializer:
     """Initializer that uses fixed values for initial pose and goal."""
+    def_goal_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]),
+                                   np.array([0,0,0,1]))
+    def_initial_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]),
+                                      np.array([0,0,0,1]))
 
     def __init__(self, difficulty, initial_state=None, goal=None):
         """Initialize.
@@ -52,6 +44,9 @@ class FixedInitializer:
             Exception:  If initial_state or goal are not valid.  See
             :meth:`move_cube.validate_goal` for more information.
         """
+        initial_state = initial_state or self.def_initial_pose
+        goal = goal or self.def_goal_pose
+
         move_cube.validate_goal(initial_state)
         move_cube.validate_goal(goal)
         self.difficulty = difficulty
@@ -66,12 +61,28 @@ class FixedInitializer:
         """Get the goal that was set in the constructor."""
         return self.goal
 
+    def update_initializer(self, final_pose, goal_pose):
+        pass
+
 
 @configurable(pickleable=True)
-class CurriculumInitializer:
+class RandomInitializer(FixedInitializer):
+    """Initializer that returns random initial pose and goal."""
+    def __init__(self, difficulty):
+        self.difficulty = difficulty
+
+    def get_initial_state(self):
+        return move_cube.sample_goal(difficulty=-1)
+
+    def get_goal(self):
+        return move_cube.sample_goal(difficulty=self.difficulty)
+
+
+@configurable(pickleable=True)
+class CurriculumInitializer(FixedInitializer):
     """Initializer that samples random initial states and goals."""
 
-    def __init__(self, difficulty=1, initial_dist=_CUBOID_HEIGHT,
+    def __init__(self, difficulty=1, initial_dist=_CUBOID_WIDTH,
                  num_levels=4, buffer_size=5, fixed_goal=None):
         """Initialize.
 
@@ -87,16 +98,11 @@ class CurriculumInitializer:
         self.final_dist = np.array([np.inf for _ in range(buffer_size)])
         if difficulty == 4:
             self.final_ori = np.array([np.inf for _ in range(buffer_size)])
-        self.fixed_goal = fixed_goal
+        self.fixed_goal = self.goal_pose = fixed_goal
 
     @property
     def current_level(self):
         return min(self.num_levels - 1, self._current_level)
-
-    def random_xy(self, sample_radius_min=0., sample_radius=None):
-        # sample uniform position in circle (https://stackoverflow.com/a/50746409)
-        sample_radius_max = sample_radius or self.levels[self.current_level]
-        return random_xy(sample_radius_min, sample_radius_max)
 
     def update_initializer(self, final_pose, goal_pose):
         assert np.all(goal_pose.position == self.goal_pose.position)
@@ -120,7 +126,8 @@ class CurriculumInitializer:
 
     def get_initial_state(self):
         """Get a random initial object pose (always on the ground)."""
-        x, y = self.random_xy()
+        sample_radius_min, sample_radius_max = 0., self.levels[self.current_level]
+        x, y = random_xy(sample_radius_min, sample_radius_max)
         self.initial_pose = move_cube.sample_goal(difficulty=-1)
         z = self.initial_pose.position[-1]
         self.initial_pose.position = np.array((x, y, z))
@@ -131,25 +138,24 @@ class CurriculumInitializer:
         if self.fixed_goal:
             goal_dist = np.linalg.norm(self.fixed_goal.position)
             return (goal_dist, goal_dist)
-        sample_radius_min = 0.
-        sample_radius_max = self.levels[min(self.num_levels - 1, self._current_level + 1)]
-        return (sample_radius_min, sample_radius_max)
+        level_idx = min(self.num_levels - 1, self._current_level + 1)
+        sample_radius_max = self.levels[level_idx]
+        return (0., sample_radius_max)
 
     def get_goal(self):
         """Get a random goal depending on the difficulty."""
         if self.fixed_goal:
-            self.goal_pose = self.fixed_goal
-            return self.fixed_goal
+            return self.goal_pose
         # goal_sample_radius is further than past distances
         sample_radius_min, sample_radius_max = self.goal_sample_radius
-        x, y = self.random_xy(sample_radius_min, sample_radius_max)
+        x, y = random_xy(sample_radius_min, sample_radius_max)
         self.goal_pose = move_cube.sample_goal(difficulty=self.difficulty)
         self.goal_pose.position = np.array((x, y, self.goal_pose.position[-1]))
         return self.goal_pose
 
 
 @configurable(pickleable=True)
-class ReorientInitializer:
+class ReorientInitializer(FixedInitializer):
     """Initializer that samples random initial states and goals."""
     def_goal_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
 
@@ -177,8 +183,9 @@ class ReorientInitializer:
         return self.goal_pose
 
 
-class RandomGoalOrientationInitializer:
-    init_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
+@configurable(pickleable=True)
+class RandomGoalOrientationInitializer(FixedInitializer):
+    def_initial_pose= move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
 
     def __init__(self, difficulty=1, max_dist=np.pi):
         self.difficulty = difficulty
@@ -204,7 +211,8 @@ class RandomGoalOrientationInitializer:
         return goal
 
 
-class RandomOrientationInitializer:
+@configurable(pickleable=True)
+class RandomOrientationInitializer(FixedInitializer):
     def_goal_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
 
     def __init__(self, difficulty=4):

@@ -77,7 +77,8 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
                  goal_relative=True, lim_pen=0., return_wrappers=False,
                  goal_env=False, keep_goal=False, use_quat=False,
                  cube_rew=False, step_rew=False, reorient_env=False,
-                 scaled_ac=False, task_space=False, res_torque=True):
+                 scaled_ac=True, task_space=False, res_torque=True,
+                 framestack=1, sparse=False, initializer='random'):
     if goal_env or residual:
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
@@ -142,6 +143,12 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
         final_wrappers.append(wrappers.FlattenObservation)
     else:
         final_wrappers.append(env_wrappers.FlattenGoalWrapper)
+
+    if framestack > 1:
+        final_wrappers.append(functools.partial(wrappers.FrameStack,
+                                                num_stack=framestack))
+        final_wrappers.append(wrappers.FlattenObservation)
+
     ewrappers = []
     if task_space:
         assert not scaled_ac, 'Can only use TaskSpaceWrapper OR ' \
@@ -151,15 +158,21 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
         action_type = cube_env.ActionType.POSITION
     ewrappers += rew_wrappers + final_wrappers
 
-    # initializer = env_wrappers.ReorientInitializer(1, sample_radius)
-    # initializer = env_wrappers.RandomInitializer(difficulty=difficulty)
-    initializer = initializers.RandomGoalOrientationInitializer
+    if initializer == 'random':
+        initializer = initializers.RandomInitializer(difficulty=difficulty)
+    elif initializer == 'reorient':
+        initializer = initializers.ReorientInitializer(difficulty, sample_radius)
+    elif initializer == 'curriculum':
+        initializer = initializers.CurriculumInitializer(difficulty)
+    else:
+        initializer = initializers.RandomGoalOrientationInitializer
 
     if goal_env or residual:
         ret = make_env_fn(env_str, ewrappers,
                           initializer=initializer,
                           action_type=action_type,
-                          frameskip=frameskip, goal_difficulty=difficulty)
+                          frameskip=frameskip, goal_difficulty=difficulty,
+                          sparse=sparse)
     else:
         ret = make_env_fn(env_str, ewrappers,
                           initializer=initializer,

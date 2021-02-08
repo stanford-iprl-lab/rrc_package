@@ -31,7 +31,7 @@ from trifinger_simulation.tasks import move_cube
 import rrc_iprl_package.pybullet_utils as pbutils
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.control.control_policy import ImpedanceControllerPolicy, TrajMode
-from rrc_iprl_package.envs import env_wrappers
+from rrc_iprl_package.envs import env_wrappers, initializers
 from rrc_iprl_package.envs import cube_env
 from rrc_iprl_package.envs.cube_env import ActionType
 from rrc_iprl_package.envs.env_utils import configurable

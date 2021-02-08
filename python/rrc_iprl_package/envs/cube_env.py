@@ -586,7 +586,10 @@ class CubeEnv(RealRobotCubeEnv):
             frameskip (int):  Number of actual control steps to be performed in
                 one call of step().
         """
-        self.initializer = initializer(goal_difficulty)
+        if callable(initializer):
+            self.initializer = initializer(goal_difficulty)
+        else:
+            self.initializer = initializer
         initial_pose = self.initializer.get_initial_state().to_dict()
         goal_pose = self.initializer.get_goal().to_dict()
         super().__init__(goal_pose, initial_pose, goal_difficulty,
