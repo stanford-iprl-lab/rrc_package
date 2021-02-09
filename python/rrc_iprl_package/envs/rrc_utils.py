@@ -69,24 +69,26 @@ def make_env_fn(env_str, wrapper_params=[], **make_kwargs):
         return env
     return env_fn
 
-def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dist_thresh=.06,
-                 ac_norm_pen=0, fingertip_coef=0, augment_rew=False,
-                 ep_len=EPLEN, frameskip=FRAMESKIP, rew_fn='exp',
-                 action_type='pos', sample_radius=0.09,
-                 residual=False, sa_relative=True, ts_relative=False,
-                 goal_relative=True, lim_pen=0., return_wrappers=False,
-                 goal_env=False, keep_goal=False, use_quat=False,
-                 cube_rew=False, step_rew=False, reorient_env=False,
-                 scaled_ac=True, task_space=False, res_torque=True,
-                 framestack=1, sparse=False, initializer='random'):
+def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
+                 action_type='pos', rew_fn='sigmoid', goal_env=False,
+                 dist_thresh=0.02, ori_thresh=np.pi/6,
+                 pos_coef=.1, ori_coef=.1, fingertip_coef=0, ac_norm_pen=0.,
+                 scaled_ac=False, sa_relative=False, lim_pen=0.,
+                 task_space=False, ts_relative=False,
+                 goal_relative=True, keep_goal=False, use_quat=False,
+                 step_rew=False, residual=False, res_torque=True,
+                 framestack=1, sparse=False, initializer='random',
+                 flatten=True):
     if goal_env or residual:
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
         env_str = 'real_robot_challenge_phase_2-v2'
+
     custom_env.DIST_THRESH = dist_thresh
     custom_env.ORI_THRESH = ori_thresh
     env_wrappers.DIST_THRESH = dist_thresh
     env_wrappers.ORI_THRESH = ori_thresh
+    initializers.DIST_THRESH = dist_thresh
     if action_type == 'pos' and not residual:
         action_type = cube_env.ActionType.POSITION
     else:
@@ -94,27 +96,14 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
 
     # 1. Reward wrappers
     rew_wrappers = []
-    if cube_rew:
-        rew_wrappers.append(
-            functools.partial(
-                env_wrappers.CubeRewardWrapper,
-                pos_coef=pos_coef, ori_coef=ori_coef,
-                ac_norm_pen=ac_norm_pen, fingertip_coef=fingertip_coef,
-                rew_fn=rew_fn, augment_reward=augment_rew))
     # Step reward wrapper
     if step_rew:
         rew_wrappers.append(env_wrappers.StepRewardWrapper)
 
-    # Reorient wrapper (for is_done flag)
-    if reorient_env:
-        rew_wrappers.append(functools.partial(env_wrappers.ReorientWrapper,
-                                              goal_env=(goal_env or residual),
-                                              dist_thresh=dist_thresh,
-                                              ori_thresh=ori_thresh))
     # 2. Action wrappers (scaled actions, task space, relative goal)
     final_wrappers = []
     if residual:
-        final_wrappers.append(functools.partial(custom_env.ResidualPolicyWrapper, 
+        final_wrappers.append(functools.partial(custom_env.ResidualPolicyWrapper,
                               rl_torque=res_torque))
     else:
         if scaled_ac:
@@ -135,19 +124,24 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
                     'final_ori_dist', 'final_ori_scaled']
     p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
                                             info_keys=p2_info_keys)
-    if action_type == cube_env.ActionType.TORQUE and (not residual or res_torque):
+    if ((action_type == cube_env.ActionType.TORQUE
+                and (not residual or res_torque))
+            or (scaled_ac and not sa_relative)
+            or not scaled_ac):
         final_wrappers.append(
                 functools.partial(wrappers.RescaleAction, a=-1, b=1))
     final_wrappers +=  [p2_log_info_wrapper, wrappers.ClipAction]
-    if not goal_env:
-        final_wrappers.append(wrappers.FlattenObservation)
-    else:
-        final_wrappers.append(env_wrappers.FlattenGoalWrapper)
+    if flatten:
+        if not goal_env:
+            final_wrappers.append(wrappers.FlattenObservation)
+        else:
+            final_wrappers.append(env_wrappers.FlattenGoalWrapper)
 
     if framestack > 1:
         final_wrappers.append(functools.partial(wrappers.FrameStack,
                                                 num_stack=framestack))
-        final_wrappers.append(wrappers.FlattenObservation)
+        if flatten:
+            final_wrappers.append(wrappers.FlattenObservation)
 
     ewrappers = []
     if task_space:
@@ -161,7 +155,7 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
     if initializer == 'random':
         initializer = initializers.RandomInitializer(difficulty=difficulty)
     elif initializer == 'reorient':
-        initializer = initializers.ReorientInitializer(difficulty, sample_radius)
+        initializer = initializers.ReorientInitializer(difficulty, 0.09)
     elif initializer == 'curriculum':
         initializer = initializers.CurriculumInitializer(difficulty)
     else:
@@ -174,6 +168,8 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
                           frameskip=frameskip, goal_difficulty=difficulty,
                           sparse=sparse)
     else:
+        if sparse:
+            rew_fn = 'sparse'
         ret = make_env_fn(env_str, ewrappers,
                           initializer=initializer,
                           action_type=action_type,
@@ -185,8 +181,6 @@ def build_env_fn(difficulty=1, pos_coef=.1, ori_coef=.1, ori_thresh=np.pi/8, dis
                           rew_fn=rew_fn
                           )
 
-    if return_wrappers:
-        ret = (ret, ewrappers)
     return ret
 
 

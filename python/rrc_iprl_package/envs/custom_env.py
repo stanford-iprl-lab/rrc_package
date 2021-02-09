@@ -91,9 +91,8 @@ class PushCubeEnv(gym.Env):
         pos_coef=0.5,
         ori_coef=0.5,
         fingertip_coef=0.,
-        step_coef=0.,
         ac_norm_pen=0.1,
-        rew_fn='sigmoid',
+        rew_fn='sparse',
         min_ftip_height=0.01, 
         max_velocity=0.17
         ):
@@ -216,7 +215,6 @@ class PushCubeEnv(gym.Env):
         self._pos_coef = pos_coef
         self._ori_coef = ori_coef
         self._fingertip_coef = fingertip_coef
-        self._step_coef = step_coef
         self._ac_norm_pen = ac_norm_pen
 
     def write_action_log(self, observation, action, reward, **log_kwargs):
@@ -388,7 +386,7 @@ class PushCubeEnv(gym.Env):
         orientation_errors = np.linalg.norm(goal_corners - actual_corners, axis=1)
         return orientation_errors
 
-    def compute_orientation_error(self, goal_pose, actual_pose):
+    def compute_orientation_error(self, goal_pose, actual_pose, scaled=False):
         goal_rot = Rotation.from_quat(goal_pose.orientation)
         actual_rot = Rotation.from_quat(actual_pose.orientation)
 
@@ -402,8 +400,9 @@ class PushCubeEnv(gym.Env):
 
         # scale both position and orientation error to be within [0, 1] for
         # their expected ranges
-        error = orientation_error / np.pi
-        return error
+        if scaled:
+            orientation_error = orientation_error / np.pi
+        return orientation_error
 
     def compute_fingertip_error(self, observation):
         if 'robot_tip_positions' not in observation:
@@ -446,15 +445,18 @@ class PushCubeEnv(gym.Env):
         return reward
 
     def _compute_reward(self, previous_observation, observation):
+        rew = 0.
         if self.rew_fn == 'sigmoid':
-            return self._compute_reward_sigmoid(previous_observation, observation)
+            rew = self._compute_reward_sigmoid(previous_observation, observation)
 
+        # create goal and object poses
         goal_pose = self.goal
         if previous_observation is None:
             prev_object_pose = None
         else:
-            prev_object_pose = move_cube.Pose(position=previous_observation['object_position'],
-                                           orientation=previous_observation['object_orientation'])
+            prev_object_pose = move_cube.Pose(
+                    position=previous_observation['object_position'],
+                    orientation=previous_observation['object_orientation'])
         object_pose = move_cube.Pose(position=observation['object_position'],
                                      orientation=observation['object_orientation'])
 
@@ -500,6 +502,10 @@ class PushCubeEnv(gym.Env):
             rew = self._pos_coef * (-pos_error / self._target_dist)
             if self._ori_coef:
                 rew += self._ori_coef * (-ori_error)
+        elif self.rew_fn == 'sparse':
+            rew = float(pos_error < DIST_THRESH)
+            if info.get('difficulty') == 4:
+                rew += float(ori_error < ORI_THRESH)
 
         # Add to info dict
         # compute action penalty
@@ -512,8 +518,8 @@ class PushCubeEnv(gym.Env):
         info['ori_error'] = ori_error
         info['corner_error'] = corner_error
 
-        total_rew = rew + ac_penalty + self._step_coef * step_rew
-        return total_rew + ((pos_error < DIST_THRESH) + (ori_error < ORI_THRESH))
+        total_rew = rew + ac_penalty
+        return total_rew
 
     def step(self, action):
         if self.platform is None:
