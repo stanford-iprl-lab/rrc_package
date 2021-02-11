@@ -424,24 +424,19 @@ class PushCubeEnv(gym.Env):
         position_error = self.compute_position_error(goal_pose, object_pose)
         orientation_error = self.compute_orientation_error(goal_pose, object_pose)
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
-        #ftip_error = self.compute_fingertip_error(observation).sum()
-        reward = dmr.tolerance(position_error, (0., DIST_THRESH/2),
+        ftip_error = self.compute_fingertip_error(observation).sum()
+        reward = 2*dmr.tolerance(position_error, (0., DIST_THRESH/2),
                                margin=DIST_THRESH/2, sigmoid='long_tail')
-        if reward > .5:
-            reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
-                                    margin=ORI_THRESH/2, sigmoid='long_tail')
-        else:
-            reward += .5*dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
-                                    margin=ORI_THRESH/2, sigmoid='long_tail')
-
-        reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
+        reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
+                                margin=ORI_THRESH/2, sigmoid='long_tail')
+        reward += 2*dmr.tolerance(corner_error, (0., DIST_THRESH*3),
                                 margin=DIST_THRESH*3, sigmoid='long_tail')
-        # reward += dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
-        #                         margin=_CUBOID_HEIGHT/2, sigmoid='long_tail')
+        reward += .2*dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
+                                margin=_CUBOID_HEIGHT/2, sigmoid='long_tail')
         self.info['pos_error'] = position_error
         self.info['ori_error'] = orientation_error
         self.info['corner_error'] = corner_error
-        # self.info['ftip_error'] = ftip_error
+        self.info['ftip_error'] = ftip_error
         return reward
 
     def _compute_reward(self, previous_observation, observation):
@@ -463,16 +458,10 @@ class PushCubeEnv(gym.Env):
         info = self.info
         pos_error = self.compute_position_error(goal_pose, object_pose)
         ori_error = self.compute_orientation_error(goal_pose, object_pose)
+        scaled_ori_error = ori_error/np.pi
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
-
-        # compute previous object pose error
-        if previous_observation:
-            prev_pos_error = self.compute_position_error(goal_pose, prev_object_pose)
-            prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
-            prev_corner_error = self.compute_corner_error(goal_pose, prev_object_pose).sum()
-            step_rew = (prev_pos_error - pos_error) + (prev_ori_error - ori_error)
-        else:
-            step_rew = 0
+        ftip_error = self.compute_fingertip_error(observation).sum()
+        step_rew = 0.
 
         # compute position and orientation joint reward based on chosen rew_fn 
         if self.rew_fn == 'lin':
@@ -506,6 +495,17 @@ class PushCubeEnv(gym.Env):
             rew = float(pos_error < DIST_THRESH)
             if info.get('difficulty') == 4:
                 rew += float(ori_error < ORI_THRESH)
+        elif self.rew_fn == 'step':
+            # compute previous object pose error
+            prev_pos_error = self.compute_position_error(goal_pose, prev_object_pose)
+            prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
+            prev_scaled_ori_error = prev_ori_error / np.pi
+            prev_corner_error = self.compute_corner_error(goal_pose, prev_object_pose).sum()
+            prev_ftip_error = self.compute_fingertip_error(previous_observation).sum()
+            step_rew = 20*(prev_pos_error - pos_error)
+            step_rew += 10*(prev_corner_error - corner_error)
+            step_rew += 2*(prev_ftip_error - ftip_error)
+            rew = step_rew
 
         # Add to info dict
         # compute action penalty
@@ -516,7 +516,9 @@ class PushCubeEnv(gym.Env):
         info['rew'] = rew
         info['pos_error'] = pos_error
         info['ori_error'] = ori_error
+        info['scaled_ori_error'] = scaled_ori_error
         info['corner_error'] = corner_error
+        info['ftip_error'] = ftip_error
 
         total_rew = rew + ac_penalty
         return total_rew
@@ -567,6 +569,10 @@ class PushCubeEnv(gym.Env):
         else:
             if np.linalg.norm(observation['object_position'][:2]) >= self._target_dist:
                 is_done = True
+                reward = -1
+            elif self.info['pos_error'] < DIST_THRESH:
+                is_done = True
+                reward = 15
 
         if is_done and isinstance(self.initializer, initializers.CurriculumInitializer):
             goal_pose = self.goal

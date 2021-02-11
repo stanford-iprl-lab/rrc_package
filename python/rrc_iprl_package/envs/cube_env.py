@@ -201,6 +201,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
         self.action_log = []
         self.filtered_position = None
         self.filtered_orientation = None
+        self.rew_fn = 'step'
         self.sparse = sparse
 
     def compute_reward(self, achieved_goal, desired_goal, info):
@@ -229,14 +230,34 @@ class RealRobotCubeEnv(gym.GoalEnv):
         position_error = self.compute_position_error(goal_pose, object_pose)
         orientation_error = self.compute_orientation_error(goal_pose, object_pose)
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
-        info['pos_error'] = position_error
-        info['ori_error'] = orientation_error
-        info['corner_error'] = corner_error
-        return -move_cube.evaluate_state(
-            goal_pose,
-            object_pose,
-            info["difficulty"],
-        )
+        
+        if self.rew_fn == 'step':
+            prev_object_pose = move_cube.Pose(info.get('prev_object_position'),
+                                              info.get('prev_object_orientation'))
+            prev_pos_error = self.compute_position_error(goal_pose, prev_object_pose)
+            prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
+            prev_scaled_ori_error = prev_ori_error / np.pi
+            prev_corner_error = self.compute_corner_error(goal_pose, prev_object_pose).sum()
+            prev_ftip_pos = info.get('prev_tip_positions')
+            prev_ftip_error = self.compute_fingertip_error(prev_ftip_pos, prev_object_pose).sum()
+            ftip_pos = info.get('tip_positions')
+            ftip_error = self.compute_fingertip_error(ftip_pos, object_pose).sum()
+
+            step_rew = 20*(prev_pos_error - pos_error)
+            step_rew += 10*(prev_corner_error - corner_error)
+            step_rew += 2*(prev_ftip_error - ftip_error)
+
+            info['pos_error'] = position_error
+            info['ori_error'] = orientation_error
+            info['corner_error'] = corner_error
+            rew = step_rew
+        else:
+            rew = -move_cube.evaluate_state(
+                goal_pose,
+                object_pose,
+                info["difficulty"],
+            )
+        return rew
 
     def compute_position_error(self, goal_pose, object_pose):
         pos_error = np.linalg.norm(object_pose.position - goal_pose.position)
@@ -342,12 +363,15 @@ class RealRobotCubeEnv(gym.GoalEnv):
             num_steps = max(1, num_steps - excess)
 
         reward = 0.0
+        observation = previous_observation = None
         for _ in range(num_steps):
             # send action to robot
             robot_action = self._gym_action_to_robot_action(action)
             t = self.platform.append_desired_action(robot_action)
 
             observation = self._create_observation(t, action)
+            if previous_observation is None:
+                previous_observation = observation
 
             self.step_count += t - self.t_prev
             self.t_prev = t
@@ -356,6 +380,10 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 break
 
         self.observation = observation['observation']
+        self.info['prev_object_position'] = previous_observation['achieved_goal']['position']
+        self.info['prev_object_orientation'] = previous_observation['achieved_goal']['orientation']
+        self.info['prev_tip_positions'] = previous_observation['observation']['tip_positions']
+
         reward += self.compute_reward(
             observation["achieved_goal"],
             observation["desired_goal"],
@@ -524,7 +552,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 "cam0_timestamp": camera_observation.cameras[0].timestamp
             }
         obs_dict = {k: obs_dict[k] for k in self.observation_names}
-        # self.info.update(obs_dict)
+        self.info.update(obs_dict)
         observation = {
             "observation": obs_dict,
             "desired_goal": self.goal.to_dict(),

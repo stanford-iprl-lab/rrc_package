@@ -76,7 +76,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
                  scaled_ac=False, sa_relative=False, lim_pen=0.,
                  task_space=False, ts_relative=False,
                  goal_relative=True, keep_goal=False, use_quat=False,
-                 step_rew=False, residual=False, res_torque=True,
+                 residual=False, res_torque=True,
                  framestack=1, sparse=False, initializer='random',
                  flatten=True):
     if goal_env or residual:
@@ -96,9 +96,6 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
 
     # 1. Reward wrappers
     rew_wrappers = []
-    # Step reward wrapper
-    if step_rew:
-        rew_wrappers.append(env_wrappers.StepRewardWrapper)
 
     # 2. Action wrappers (scaled actions, task space, relative goal)
     final_wrappers = []

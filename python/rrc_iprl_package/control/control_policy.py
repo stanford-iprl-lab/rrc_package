@@ -700,8 +700,8 @@ class ImpedanceControllerPolicy:
 
         if ft_des_force_wf is not None and residual_ft_force is not None:
             ft_des_force_wf += residual_ft_force
-        elif residual_ft_force is not None:
-            ft_des_force_wf = residual_ft_force
+        # elif residual_ft_force is not None:
+        #   ft_des_force_wf = residual_ft_force
 
         # Compute torque with impedance controller, and clip
         torque = c_utils.impedance_controller(ft_pos_goal_list,
