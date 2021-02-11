@@ -262,12 +262,19 @@ class PushCubeEnv(gym.Env):
             logging.debug("Virtually resetting after %d resets", self.num_resets+1)
             self.num_resets += 1
         else:
+            if self.initializer:
+                initial_pose = self.initializer.get_initial_state()
+            else:
+                initial_pose = move_cube.sample_goal(difficulty=-1)
             self.platform = robot_fingers.TriFingerPlatformFrontend()
             platform = trifinger_simulation.TriFingerPlatform(
                 visualization=False,
-                initial_object_pose=move_cube.sample_goal(difficulty=-1)
+                initial_object_pose=initial_pose
             )
             self.kinematics = platform.simfinger.kinematics
+
+        if self.initializer:
+            self.goal = self.initializer.get_goal()
 
     def _reset_direct_simulation(self, **platform_kwargs):
         """Reset direct simulation.
@@ -280,14 +287,20 @@ class PushCubeEnv(gym.Env):
         del self.platform
 
         # initialize simulation
-        initial_object_pose = move_cube.sample_goal(difficulty=-1)
+        if self.initializer:
+            initial_pose = self.initializer.get_initial_state()
+        else:
+            initial_pose = move_cube.sample_goal(difficulty=-1)
         self.platform = trifinger_simulation.TriFingerPlatform(
             visualization=self.visualization,
-            initial_object_pose=initial_object_pose,
+            initial_object_pose=initial_pose,
             object_mass=platform_kwargs.get('object_mass'),
             joint_friction=platform_kwargs.get('joint_friction'),
         )
         self.kinematics = self.platform.simfinger.kinematics
+
+        if self.initializer:
+            self.goal = self.initializer.get_goal()
 
         # visualize the goal
         if self.visualization:
@@ -305,9 +318,6 @@ class PushCubeEnv(gym.Env):
             self._reset_platform_frontend(**platform_kwargs)
         else:
             self._reset_direct_simulation(**platform_kwargs)
-
-        if self.initializer:
-            self.goal = self.initializer.get_goal()
 
         self.info = {"difficulty": self.initializer.difficulty}
         self.step_count = 0
@@ -570,9 +580,13 @@ class PushCubeEnv(gym.Env):
             if np.linalg.norm(observation['object_position'][:2]) >= self._target_dist:
                 is_done = True
                 reward = -1
+                if self.rew_fn == 'step':
+                    reward = -5
             elif self.info['pos_error'] < DIST_THRESH:
                 is_done = True
                 reward = 15
+                if self.rew_fn == 'sigmoid':
+                    reward = 40
 
         if is_done and isinstance(self.initializer, initializers.CurriculumInitializer):
             goal_pose = self.goal

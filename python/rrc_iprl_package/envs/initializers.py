@@ -96,6 +96,7 @@ class CurriculumInitializer(FixedInitializer):
         self._current_level = 0
         self.levels = np.linspace(initial_dist, MAX_DIST, num_levels)
         self.final_dist = np.array([np.inf for _ in range(buffer_size)])
+        self.initial_pose = self.get_initial_state()
         if difficulty == 4:
             self.final_ori = np.array([np.inf for _ in range(buffer_size)])
         self.fixed_goal = self.goal_pose = fixed_goal
@@ -149,6 +150,8 @@ class CurriculumInitializer(FixedInitializer):
         # goal_sample_radius is further than past distances
         sample_radius_min, sample_radius_max = self.goal_sample_radius
         x, y = random_xy(sample_radius_min, sample_radius_max)
+        while np.linalg.norm(np.array([x,y]) - self.initial_pose.position[:2]) < DIST_THRESH:
+            x, y = random_xy(sample_radius_min, sample_radius_max)
         self.goal_pose = move_cube.sample_goal(difficulty=self.difficulty)
         self.goal_pose.position = np.array((x, y, self.goal_pose.position[-1]))
         return self.goal_pose
@@ -191,6 +194,7 @@ class RandomGoalOrientationInitializer(FixedInitializer):
         self.difficulty = difficulty
         self.max_dist = max_dist
         self.random = np.random.RandomState()
+        self.init_pose = self.def_initial_pose
 
     def get_initial_state(self):
         self.init_pose = move_cube.sample_goal(-1)

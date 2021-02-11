@@ -77,7 +77,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
                  task_space=False, ts_relative=False,
                  goal_relative=True, keep_goal=False, use_quat=False,
                  residual=False, res_torque=True,
-                 framestack=1, sparse=False, initializer='random',
+                 framestack=1, sparse=False, initializer=None,
                  flatten=True):
     if goal_env or residual:
         env_str = 'real_robot_challenge_phase_2-v1'
@@ -156,7 +156,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
     elif initializer == 'curriculum':
         initializer = initializers.CurriculumInitializer(difficulty)
     else:
-        initializer = initializers.RandomGoalOrientationInitializer
+        initializer = initializers.RandomGoalOrientationInitializer(difficulty)
 
     if goal_env or residual:
         ret = make_env_fn(env_str, ewrappers,

@@ -624,6 +624,16 @@ class CubeEnv(RealRobotCubeEnv):
             action_type=action_type, default_position=default_position, visualization=visualization,
             frameskip=frameskip, num_steps=num_steps, save_npz=save_npz, sparse=sparse)
 
+    def step(self, action):
+        obs, rew, done, info = super(CubeEnv, self).step(action)
+        if done and isinstance(self.initializer, initializers.CurriculumInitializer):
+            goal_pose = self.goal
+            object_pose = move_cube.Pose(
+                position=observation['achieved_goal']['position'],
+                orientation=observation['achieved_goal']['orientation'])
+            self.initializer.update_initializer(object_pose, goal_pose)
+
+
     def reset(self, **kwargs):
         self.initial_pose = self.initializer.get_initial_state()
         self.goal = self.initializer.get_goal()
