@@ -127,14 +127,21 @@ class TaskSpaceWrapper(gym.ActionWrapper):
     def action(self, action, obs=None):
         obs = obs or self._prev_obs
         poskey, velkey = 'robot_position', 'robot_velocity'
+        obj_dict, objpos_key = obs, 'object_position'
         if self.goal_env:
             obs, poskey, velkey = obs['observation'], 'position', 'velocity'
+            obj_dict, objpos_key = obs['achieved_goal'], 'position'
         current_position, current_velocity = obs[poskey], obs[velkey]
+        obj_position = obj_dict[objpos_key]
         if self.relative:
-            fingertip_goals = self.pinocchio_utils.forward_kinematics(
-                    current_position.flatten())
-            fingertip_goals = np.asarray(fingertip_goals)
-            fingertip_goals = fingertip_goals + self.scale * action.reshape((3,3))
+            action[::3] = action[::3] + 1 / 2  # scale z-axis to only positive
+            action = action * 0.3  # scale all positions to be in -.3, .3 range
+            fingertip_goals = obj_position + action.reshape((3,3))
+            fingertip_goals = fingertip_goals.flatten()
+            # fingertip_goals = self.pinocchio_utils.forward_kinematics(
+            #         current_position.flatten())
+            # fingertip_goals = np.asarray(fingertip_goals)
+            # fingertip_goals = fingertip_goals + self.scale * action.reshape((3,3))
         else:
             fingertip_goals = action
         if self.unwrapped.action_type == ActionType.TORQUE:
