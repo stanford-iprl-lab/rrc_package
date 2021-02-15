@@ -29,7 +29,7 @@ class FixedInitializer:
     def_initial_pose = move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]),
                                       np.array([0,0,0,1]))
 
-    def __init__(self, difficulty, initial_state=None, goal=None):
+    def __init__(self, difficulty=1, initial_state=None, goal=None):
         """Initialize.
 
         Args:

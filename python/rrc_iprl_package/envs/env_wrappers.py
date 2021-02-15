@@ -14,6 +14,7 @@ from rrc_iprl_package.envs.initializers import *
 from trifinger_simulation import TriFingerPlatform
 from trifinger_simulation import visual_objects
 from trifinger_simulation.tasks import move_cube
+from trifinger_simulation import trifingerpro_limits
 from scipy.spatial.transform import Rotation
 from collections import deque
 
@@ -94,8 +95,8 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         if 'action' not in obs_dict:
             obs_dict['action'] = self.action_space
 
-    def reset(self):
-        obs = super(TaskSpaceWrapper, self).reset()
+    def reset(self, **kwargs):
+        obs = super(TaskSpaceWrapper, self).reset(**kwargs)
         self._prev_obs = obs
         self._last_action = np.zeros_like(self.action_space.sample())
         obs_dict = obs
@@ -144,7 +145,10 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             # fingertip_goals = fingertip_goals + self.scale * action.reshape((3,3))
         else:
             fingertip_goals = action
+
+        # currently not implemented
         if self.unwrapped.action_type == ActionType.TORQUE:
+            raise NotImplementedError
             # compute desired velocity
             dt = self.frameskip * .001
             desired_velocity = self.scale * action.reshape((3,3)) / dt
@@ -156,6 +160,8 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             ac = np.clip(torque, self.unwrapped.action_space.low,
                              self.unwrapped.action_space.high)
         else:
+            if obs and np.all(action == 0):
+                ac = current_position
             ac, ft_err = self.pinocchio_utils.inverse_kinematics(
                     fingertip_goals.reshape((3,3)), current_position)
             ac = np.clip(ac.flatten(), self.unwrapped.action_space.low,
@@ -191,8 +197,8 @@ class ScaledActionWrapper(gym.ActionWrapper):
             scaled_action=self.action(action), t=self.step_count,
             reward=reward))
 
-    def reset(self):
-        obs = super(ScaledActionWrapper, self).reset()
+    def reset(self, **kwargs):
+        obs = super(ScaledActionWrapper, self).reset(**kwargs)
         self._prev_obs = obs
         self._clipped_action = self._last_action = 0*self.action_space.sample()
         return obs
@@ -373,88 +379,6 @@ class FlattenGoalWrapper(gym.ObservationWrapper):
         observation = {k: gym.spaces.flatten(self.env.observation_space[k], v)
                        for k, v in observation.items()}
         return observation
-
-
-# DEPRECATED, USE CubeRewardWrapper INSTEAD
-class DistRewardWrapper(gym.RewardWrapper):
-    def __init__(self, env, target_dist=0.2, dist_coef=1., ori_coef=1.,
-                 ac_norm_pen=0.2, final_step_only=True, augment_reward=True,
-                 rew_fn='lin'):
-        super(DistRewardWrapper, self).__init__(env)
-        self._target_dist = target_dist  # 0.156
-        self._dist_coef = dist_coef
-        self._ori_coef = ori_coef
-        self._ac_norm_pen = ac_norm_pen
-        self._last_action = None
-        self.final_step_only = final_step_only
-        self.augment_reward = augment_reward
-        self.rew_fn = rew_fn
-        print('DistRewardWrapper is deprecated, use CubeRewardWrapper instead')
-
-    @property
-    def target_dist(self):
-        target_dist = self._target_dist
-        if target_dist is None:
-            if isinstance(self.initializer, CurriculumInitializer):
-                _, target_dist = self.initializer.goal_sample_radius
-                target_dist = 2 * target_dist  # use sample diameter
-            else:
-                target_dist = move_cube._ARENA_RADIUS
-        return target_dist
-
-    @property
-    def difficulty(self):
-        return self.unwrapped.initializer.difficulty
-
-    def reset(self, **reset_kwargs):
-        self._last_action = None
-        return super(DistRewardWrapper, self).reset(**reset_kwargs)
-
-    def step(self, action):
-        self._last_action = action
-        observation, reward, done, info = self.env.step(action)
-        if self.final_step_only and done:
-            return observation, reward, done, info
-        else:
-            return observation, self.reward(reward, info), done, info
-
-    def reward(self, reward, info):
-        final_dist = self.compute_goal_dist(info)
-        if self.rew_fn == 'lin':
-            rew = self._dist_coef * (1 - final_dist/self.target_dist)
-            if self.info['difficulty'] == 4:
-                rew += self._ori_coef * (1 - self.compute_orientation_error())
-        elif self.rew_fn == 'exp':
-            rew = self._dist_coef * np.exp(-final_dist/self.target_dist)
-            if self.info['difficulty'] == 4:
-                rew += self._ori_coef * np.exp(-self.compute_orientation_error())
-        if self.augment_reward:
-            rew += reward
-        if self._ac_norm_pen:
-            rew -= np.linalg.norm(self._last_action) * self._ac_norm_pen
-        return rew
-
-    def get_goal_object_pose(self):
-        goal_pose = self.unwrapped.goal
-        if not isinstance(goal_pose, move_cube.Pose):
-            goal_pose = move_cube.Pose.from_dict(goal_pose)
-        cube_state = self.unwrapped.platform.cube.get_state()
-        object_pose = move_cube.Pose(
-                np.asarray(cube_state[0]).flatten(),
-                np.asarray(cube_state[1]).flatten())
-        return goal_pose, object_pose
-
-    def compute_orientation_error(self):
-        goal_pose, object_pose = self.get_goal_object_pose()
-        orientation_error = compute_orientation_error(goal_pose, object_pose)
-        return orientation_error
-
-    def compute_goal_dist(self, info):
-        goal_pose, object_pose = self.get_goal_object_pose()
-        pos_idx = 3 if info['difficulty'] > 3 else 2
-        goal_dist = np.linalg.norm(object_pose.position[:pos_idx] -
-                                   goal_pose.position[:pos_idx])
-        return goal_dist
 
 
 @configurable(pickleable=True)
@@ -745,9 +669,9 @@ class StepRewardWrapper(gym.RewardWrapper):
         super(StepRewardWrapper, self).__init__(env)
         self._last_rew = 0.
 
-    def reset(self):
+    def reset(self, **kwargs):
         self._last_rew = 0.
-        return super(StepRewardWrapper, self).reset()
+        return super(StepRewardWrapper, self).reset(**kwargs)
 
     def reward(self, reward):
         step_reward = reward - self._last_rew
@@ -865,6 +789,51 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
         return obs
 
 
+@configurable(pickleable=True)
+class SingleFingerWrapper(gym.ObservationWrapper):
+
+    def __init__(self, env):
+        super(SingleFingerWrapper, self).__init__(env)
+        self.action_space = gym.spaces.Box(
+            low=self.env.action_space.low[:3],
+            high=self.env.action_space.high[:3])
+        self.observation_names = self.env.observation_names
+        obs_space_dict = self.observation_space.spaces
+        if self.action_type == ActionType.POSITION:
+            self._initial_action = trifingerpro_limits.robot_position.default
+        for obs_key, obs_space in obs_space_dict.items():
+            if obs_key == 'robot_tip_forces':
+                obs_space_dict[obs_key] = gym.spaces.Box(
+                        low=0, high=1, shape=(1,))
+            elif obs_key == 'action':
+                obs_space_dict[obs_key] = self.action_space
+            elif 'robot' in obs_key:
+                obs_space_dict[obs_key] = gym.spaces.Box(
+                        low=obs_space.low[:3], high=obs_space.high[:3])
+        return
+
+    def observation(self, obs):
+        for key in self.observation_names:
+            if key == 'robot_tip_forces':
+                obs[key] = obs[key][:1]
+            elif key == 'action':
+                obs[key] = obs[key][:3]
+            elif 'robot' in key:
+                obs[key] = obs[key][:3]
+        return obs
+
+    def reset(self, **kwargs):
+        return super(SingleFingerWrapper, self).reset(**kwargs)
+
+    def step(self, action):
+        return super(SingleFingerWrapper, self).step(self.action(action))
+
+    def action(self, action):
+        t_action = self._initial_action[:]
+        t_action[:3] = action
+        return t_action
+
+
 # Phase 3 orientation error
 def compute_orientation_error(goal_pose, actual_pose):
     goal_rot = Rotation.from_quat(goal_pose.orientation)
@@ -924,3 +893,5 @@ def get_theta_z_wf(goal_rot, actual_rot):
     )
 
     return orientation_error
+
+
