@@ -188,12 +188,12 @@ class ReorientInitializer(FixedInitializer):
 
 @configurable(pickleable=True)
 class RandomGoalOrientationInitializer(FixedInitializer):
-    def_initial_pose= move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
+    def_initial_pose= move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]),
+                                     np.array([0,0,0,1]))
 
     def __init__(self, difficulty=1, max_dist=np.pi):
         self.difficulty = difficulty
         self.max_dist = max_dist
-        self.random = np.random.RandomState()
         self.init_pose = self.def_initial_pose
 
     def get_initial_state(self):
@@ -201,8 +201,9 @@ class RandomGoalOrientationInitializer(FixedInitializer):
         return self.init_pose
 
     def get_goal(self):
-        goal =  move_cube.sample_goal(-1)
-        if self.max_dist:
+        return self.def_initial_pose
+        goal =  move_cube.sample_goal(self.difficulty)
+        if self.max_dist and self.difficulty != 2:
             init_rot = Rotation.from_quat(self.init_pose.orientation)
             init_xyz = init_rot.as_euler('xyz')
             goal_y = init_xyz[1] + self.max_dist * np.random.uniform(-1, 1)

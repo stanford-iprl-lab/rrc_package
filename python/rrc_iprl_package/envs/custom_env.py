@@ -441,9 +441,9 @@ class PushCubeEnv(gym.Env):
                                 margin=ORI_THRESH/2, sigmoid='long_tail')
         reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
                                 margin=DIST_THRESH*3, sigmoid='long_tail')
-        reward += .2*dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
-                                margin=_CUBOID_HEIGHT/2, sigmoid='long_tail')
-        reward /= 4
+        reward += .5*dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
+                                margin=_CUBOID_HEIGHT, sigmoid='long_tail')
+        reward /= 2
         self.info['pos_error'] = position_error
         self.info['ori_error'] = orientation_error
         self.info['corner_error'] = corner_error
