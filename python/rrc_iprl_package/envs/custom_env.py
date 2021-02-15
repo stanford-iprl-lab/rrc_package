@@ -356,7 +356,7 @@ class PushCubeEnv(gym.Env):
             robot_tip_positions = self.kinematics.forward_kinematics(
                 robot_observation.position
             )
-            robot_tip_positions = np.array(robot_tip_positions)
+            robot_tip_positions = np.array(robot_tip_positions).flatten()
         except:
             robot_tip_positions = np.zeros(9)
 
@@ -701,7 +701,7 @@ class HierarchicalPolicyWrapper(ObservationWrapper):
             elif on == 'robot_velocity':
                 val = obs['observation']['velocity']
             elif on == 'robot_tip_positions':
-                val = cpu.forward_kinematics(obs['observation']['position'])
+                val = cpu.forward_kinematics(obs['observation']['position']).flatten()
             elif on == 'object_position':
                 val = obs['achieved_goal']['position']
             elif on == 'object_orientation':

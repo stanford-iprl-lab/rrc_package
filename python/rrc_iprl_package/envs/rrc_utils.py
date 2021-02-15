@@ -78,7 +78,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
                  goal_relative=True, keep_goal=False, use_quat=False,
                  residual=False, res_torque=True,
                  framestack=1, sparse=False, initializer=None,
-                 flatten=True):
+                 flatten=True, single_finger=False):
     if goal_env or residual:
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
@@ -94,24 +94,24 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
     else:
         action_type = cube_env.ActionType.TORQUE
 
-    # 1. Reward wrappers
-    rew_wrappers = []
-
-    # 2. Action wrappers (scaled actions, task space, relative goal)
     final_wrappers = []
-    if residual:
-        final_wrappers.append(functools.partial(custom_env.ResidualPolicyWrapper,
-                              rl_torque=res_torque))
+    if single_finger:
+        final_wrappers = [env_wrappers.SingleFingerWrapper]
     else:
-        if scaled_ac:
-            final_wrappers.append(
-                functools.partial(env_wrappers.ScaledActionWrapper,
-                                  goal_env=goal_env, relative=sa_relative,
-                                  lim_penalty=lim_pen))
-        if goal_relative and not goal_env:
-            final_wrappers.append(functools.partial(
-                env_wrappers.RelativeGoalWrapper, keep_goal=keep_goal,
-                use_quat=use_quat))
+        # Action wrappers (scaled actions, task space, relative goal)
+        if residual:
+            final_wrappers.append(functools.partial(custom_env.ResidualPolicyWrapper,
+                                  rl_torque=res_torque))
+        else:
+            if scaled_ac:
+                final_wrappers.append(
+                    functools.partial(env_wrappers.ScaledActionWrapper,
+                                      goal_env=goal_env, relative=sa_relative,
+                                      lim_penalty=lim_pen))
+            if goal_relative and not goal_env:
+                final_wrappers.append(functools.partial(
+                    env_wrappers.RelativeGoalWrapper, keep_goal=keep_goal,
+                    use_quat=use_quat))
 
     # Adds time limit, logging, action clipping, and flattens observation 
     final_wrappers.append(functools.partial(wrappers.TimeLimit,
@@ -128,7 +128,8 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
         final_wrappers.append(
                 functools.partial(wrappers.RescaleAction, a=-1, b=1))
     final_wrappers +=  [p2_log_info_wrapper, wrappers.ClipAction]
-    if flatten:
+
+    if flatten:  # set to false to debug with obs dict
         if not goal_env:
             final_wrappers.append(wrappers.FlattenObservation)
         else:
@@ -147,7 +148,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
         ewrappers.append(functools.partial(env_wrappers.TaskSpaceWrapper,
                                            relative=ts_relative))
         action_type = cube_env.ActionType.POSITION
-    ewrappers += rew_wrappers + final_wrappers
+    ewrappers += final_wrappers
 
     if initializer == 'random':
         initializer = initializers.RandomInitializer(difficulty=difficulty)
