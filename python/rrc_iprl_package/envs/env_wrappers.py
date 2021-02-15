@@ -612,9 +612,12 @@ class LogInfoWrapper(gym.Wrapper):
         return np.linalg.norm(object_pose.position[:pos_idx] -
                               goal_pose.position[:pos_idx])
 
-    def compute_orientation_error(self, info):
+    def compute_orientation_error(self, info, scale=False):
         goal_pose, object_pose = self.get_goal_object_pose()
-        return compute_orientation_error(goal_pose, object_pose)
+        ori_error = compute_orientation_error(goal_pose, object_pose)
+        if not scale:
+            ori_error = ori_error * np.pi
+        return ori_error
 
     def step(self, action):
         o, r, d, i = super(LogInfoWrapper, self).step(action)

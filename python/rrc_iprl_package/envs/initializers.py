@@ -96,6 +96,7 @@ class CurriculumInitializer(FixedInitializer):
         self._current_level = 0
         self.levels = np.linspace(initial_dist, MAX_DIST, num_levels)
         self.final_dist = np.array([np.inf for _ in range(buffer_size)])
+        self.initial_pose = self.get_initial_state()
         if difficulty == 4:
             self.final_ori = np.array([np.inf for _ in range(buffer_size)])
         self.fixed_goal = self.goal_pose = fixed_goal
@@ -149,6 +150,8 @@ class CurriculumInitializer(FixedInitializer):
         # goal_sample_radius is further than past distances
         sample_radius_min, sample_radius_max = self.goal_sample_radius
         x, y = random_xy(sample_radius_min, sample_radius_max)
+        while np.linalg.norm(np.array([x,y]) - self.initial_pose.position[:2]) < DIST_THRESH:
+            x, y = random_xy(sample_radius_min, sample_radius_max)
         self.goal_pose = move_cube.sample_goal(difficulty=self.difficulty)
         self.goal_pose.position = np.array((x, y, self.goal_pose.position[-1]))
         return self.goal_pose
@@ -185,20 +188,22 @@ class ReorientInitializer(FixedInitializer):
 
 @configurable(pickleable=True)
 class RandomGoalOrientationInitializer(FixedInitializer):
-    def_initial_pose= move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]), np.array([0,0,0,1]))
+    def_initial_pose= move_cube.Pose(np.array([0,0,_CUBOID_HEIGHT/2]),
+                                     np.array([0,0,0,1]))
 
     def __init__(self, difficulty=1, max_dist=np.pi):
         self.difficulty = difficulty
         self.max_dist = max_dist
-        self.random = np.random.RandomState()
+        self.init_pose = self.def_initial_pose
 
     def get_initial_state(self):
         self.init_pose = move_cube.sample_goal(-1)
         return self.init_pose
 
     def get_goal(self):
-        goal =  move_cube.sample_goal(-1)
-        if self.max_dist:
+        return self.def_initial_pose
+        goal =  move_cube.sample_goal(self.difficulty)
+        if self.max_dist and self.difficulty != 2:
             init_rot = Rotation.from_quat(self.init_pose.orientation)
             init_xyz = init_rot.as_euler('xyz')
             goal_y = init_xyz[1] + self.max_dist * np.random.uniform(-1, 1)
