@@ -6,6 +6,7 @@ import pybullet
 from gym import wrappers
 
 from rrc_iprl_package.control import controller_utils as c_utils
+from rrc_iprl_package.envs import cube_env, custom_env
 from rrc_iprl_package.envs.env_utils import configurable, flatten_space
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.envs.cube_env import CubeEnv, ActionType
@@ -57,7 +58,7 @@ class SparseCubeEnv(CubeEnv):
 
 @configurable(pickleable=True)
 class TaskSpaceWrapper(gym.ActionWrapper):
-    def __init__(self, env, goal_env=False, relative=False, scale=.01,
+    def __init__(self, env, goal_env=False, relative=False, scale=.3,
                  ac_pen=0.):
         super(TaskSpaceWrapper, self).__init__(env)
         self.action_log = []
@@ -130,19 +131,22 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         poskey, velkey = 'robot_position', 'robot_velocity'
         obj_dict, objpos_key = obs, 'object_position'
         if self.goal_env:
-            obs, poskey, velkey = obs['observation'], 'position', 'velocity'
             obj_dict, objpos_key = obs['achieved_goal'], 'position'
+            obs, poskey, velkey = obs['observation'], 'position', 'velocity'
         current_position, current_velocity = obs[poskey], obs[velkey]
         obj_position = obj_dict[objpos_key]
         if self.relative:
-            action[::3] = action[::3] + 1 / 2  # scale z-axis to only positive
             action = action * 0.3  # scale all positions to be in -.3, .3 range
-            fingertip_goals = obj_position + action.reshape((3,3))
-            fingertip_goals = fingertip_goals.flatten()
-            # fingertip_goals = self.pinocchio_utils.forward_kinematics(
-            #         current_position.flatten())
-            # fingertip_goals = np.asarray(fingertip_goals)
-            # fingertip_goals = fingertip_goals + self.scale * action.reshape((3,3))
+            # fingertip_goals = obj_position + action.reshape((3,3))
+            # fingertip_goals = fingertip_goals.flatten()
+            if 'robot_tip_positions' in obs or 'tip_positions' in obs:
+                ftip_key = 'tip_positions' if self.goal_env else 'robot_tip_positions'
+                fingertip_goals = obs[ftip_key].flatten()
+            else:
+                fingertip_goals = self.pinocchio_utils.forward_kinematics(
+                        current_position.flatten())
+            fingertip_goals = np.asarray(fingertip_goals)
+            fingertip_goals = fingertip_goals + action
         else:
             fingertip_goals = action
 
@@ -162,8 +166,9 @@ class TaskSpaceWrapper(gym.ActionWrapper):
         else:
             if obs and np.all(action == 0):
                 ac = current_position
-            ac, ft_err = self.pinocchio_utils.inverse_kinematics(
-                    fingertip_goals.reshape((3,3)), current_position)
+            else:
+                ac, ft_err = self.pinocchio_utils.inverse_kinematics(
+                        fingertip_goals.reshape((3,3)), current_position)
             ac = np.clip(ac.flatten(), self.unwrapped.action_space.low,
                          self.unwrapped.action_space.high)
         return ac
@@ -792,15 +797,22 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
 @configurable(pickleable=True)
 class SingleFingerWrapper(gym.ObservationWrapper):
 
-    def __init__(self, env):
+    def __init__(self, env, finger_id=0):
         super(SingleFingerWrapper, self).__init__(env)
+        assert 0 <= finger_id < 3, f'finger_id was {finger_id}, must be in [0, 3)'
+        self.finger_id = finger_id
         self.action_space = gym.spaces.Box(
             low=self.env.action_space.low[:3],
             high=self.env.action_space.high[:3])
         self.observation_names = self.env.observation_names
         obs_space_dict = self.observation_space.spaces
         if self.action_type == ActionType.POSITION:
-            self._initial_action = trifingerpro_limits.robot_position.default
+            self._initial_action = np.array([0.,.8,-2]*3)
+            self._initial_action[finger_id*3:(finger_id+1)*3] = (
+                    np.array([0.,  0.75, -1.24]))
+            while not isinstance(env, (custom_env.PushCubeEnv, cube_env.CubeEnv)):
+                env = env.env
+            env._initial_action = self._initial_action
         for obs_key, obs_space in obs_space_dict.items():
             if obs_key == 'robot_tip_forces':
                 obs_space_dict[obs_key] = gym.spaces.Box(
@@ -815,11 +827,11 @@ class SingleFingerWrapper(gym.ObservationWrapper):
     def observation(self, obs):
         for key in self.observation_names:
             if key == 'robot_tip_forces':
-                obs[key] = obs[key][:1]
+                obs[key] = obs[key][self.finger_id:self.finger_id+1]
             elif key == 'action':
-                obs[key] = obs[key][:3]
+                obs[key] = obs[key][self.finger_id*3:(self.finger_id+1)*3]
             elif 'robot' in key:
-                obs[key] = obs[key][:3]
+                obs[key] = obs[key][self.finger_id*3:(self.finger_id+1)*3]
         return obs
 
     def reset(self, **kwargs):
@@ -830,7 +842,7 @@ class SingleFingerWrapper(gym.ObservationWrapper):
 
     def action(self, action):
         t_action = self._initial_action[:]
-        t_action[:3] = action
+        t_action[self.finger_id*3:(self.finger_id+1)*3] = action
         return t_action
 
 
