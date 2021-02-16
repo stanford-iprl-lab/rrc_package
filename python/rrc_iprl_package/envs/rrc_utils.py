@@ -3,6 +3,7 @@ import numpy as np
 from gym import wrappers
 import functools
 from gym.envs.registration import register
+from scipy.spatial.transform import Rotation
 
 # SET THIS TO DETERMINE RRC_UTILS IMPORTS
 phase = 2
@@ -152,6 +153,18 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
 
     if initializer == 'random':
         initializer = initializers.RandomInitializer(difficulty=difficulty)
+    elif initializer == 'fixed':
+        init_pose = initializers.FixedInitializer.def_initial_pose
+        goal_pose = initializers.FixedInitializer.def_goal_pose
+        ori = Rotation.from_quat(init_pose.orientation).as_euler('xyz')
+        ori += np.array([0,0,np.pi/2])
+        ori = Rotation.from_euler('xyz', ori).as_quat()
+
+        init_pose.position += np.array([0,0.05,0])
+        init_pose.orientation = ori
+        goal_pose.orientation = ori
+        initializer = initializers.FixedInitializer(
+		    difficulty, initial_state=init_pose, goal=goal_pose)
     elif initializer == 'reorient':
         initializer = initializers.ReorientInitializer(difficulty, 0.09)
     elif initializer == 'curriculum':
