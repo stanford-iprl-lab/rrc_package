@@ -583,9 +583,9 @@ class PushCubeEnv(gym.Env):
                 reward = -1
                 if self.rew_fn == 'step':
                     reward = -5
-            #elif self.rew_fn != 'sigmoid' and self.info['pos_error'] < DIST_THRESH:
-            #    is_done = True
-            #    reward = 15
+            elif self.rew_fn != 'sigmoid' and self.info['pos_error'] < DIST_THRESH:
+               is_done = True
+               reward = 15
 
         if is_done and isinstance(self.initializer, initializers.CurriculumInitializer):
             goal_pose = self.goal
