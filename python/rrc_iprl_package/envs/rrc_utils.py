@@ -42,12 +42,12 @@ elif phase == 2:
     if "real_robot_challenge_phase_2-v1" not in registered_envs:
         register(
             id="real_robot_challenge_phase_2-v1",
-            entry_point=cube_env.RealRobotCubeEnv
+            entry_point=cube_env.CubeEnv
             )
     if "real_robot_challenge_phase_2-v2" not in registered_envs:
         register(
             id="real_robot_challenge_phase_2-v2",
-            entry_point=cube_env.PushCubeEnv
+            entry_point=custom_env.PushCubeEnv
             )
 
 total_steps = 5e6
@@ -79,7 +79,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
                  goal_relative=True, keep_goal=False, use_quat=False,
                  residual=False, res_torque=True,
                  framestack=1, sparse=False, initializer=None,
-                 flatten=True, single_finger=False):
+                 flatten=True, single_finger=False, rescale=False):
     if goal_env or residual:
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
@@ -92,11 +92,14 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
     initializers.DIST_THRESH = dist_thresh
     if action_type == 'pos' and not residual:
         action_type = cube_env.ActionType.POSITION
+    elif action_type == 'pos_tor':
+        action_type = cube_env.ActionType.TORQUE_AND_POSITION
     else:
         action_type = cube_env.ActionType.TORQUE
 
     final_wrappers = []
     if single_finger:
+        rescale = False
         final_wrappers = [env_wrappers.SingleFingerWrapper]
     else:
         # Action wrappers (scaled actions, task space, relative goal)
@@ -122,10 +125,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
                     'final_ori_dist', 'final_ori_scaled']
     p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
                                             info_keys=p2_info_keys)
-    if ((action_type == cube_env.ActionType.TORQUE
-                and (not residual or res_torque))
-            or (scaled_ac and not sa_relative)
-            or not scaled_ac):
+    if rescale and not scaled_ac:
         final_wrappers.append(
                 functools.partial(wrappers.RescaleAction, a=-1, b=1))
     final_wrappers +=  [p2_log_info_wrapper, wrappers.ClipAction]
@@ -164,7 +164,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
         init_pose.orientation = ori
         goal_pose.orientation = ori
         initializer = initializers.FixedInitializer(
-		    difficulty, initial_state=init_pose, goal=goal_pose)
+                difficulty, initial_state=init_pose, goal=goal_pose)
     elif initializer == 'reorient':
         initializer = initializers.ReorientInitializer(difficulty, 0.09)
     elif initializer == 'curriculum':

@@ -1,6 +1,6 @@
 import gym
 from gym.envs.registration import register
-from . import env_wrappers
+from . import rrc_utils
 
 registered_envs = [spec.id for spec in gym.envs.registry.all()]
 
@@ -40,5 +40,4 @@ if "real_robot_challenge_phase_2-v3" not in registered_envs:
         id="real_robot_challenge_phase_2-v3",
         entry_point="rrc_iprl_package.envs.cube_env:FlattenedCubeEnv",
     )
-
 
