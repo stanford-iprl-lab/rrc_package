@@ -113,6 +113,7 @@ class PushCubeEnv(gym.Env):
         # ====================
 
         self.initializer = initializer
+        self._last_done = False
         if initializer:
             self.goal = initializer.get_goal()
         else:
@@ -129,7 +130,6 @@ class PushCubeEnv(gym.Env):
         self.platform = None
         self.save_npz = save_npz
         self.action_log = []
-        self._prev_action = np.zeros(9)
         self.action_type = action_type
 
         # Create the action and observation spaces
@@ -168,10 +168,10 @@ class PushCubeEnv(gym.Env):
 
         if self.action_type == ActionType.TORQUE:
             self.action_space = robot_torque_space
-            self._initial_action = trifingerpro_limits.robot_torque.default
+            self._prev_action = self._initial_action = trifingerpro_limits.robot_torque.default
         elif self.action_type == ActionType.POSITION:
             self.action_space = robot_position_space
-            self._initial_action = trifingerpro_limits.robot_position.default
+            self._prev_action = self._initial_action = trifingerpro_limits.robot_position.default
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
             self.action_space = gym.spaces.Dict(
                 {
@@ -179,7 +179,7 @@ class PushCubeEnv(gym.Env):
                     "position": robot_position_space,
                 }
             )
-            self._initial_action = {
+            self._prev_action = self._initial_action = {
                 "torque": trifingerpro_limits.robot_torque.default,
                 "position": trifingerpro_limits.robot_position.default,
             }
@@ -188,14 +188,17 @@ class PushCubeEnv(gym.Env):
 
         p_low = np.concatenate([object_state_space.spaces['position'].low for _ in range(3)])
         p_high = np.concatenate([object_state_space.spaces['position'].high for _ in range(3)])
-
+        if self.action_type == cube_env.ActionType.TORQUE_AND_POSITION:
+            ac_space = self.action_space.spaces.get('torque')
+        else:
+            ac_space = self.action_space
         obs_spaces = {
                 "robot_position": robot_position_space,
                 "robot_velocity": robot_velocity_space,
                 "robot_torque": robot_torque_space,
                 "robot_tip_positions": gym.spaces.Box(low=p_low, high=p_high),
                 "robot_tip_forces": gym.spaces.Box(low=np.zeros(3), high=np.ones(3)),
-                "action": self.action_space,
+                "action": ac_space,
                 "goal_object_position": object_state_space.spaces['position'],
                 "goal_object_orientation": object_state_space.spaces['orientation'],
                 "object_position": object_state_space.spaces['position'],
@@ -322,6 +325,7 @@ class PushCubeEnv(gym.Env):
         self.info = {"difficulty": self.initializer.difficulty}
         self.step_count = 0
         observation, _, _, _ = self.step(self._initial_action)
+        self._last_done = False
         return observation
 
     def get_camera_pose(self, camera_observation):
@@ -363,6 +367,8 @@ class PushCubeEnv(gym.Env):
         # verify that the given goal pose is contained in the cube state space
         goal_pose = self.goal.to_dict()
 
+        if isinstance(action, dict):
+            action = action.get('torque', np.zeros(9))
         self._obs_dict = observation = {
             "robot_position": robot_observation.position,
             "robot_velocity": robot_observation.velocity,
@@ -435,15 +441,15 @@ class PushCubeEnv(gym.Env):
         orientation_error = self.compute_orientation_error(goal_pose, object_pose)
         corner_error = self.compute_corner_error(goal_pose, object_pose).sum()
         ftip_error = self.compute_fingertip_error(observation).sum()
-        reward = 2*dmr.tolerance(position_error, (0., DIST_THRESH/2),
-                               margin=DIST_THRESH/2, sigmoid='long_tail')
-        reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
-                                margin=ORI_THRESH/2, sigmoid='long_tail')
-        reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
-                                margin=DIST_THRESH*3, sigmoid='long_tail')
-        reward += .5*dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
-                                margin=_CUBOID_HEIGHT, sigmoid='long_tail')
-        reward /= 2
+        reward = 2*dmr.tolerance(position_error, (0., DIST_THRESH),
+                               margin=DIST_THRESH, sigmoid='long_tail')
+        #reward += dmr.tolerance(orientation_error, (0., ORI_THRESH/2),
+        #                        margin=ORI_THRESH/2, sigmoid='long_tail')
+        #reward += dmr.tolerance(corner_error, (0., DIST_THRESH*3),
+        #                        margin=DIST_THRESH*3, sigmoid='long_tail')
+        #reward += .5*dmr.tolerance(ftip_error, (3*_CUBOID_HEIGHT/2, 2*_CUBOID_HEIGHT),
+        #                        margin=_CUBOID_HEIGHT, sigmoid='long_tail')
+        #reward /= 2
         self.info['pos_error'] = position_error
         self.info['ori_error'] = orientation_error
         self.info['corner_error'] = corner_error
@@ -512,15 +518,19 @@ class PushCubeEnv(gym.Env):
             # prev_ori_error = self.compute_orientation_error(goal_pose, prev_object_pose)
             # prev_scaled_ori_error = prev_ori_error / np.pi
             # prev_corner_error = self.compute_corner_error(goal_pose, prev_object_pose).sum()
-            # prev_ftip_error = self.compute_fingertip_error(previous_observation).sum()
+            prev_ftip_error = self.compute_fingertip_error(previous_observation).sum()
             step_rew = 20*(prev_pos_error - pos_error)
             # step_rew += 10*(prev_corner_error - corner_error)
-            # step_rew += 2*(prev_ftip_error - ftip_error)
+            # step_rew += np.exp(prev_ftip_error - ftip_error)
             rew = step_rew
 
         # Add to info dict
         # compute action penalty
-        ac_penalty = -np.linalg.norm(self._prev_action) * self._ac_norm_pen
+        if self.action_type == cube_env.ActionType.TORQUE_AND_POSITION:
+            action = self._prev_action.get('torque')
+        else:
+            action = self._prev_action
+        ac_penalty = -np.linalg.norm(action) * self._ac_norm_pen
         info['ac_penalty'] = ac_penalty
         if step_rew:
             info['step_rew'] = step_rew
@@ -583,9 +593,12 @@ class PushCubeEnv(gym.Env):
                 reward = -1
                 if self.rew_fn == 'step':
                     reward = -5
-            elif self.rew_fn != 'sigmoid' and self.info['pos_error'] < DIST_THRESH:
-               is_done = True
+            elif self.info['pos_error'] < DIST_THRESH:
+               is_done = True and self._last_done
+               self._last_done = True
                reward = 15
+            else:
+                self._last_done = False
 
         if is_done and isinstance(self.initializer, initializers.CurriculumInitializer):
             goal_pose = self.goal

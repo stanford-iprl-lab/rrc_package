@@ -800,22 +800,40 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
 @configurable(pickleable=True)
 class SingleFingerWrapper(gym.ObservationWrapper):
 
-    def __init__(self, env, finger_id=0):
+    def __init__(self, env, finger_id=0, relative=False):
         super(SingleFingerWrapper, self).__init__(env)
         assert 0 <= finger_id < 3, f'finger_id was {finger_id}, must be in [0, 3)'
         self.finger_id = finger_id
-        self.action_space = gym.spaces.Box(
-            low=self.env.action_space.low[:3],
-            high=self.env.action_space.high[:3])
+        self.relative = relative
+        if not relative:
+            if self.action_type == ActionType.TORQUE_AND_POSITION:
+                self.action_space = gym.spaces.Box(
+                        low=-np.ones(3),
+                        high=np.ones(3))
+            else:
+                self.action_space = gym.spaces.Box(
+                    low=self.env.action_space.low[:3],
+                    high=self.env.action_space.high[:3])
+        else:
+            self.action_space = gym.spaces.Box(
+                low=-np.ones(3),
+                high=np.ones(3))
+            self.scale = POS_SCALE[:3]
+
         self.observation_names = self.env.observation_names
         obs_space_dict = self.observation_space.spaces
-        if self.action_type == ActionType.POSITION:
-            self._initial_action = np.array([0.,.8,-2]*3)
-            self._initial_action[finger_id*3:(finger_id+1)*3] = (
-                    np.array([0.,  0.75, -1.24]))
-            while not isinstance(env, (custom_env.PushCubeEnv, cube_env.CubeEnv)):
-                env = env.env
-            env._initial_action = self._initial_action
+
+        self._initial_action = np.array([0.,.8,-2]*3)
+        self._initial_action[finger_id*3:(finger_id+1)*3] = (
+                np.array([0.,  0.75, -1.24]))
+        if self.action_type == ActionType.TORQUE_AND_POSITION:
+            self.unwrapped._initial_action = {
+                    'position': self._initial_action,
+                    'torque': np.zeros(9)
+                    }
+        else:
+            self.unwrapped._initial_action = self._initial_action
+
         for obs_key, obs_space in obs_space_dict.items():
             if obs_key == 'robot_tip_forces':
                 obs_space_dict[obs_key] = gym.spaces.Box(
@@ -838,14 +856,35 @@ class SingleFingerWrapper(gym.ObservationWrapper):
         return obs
 
     def reset(self, **kwargs):
+        self._prev_obs = None
         return super(SingleFingerWrapper, self).reset(**kwargs)
 
     def step(self, action):
-        return super(SingleFingerWrapper, self).step(self.action(action))
+        obs, r, d, i = super(SingleFingerWrapper, self).step(self.action(action))
+        self._prev_obs = obs
+        return obs, r, d, i
 
     def action(self, action):
+        if self.relative and self.action_type == ActionType.POSITION:
+            if self._prev_obs is None:
+                current_pos = self._initial_action[:]
+            else:
+                if isinstance(self.unwrapped, gym.GoalEnv):
+                    current_pos = self._prev_obs['observation']['position']
+                else:
+                    current_pos = self._prev_obs['robot_position']
+            action = current_pos[self.finger_id*3:(self.finger_id+1)*3] + self.scale * action
+        elif self.action_type == ActionType.TORQUE_AND_POSITION:
+            action = action * 0.397
         t_action = self._initial_action[:]
-        t_action[self.finger_id*3:(self.finger_id+1)*3] = action
+        if self.action_type == ActionType.TORQUE_AND_POSITION:
+            torque = np.zeros(9)
+            torque[self.finger_id*3:(self.finger_id+1)*3] = action
+            t_action = {'position': t_action, 'torque': torque}
+        else:
+            t_action[self.finger_id*3:(self.finger_id+1)*3] = action
+            t_action = np.clip(t_action, self.env.action_space.low,
+                               self.env.action_space.high)
         return t_action
 
 
