@@ -805,15 +805,10 @@ class SingleFingerWrapper(gym.ObservationWrapper):
         assert 0 <= finger_id < 3, f'finger_id was {finger_id}, must be in [0, 3)'
         self.finger_id = finger_id
         self.relative = relative
-        if not relative:
-            if self.action_type == ActionType.TORQUE_AND_POSITION:
-                self.action_space = gym.spaces.Box(
-                        low=-np.ones(3),
-                        high=np.ones(3))
-            else:
-                self.action_space = gym.spaces.Box(
-                    low=self.env.action_space.low[:3],
-                    high=self.env.action_space.high[:3])
+        if not relative and not self.action_type == ActionType.TORQUE_AND_POSITION:
+           self.action_space = gym.spaces.Box(
+                low=self.env.action_space.low[:3],
+                high=self.env.action_space.high[:3])
         else:
             self.action_space = gym.spaces.Box(
                 low=-np.ones(3),
@@ -831,7 +826,7 @@ class SingleFingerWrapper(gym.ObservationWrapper):
                     'position': self._initial_action,
                     'torque': np.zeros(9)
                     }
-        else:
+        elif self.action_type == ActionType.POSITION:
             self.unwrapped._initial_action = self._initial_action
 
         for obs_key, obs_space in obs_space_dict.items():
@@ -865,22 +860,26 @@ class SingleFingerWrapper(gym.ObservationWrapper):
         return obs, r, d, i
 
     def action(self, action):
-        if self.relative and self.action_type == ActionType.POSITION:
-            if self._prev_obs is None:
-                current_pos = self._initial_action[:]
+        current_pos = self._initial_action[:]
+        if self._prev_obs is not None:
+            if isinstance(self.unwrapped, gym.GoalEnv):
+                current_pos[self.finger_id*3:(self.finger_id+1)*3] = self._prev_obs['observation']['position']
             else:
-                if isinstance(self.unwrapped, gym.GoalEnv):
-                    current_pos = self._prev_obs['observation']['position']
-                else:
-                    current_pos = self._prev_obs['robot_position']
+                current_pos[self.finger_id*3:(self.finger_id+1)*3] = self._prev_obs['robot_position']
+
+        if self.relative and self.action_type == ActionType.POSITION:
             action = current_pos[self.finger_id*3:(self.finger_id+1)*3] + self.scale * action
-        elif self.action_type == ActionType.TORQUE_AND_POSITION:
+        if self.action_type == ActionType.TORQUE_AND_POSITION:
             action = action * 0.397
+
         t_action = self._initial_action[:]
         if self.action_type == ActionType.TORQUE_AND_POSITION:
             torque = np.zeros(9)
             torque[self.finger_id*3:(self.finger_id+1)*3] = action
-            t_action = {'position': t_action, 'torque': torque}
+            current_pos = np.clip(
+                    current_pos, self.unwrapped.action_space['position'].low,
+                    self.unwrapped.action_space['position'].high)
+            t_action = {'position': current_pos, 'torque': torque}
         else:
             t_action[self.finger_id*3:(self.finger_id+1)*3] = action
             t_action = np.clip(t_action, self.env.action_space.low,
