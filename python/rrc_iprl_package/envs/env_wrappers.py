@@ -616,6 +616,9 @@ class LogInfoWrapper(gym.Wrapper):
         return goal_pose, object_pose
 
     def compute_position_error(self, info, score=False):
+        if 'pos_error' in info:
+            print("DIST_THRESH", DIST_THRESH)
+            return info.get('pos_error')
         goal_pose, object_pose = self.get_goal_object_pose()
         if score:
             return move_cube.evaluate_state(goal_pose, object_pose,
