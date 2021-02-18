@@ -128,7 +128,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
                                             info_keys=p2_info_keys)
     final_wrappers.append(p2_log_info_wrapper)
 
-    obs_noise = 0.01 * observation_noise  # 1 cm
+    obs_noise = 0.02 * observation_noise  # 1 cm
     ac_noise = 0.1 * action_noise
     if observation_noise or action_noise:
         noise_params = env_wrappers.ObservationNoiseParams(

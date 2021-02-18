@@ -5,7 +5,7 @@ from scipy.spatial.transform import Rotation
 from trifinger_simulation.tasks import move_cube
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
-DIST_THRESH = 0.02
+DIST_THRESH = 0.03
 
 _CUBOID_WIDTH = max(move_cube._CUBOID_SIZE)
 _CUBOID_HEIGHT = min(move_cube._CUBOID_SIZE)
@@ -224,22 +224,12 @@ class RandomGoalOrientationInitializer(FixedInitializer):
 
     def get_initial_state(self):
         self.init_pose = move_cube.sample_goal(-1)
+        x,y = random_xy(DIST_THRESH, 0.09)
+        self.init_pose.position[:2] = np.array([x,y])
         return self.init_pose
 
     def get_goal(self):
-        return self.def_initial_pose
-        goal =  move_cube.sample_goal(self.difficulty)
-        if self.max_dist and self.difficulty != 2:
-            init_rot = Rotation.from_quat(self.init_pose.orientation)
-            init_xyz = init_rot.as_euler('xyz')
-            goal_y = init_xyz[1] + self.max_dist * np.random.uniform(-1, 1)
-            if np.abs(goal_y) > 2*np.pi:
-                goal_y -= np.sign(goal_y)*2*np.pi
-            goal_xyz = init_xyz[:]
-            goal_xyz[1] = goal_y
-            goal.orientation = Rotation.from_euler('xyz', goal_xyz).as_quat()
-        goal.position = np.array([0, 0, _CUBOID_HEIGHT/2])
-        return goal
+        return self.def_goal_pose
 
 
 @configurable(pickleable=True)
