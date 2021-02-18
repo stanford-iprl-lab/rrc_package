@@ -79,7 +79,8 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
                  goal_relative=True, keep_goal=False, use_quat=False,
                  residual=False, res_torque=True,
                  framestack=1, sparse=False, initializer=None,
-                 flatten=True, single_finger=False, rescale=False):
+                 flatten=True, single_finger=False, rescale=False,
+                 observation_noise=True, action_noise=True):
     if goal_env or residual:
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
@@ -125,10 +126,23 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
                     'final_ori_dist', 'final_ori_scaled']
     p2_log_info_wrapper = functools.partial(env_wrappers.LogInfoWrapper,
                                             info_keys=p2_info_keys)
+    final_wrappers.append(p2_log_info_wrapper)
+
+    obs_noise = 0.01 * observation_noise  # 1 cm
+    ac_noise = 0.1 * action_noise
+    if observation_noise or action_noise:
+        noise_params = env_wrappers.ObservationNoiseParams(
+                object_pos_std=obs_noise,
+                action_noise_scale=ac_noise)
+        final_wrappers.append(functools.partial(
+                env_wrappers.ObservationNoiseWrapper,
+                noise_params=noise_params, goal_env=goal_env))
+
+
     if rescale and not scaled_ac:
         final_wrappers.append(
                 functools.partial(wrappers.RescaleAction, a=-1, b=1))
-    final_wrappers +=  [p2_log_info_wrapper, wrappers.ClipAction]
+    final_wrappers.append(wrappers.ClipAction)
 
     if flatten:  # set to false to debug with obs dict
         if not goal_env:
@@ -169,6 +183,8 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
         initializer = initializers.ReorientInitializer(difficulty, 0.09)
     elif initializer == 'curriculum':
         initializer = initializers.CurriculumInitializer(difficulty)
+    elif initializer == 'random_push':
+        initializer = initializers.RandomPushInitializer(difficulty)
     else:
         initializer = initializers.RandomGoalOrientationInitializer(difficulty)
 

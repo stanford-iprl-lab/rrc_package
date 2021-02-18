@@ -689,9 +689,9 @@ class StepRewardWrapper(gym.RewardWrapper):
 @configurable(pickleable=True)
 class ObservationNoiseParams:
     def __init__(self, object_pos_std=.01, object_ori_std=0.,
-                 robot_pos_std=0., robot_vel_std=0., action_noise_loc=-0.01,
+                 robot_pos_std=0., robot_vel_std=0., action_noise_loc=0.,
                  action_noise_scale=0.005, object_mass=0.016,
-                 object_friction=1., joint_friction_scale=0.01):
+                 object_friction=1., joint_friction_scale=0.0):
         self.object_pos_std = object_pos_std
         self.object_ori_std = object_ori_std
         self.robot_pos_std = robot_pos_std
@@ -726,11 +726,11 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
         ret = super(ObservationNoiseWrapper, self).reset(
                 joint_friction=self.noise_params.joint_friction,
                 object_mass=self.noise_params.object_mass)
-        if self.noise_params.object_friction:
+        if self.noise_params.object_friction != 1.:
             lateral_friction = self.noise_params.object_friction
             spinning_friction = .001 * self.noise_params.object_friction
             pybullet.changeDynamics(
-                    bodyUniqueId=self.platform.cube.block_id, 
+                    bodyUniqueId=self.platform.cube.block_id,
                     linkIndex=-1,
                     lateralFriction=lateral_friction,
                     spinningFriction=spinning_friction)
@@ -743,13 +743,18 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
     def action(self, action):
         if self.unwrapped.resetting:
             return action
+        if isinstance(action, dict):
+            n = action['torque'].size
+        else:
+            n = action.size
         action_noise = np.random.normal(self.noise_params.action_noise_loc,
                                    scale=self.noise_params.action_noise_scale,
-                                   size=action.shape)
-        if self.action_type == ActionType.TORQUE_AND_POSITION:
+                                   size=n)
+        if isinstance(action, dict):
             action['torque'] += action_noise
-            action['torque'] = np.clip(action['torque'], self.action_space.low,
-                                       self.action_space.high)
+            action['torque'] = np.clip(action['torque'],
+                    self.action_space['torque'].low,
+                    self.action_space['torque'].high)
         else:
             action += action_noise
             action = np.clip(action, self.action_space.low, self.action_space.high)
@@ -787,11 +792,11 @@ class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
 
         robot_dict[robot_position_key] += np.random.normal(
                 scale=self.noise_params.robot_pos_std,
-                size=9
+                size=robot_dict[robot_position_key].size
             )
         robot_dict[robot_velocity_key] += np.random.normal(
                 scale=self.noise_params.robot_vel_std,
-                size=9
+                size=robot_dict[robot_position_key].size
             )
         return obs
 
@@ -865,7 +870,7 @@ class SingleFingerWrapper(gym.ObservationWrapper):
         return obs, r, d, i
 
     def action(self, action):
-        current_pos = self._initial_action[:]
+        current_pos = self._initial_action.copy()
         if self._prev_obs is not None:
             if isinstance(self.unwrapped, gym.GoalEnv):
                 current_pos[self.finger_id*3:(self.finger_id+1)*3] = self._prev_obs['observation']['position']
@@ -877,7 +882,7 @@ class SingleFingerWrapper(gym.ObservationWrapper):
         if self.action_type == ActionType.TORQUE_AND_POSITION:
             action = action * 0.397
 
-        t_action = self._initial_action[:]
+        t_action = self._initial_action.copy()
         if self.action_type == ActionType.TORQUE_AND_POSITION:
             torque = np.zeros(9)
             torque[self.finger_id*3:(self.finger_id+1)*3] = action

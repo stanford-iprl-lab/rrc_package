@@ -81,7 +81,7 @@ class RandomInitializer(FixedInitializer):
 @configurable(pickleable=True)
 class RandomPushInitializer(FixedInitializer):
     def __init__(self, difficulty=1, initial_state=None, goal=None,
-                 push_upper=0.09, push_lower=0.):
+                 push_upper=0.05, push_lower=0.):
         super(RandomPushInitializer, self).__init__(difficulty, initial_state, goal)
         self.push_lower, self.push_upper = push_lower, push_upper
         ori = Rotation.from_quat(self.def_goal_pose.orientation).as_euler('xyz')
