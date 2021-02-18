@@ -79,6 +79,32 @@ class RandomInitializer(FixedInitializer):
 
 
 @configurable(pickleable=True)
+class RandomPushInitializer(FixedInitializer):
+    def __init__(self, difficulty=1, initial_state=None, goal=None,
+                 push_upper=0.09, push_lower=0.):
+        super(RandomPushInitializer, self).__init__(difficulty, initial_state, goal)
+        self.push_lower, self.push_upper = push_lower, push_upper
+        ori = Rotation.from_quat(self.def_goal_pose.orientation).as_euler('xyz')
+        ori += np.array([0,0,np.pi/2])
+        self.ori = Rotation.from_euler('xyz', ori).as_quat()
+
+    def get_initial_state(self):
+        init_pose = move_cube.Pose(self.def_initial_pose.position,
+                                   self.def_initial_pose.orientation)
+        init_pose.position += np.array([0,0.05,0])
+        init_pose.orientation = self.ori
+        return init_pose
+
+    def get_goal(self):
+        push_dist = np.random.uniform(self.push_lower, self.push_upper)
+        goal_pose = move_cube.Pose(self.def_goal_pose.position,
+                                   self.def_goal_pose.orientation)
+        goal_pose.position += np.array([0, -push_dist, 0])
+        goal_pose.orientation = self.ori
+        return goal_pose
+
+
+@configurable(pickleable=True)
 class CurriculumInitializer(FixedInitializer):
     """Initializer that samples random initial states and goals."""
 

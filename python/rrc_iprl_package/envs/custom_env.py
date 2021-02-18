@@ -41,7 +41,7 @@ from dm_control.utils import rewards as dmr
 
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
-DIST_THRESH = 0.05
+DIST_THRESH = 0.03
 _CUBOID_WIDTH = max(move_cube._CUBOID_SIZE)
 _CUBOID_HEIGHT = min(move_cube._CUBOID_SIZE)
 
