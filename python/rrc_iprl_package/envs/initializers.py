@@ -97,8 +97,8 @@ class RandomPushInitializer(FixedInitializer):
 
     def get_goal(self):
         push_dist = np.random.uniform(self.push_lower, self.push_upper)
-        goal_pose = move_cube.Pose(self.def_goal_pose.position,
-                                   self.def_goal_pose.orientation)
+        goal_pose = move_cube.Pose(self.def_goal_pose.position.copy(),
+                                   self.def_goal_pose.orientation.copy())
         goal_pose.position += np.array([0, -push_dist, 0])
         goal_pose.orientation = self.ori
         return goal_pose
