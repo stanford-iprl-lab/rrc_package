@@ -171,7 +171,7 @@ class PushCubeEnv(gym.Env):
             self._prev_action = self._initial_action = trifingerpro_limits.robot_torque.default
         elif self.action_type == ActionType.POSITION:
             self.action_space = robot_position_space
-            self._prev_action = self._initial_action = trifingerpro_limits.robot_position.default
+            self._prev_action = self._initial_action = np.array([0.,  0.75, -1.24]*3)
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
             self.action_space = gym.spaces.Dict(
                 {
@@ -181,7 +181,7 @@ class PushCubeEnv(gym.Env):
             )
             self._prev_action = self._initial_action = {
                 "torque": trifingerpro_limits.robot_torque.default,
-                "position": trifingerpro_limits.robot_position.default,
+                "position": np.array([0., 0.75, -1.24]*3),
             }
         else:
             raise ValueError("Invalid action_type")
@@ -318,6 +318,7 @@ class PushCubeEnv(gym.Env):
     def reset(self, **platform_kwargs):
         # reset simulation
         self._prev_obs = None
+        self.resetting = True
         if robot_fingers:
             self._reset_platform_frontend(**platform_kwargs)
         else:
@@ -327,6 +328,7 @@ class PushCubeEnv(gym.Env):
         self.step_count = 0
         observation, _, _, _ = self.step(self._initial_action)
         self._last_done = False
+        self.resetting = False
         return observation
 
     def get_camera_pose(self, camera_observation):

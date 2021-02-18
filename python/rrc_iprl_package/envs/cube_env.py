@@ -158,7 +158,7 @@ class RealRobotCubeEnv(gym.GoalEnv):
             self._initial_action = trifingerpro_limits.robot_torque.default
         elif self.action_type == ActionType.POSITION:
             self.action_space = robot_position_space
-            self._initial_action = default_position
+            self._initial_action = np.array([0.,  0.75, -1.24]*3)
         elif self.action_type == ActionType.TORQUE_AND_POSITION:
             self.action_space = gym.spaces.Dict(
                 {
