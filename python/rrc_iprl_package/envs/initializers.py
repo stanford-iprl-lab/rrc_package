@@ -89,8 +89,8 @@ class RandomPushInitializer(FixedInitializer):
         self.ori = Rotation.from_euler('xyz', ori).as_quat()
 
     def get_initial_state(self):
-        init_pose = move_cube.Pose(self.def_initial_pose.position,
-                                   self.def_initial_pose.orientation)
+        init_pose = move_cube.Pose(self.def_initial_pose.position.copy(),
+                                   self.def_initial_pose.orientation.copy())
         init_pose.position += np.array([0,0.05,0])
         init_pose.orientation = self.ori
         return init_pose
