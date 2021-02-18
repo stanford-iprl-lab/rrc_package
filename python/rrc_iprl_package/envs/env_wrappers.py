@@ -851,7 +851,9 @@ class SingleFingerWrapper(gym.ObservationWrapper):
 
     def reset(self, **kwargs):
         self._prev_obs = None
-        return super(SingleFingerWrapper, self).reset(**kwargs)
+        obs = super(SingleFingerWrapper, self).reset(**kwargs)
+        self._prev_obs = obs
+        return obs
 
     def step(self, action):
         action = self.action(action)

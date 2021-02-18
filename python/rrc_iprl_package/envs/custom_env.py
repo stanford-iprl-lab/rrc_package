@@ -327,6 +327,7 @@ class PushCubeEnv(gym.Env):
         self.step_count = 0
         observation, _, _, _ = self.step(self._initial_action)
         self._last_done = False
+        self._prev_obs = observation
         return observation
 
     def get_camera_pose(self, camera_observation):
