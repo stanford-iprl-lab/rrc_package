@@ -617,7 +617,6 @@ class LogInfoWrapper(gym.Wrapper):
 
     def compute_position_error(self, info, score=False):
         if 'pos_error' in info:
-            print("DIST_THRESH", DIST_THRESH)
             return info.get('pos_error')
         goal_pose, object_pose = self.get_goal_object_pose()
         if score:
@@ -855,7 +854,11 @@ class SingleFingerWrapper(gym.ObservationWrapper):
         return super(SingleFingerWrapper, self).reset(**kwargs)
 
     def step(self, action):
-        obs, r, d, i = super(SingleFingerWrapper, self).step(self.action(action))
+        action = self.action(action)
+        try:
+            obs, r, d, i = super(SingleFingerWrapper, self).step(action)
+        except ValueError:
+            raise(ValueError, f"The following action was not accepted: {action}")
         self._prev_obs = obs
         return obs, r, d, i
 
@@ -879,6 +882,8 @@ class SingleFingerWrapper(gym.ObservationWrapper):
             current_pos = np.clip(
                     current_pos, self.unwrapped.action_space['position'].low,
                     self.unwrapped.action_space['position'].high)
+            torque = np.clip(torque, self.unwrapped.action_space['torque'].low,
+                    self.unwrapped.action_space['torque'].high)
             t_action = {'position': current_pos, 'torque': torque}
         else:
             t_action[self.finger_id*3:(self.finger_id+1)*3] = action

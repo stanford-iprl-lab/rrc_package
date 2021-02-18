@@ -317,6 +317,7 @@ class PushCubeEnv(gym.Env):
 
     def reset(self, **platform_kwargs):
         # reset simulation
+        self._prev_obs = None
         if robot_fingers:
             self._reset_platform_frontend(**platform_kwargs)
         else:
@@ -528,8 +529,10 @@ class PushCubeEnv(gym.Env):
         # compute action penalty
         if self.action_type == cube_env.ActionType.TORQUE_AND_POSITION:
             action = self._prev_action.get('torque')
-        else:
+        elif self.action_type == cube_env.ActionType.TORQUE:
             action = self._prev_action
+        else:  # for ActionType.POSITION compute change in robot_position
+            action = self._prev_action - observation.get('robot_position')
         ac_penalty = -np.linalg.norm(action) * self._ac_norm_pen
         info['ac_penalty'] = ac_penalty
         if step_rew:
@@ -562,7 +565,8 @@ class PushCubeEnv(gym.Env):
             num_steps = max(1, num_steps - excess)
 
         reward = 0.0
-        observation = previous_observation = None
+        previous_observation = self._prev_obs
+        observation =  None
         for _ in range(num_steps):
             self.step_count += 1
             if self.step_count > move_cube.episode_length:
@@ -577,7 +581,7 @@ class PushCubeEnv(gym.Env):
             # will not be possible
             if previous_observation is None and observation is not None:
                 previous_observation = observation
-            observation = self._create_observation(t, self._prev_action)
+            observation = self._create_observation(t, action)
 
         reward += self._compute_reward(
             previous_observation=previous_observation,
@@ -608,6 +612,7 @@ class PushCubeEnv(gym.Env):
             self.initializer.update_initializer(object_pose, goal_pose)
 
         self._prev_action = action
+        self._prev_obs = observation
         return observation, reward, is_done, self.info
 
 
