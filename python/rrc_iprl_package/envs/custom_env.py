@@ -523,9 +523,13 @@ class PushCubeEnv(gym.Env):
             # prev_scaled_ori_error = prev_ori_error / np.pi
             # prev_corner_error = self.compute_corner_error(goal_pose, prev_object_pose).sum()
             prev_ftip_error = self.compute_fingertip_error(previous_observation).sum()
-            step_rew = 20*(prev_pos_error - pos_error)
-            # step_rew += 10*(prev_corner_error - corner_error)
+            #if pos_error > DIST_THRESH:
             step_rew += (prev_ftip_error - ftip_error)
+            if ftip_error < 0.14:
+                step_rew += 20*(prev_pos_error - pos_error)
+            #else:
+            #    step_rew = 1
+            # step_rew += 10*(prev_corner_error - corner_error)
             rew = step_rew
 
         # Add to info dict
