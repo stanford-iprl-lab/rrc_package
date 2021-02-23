@@ -108,8 +108,8 @@ class RandomPushInitializer(FixedInitializer):
 class CurriculumInitializer(FixedInitializer):
     """Initializer that samples random initial states and goals."""
 
-    def __init__(self, difficulty=1, initial_dist=_CUBOID_WIDTH,
-                 num_levels=4, buffer_size=5, fixed_goal=None):
+    def __init__(self, difficulty=1, initial_dist=_CUBOID_WIDTH/2,
+                 num_levels=3, buffer_size=5, fixed_goal=None):
         """Initialize.
 
         Args:
@@ -120,12 +120,13 @@ class CurriculumInitializer(FixedInitializer):
         self.difficulty = difficulty
         self.num_levels = num_levels
         self._current_level = 0
-        self.levels = np.linspace(initial_dist, MAX_DIST, num_levels)
+        self.levels = np.linspace(initial_dist, 0.09, num_levels)
+        self.initial_pose = self.def_initial_pose
         self.final_dist = np.array([np.inf for _ in range(buffer_size)])
-        self.initial_pose = self.get_initial_state()
         if difficulty == 4:
             self.final_ori = np.array([np.inf for _ in range(buffer_size)])
-        self.fixed_goal = self.goal_pose = fixed_goal
+        self.fixed_goal = fixed_goal is not None
+        self.goal_pose = fixed_goal
 
     @property
     def current_level(self):
@@ -133,6 +134,7 @@ class CurriculumInitializer(FixedInitializer):
 
     def update_initializer(self, final_pose, goal_pose):
         assert np.all(goal_pose.position == self.goal_pose.position)
+        # add final pos and ori errors to buffers
         self.final_dist = np.roll(self.final_dist, 1)
         final_dist = np.linalg.norm(goal_pose.position - final_pose.position)
         self.final_dist[0] = final_dist
@@ -145,15 +147,11 @@ class CurriculumInitializer(FixedInitializer):
             update_level = update_level and np.mean(self.final_ori) < ORI_THRESH
 
         if update_level and self._current_level < self.num_levels - 1:
-            pre_sample_dist = self.goal_sample_radius
             self._current_level += 1
-            post_sample_dist = self.goal_sample_radius
-            print("Old sampling distances: {}/New sampling distances: {}".format(
-                pre_sample_dist, post_sample_dist))
 
     def get_initial_state(self):
         """Get a random initial object pose (always on the ground)."""
-        sample_radius_min, sample_radius_max = 0., self.levels[self.current_level]
+        sample_radius_min, sample_radius_max = DIST_THRESH, self.levels[self.current_level]
         x, y = random_xy(sample_radius_min, sample_radius_max)
         self.initial_pose = move_cube.sample_goal(difficulty=-1)
         z = self.initial_pose.position[-1]
@@ -163,7 +161,7 @@ class CurriculumInitializer(FixedInitializer):
     @property
     def goal_sample_radius(self):
         if self.fixed_goal:
-            goal_dist = np.linalg.norm(self.fixed_goal.position)
+            goal_dist = np.linalg.norm(self.goal_pose.position)
             return (goal_dist, goal_dist)
         level_idx = min(self.num_levels - 1, self._current_level + 1)
         sample_radius_max = self.levels[level_idx]
