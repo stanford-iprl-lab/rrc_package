@@ -80,7 +80,7 @@ def build_env_fn(difficulty=1,ep_len=EPLEN, frameskip=FRAMESKIP,
                  residual=False, res_torque=True,
                  framestack=1, sparse=False, initializer=None,
                  flatten=True, single_finger=False, rescale=False,
-                 observation_noise=True, action_noise=True):
+                 observation_noise=False, action_noise=False):
     if goal_env or residual:
         env_str = 'real_robot_challenge_phase_2-v1'
     else:
