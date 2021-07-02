@@ -141,8 +141,8 @@ class RealRobotCubeEnv(gym.GoalEnv):
                 ),
                 "orientation": gym.spaces.Box(
                     low=trifingerpro_limits.object_orientation.low,
-                    high=trifingerpro_limits.object_orientation.high,
-                ),
+                    high=trifingerpro_limits.object_orientation.high
+                )
             }
         )
 
