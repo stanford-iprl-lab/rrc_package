@@ -1,563 +1,35 @@
-"""Custom Gym environment for the Real Robot Challenge Phase 1 (Simulation)."""
+"""Custom Gym environment for the Real Robot Challenge Phase 0 (Simulation)."""
 import numpy as np
 import gym
 import pybullet
-import inspect
 
 from gym import wrappers
-from gym.spaces import Box
-from gym.spaces import Discrete
-from gym.spaces import MultiDiscrete
-from gym.spaces import MultiBinary
-from gym.spaces import Tuple
-from gym.spaces import Dict
-from gym.spaces import utils
 
 from rrc_iprl_package.control import controller_utils as c_utils
+from rrc_iprl_package.envs import cube_env, custom_env
+from rrc_iprl_package.envs.env_utils import configurable, flatten_space
 from rrc_iprl_package.control.custom_pinocchio_utils import CustomPinocchioUtils
 from rrc_iprl_package.envs.cube_env import CubeEnv, ActionType
-from rrc_iprl_package.envs.custom_env import PushCubeEnv, ActionType
+from rrc_iprl_package.envs.initializers import *
 
 from trifinger_simulation import TriFingerPlatform
 from trifinger_simulation import visual_objects
 from trifinger_simulation.tasks import move_cube
+from trifinger_simulation import trifingerpro_limits
 from scipy.spatial.transform import Rotation
+from collections import deque
 
 
 MAX_DIST = move_cube._max_cube_com_distance_to_center
-DIST_THRESH = move_cube._CUBE_WIDTH / 5
+DIST_THRESH = 0.02
+_CUBOID_WIDTH = max(move_cube._CUBOID_SIZE)
+_CUBOID_HEIGHT = min(move_cube._CUBOID_SIZE)
+
 ORI_THRESH = np.pi / 8
-REW_BONUS = 1
+REW_BONUS = 10
+REW_PENALTY = -10
 POS_SCALE = np.array([0.128, 0.134, 0.203, 0.128, 0.134, 0.203, 0.128, 0.134,
                       0.203])
-
-
-def reset_camera():
-    camera_pos = (0.,0.2,-0.2)
-    camera_dist = 1.0
-    pitch = -45.
-    yaw = 0.
-    if pybullet.isConnected() != 0:
-        pybullet.resetDebugVisualizerCamera(cameraDistance=camera_dist,
-                                    cameraYaw=yaw,
-                                    cameraPitch=pitch,
-                                    cameraTargetPosition=camera_pos)
-
-
-def random_xy(sample_radius_min=0., sample_radius_max=None):
-    # sample uniform position in circle (https://stackoverflow.com/a/50746409)
-    radius = np.random.uniform(sample_radius_min, sample_radius_max)
-    theta = np.random.uniform(0, 2 * np.pi)
-    # x,y-position of the cube
-    x = radius * np.cos(theta)
-    y = radius * np.sin(theta)
-    return x, y
-
-
-def configurable(pickleable: bool = False):
-    """Class decorator to allow injection of constructor arguments.
-
-    Example usage:
-    >>> @configurable()
-    ... class A:
-    ...     def __init__(self, b=None, c=2, d='Wow'):
-    ...         ...
-
-    >>> set_env_params(A, {'b': 10, 'c': 20})
-    >>> a = A()      # b=10, c=20, d='Wow'
-    >>> a = A(b=30)  # b=30, c=20, d='Wow'
-
-    Args:
-        pickleable: Whether this class is pickleable. If true, causes the pickle
-            state to include the constructor arguments.
-    """
-    # pylint: disable=protected-access,invalid-name
-
-    def cls_decorator(cls):
-        assert inspect.isclass(cls)
-
-        # Overwrite the class constructor to pass arguments from the config.
-        base_init = cls.__init__
-
-        def __init__(self, *args, **kwargs):
-
-            if pickleable:
-                self._pkl_env_args = args
-                self._pkl_env_kwargs = kwargs
-
-            base_init(self, *args, **kwargs)
-
-        cls.__init__ = __init__
-
-        # If the class is pickleable, overwrite the state methods to save
-        # the constructor arguments
-        if pickleable:
-            # Use same pickle keys as gym.utils.ezpickle for backwards compat.
-            PKL_ARGS_KEY = '_ezpickle_args'
-            PKL_KWARGS_KEY = '_ezpickle_kwargs'
-            def __getstate__(self):
-                return {
-                   PKL_ARGS_KEY: self._pkl_env_args,
-                    PKL_KWARGS_KEY: self._pkl_env_kwargs,
-                }
-            cls.__getstate__ = __getstate__
-
-            def __setstate__(self, data):
-                saved_args = data[PKL_ARGS_KEY]
-                saved_kwargs = data[PKL_KWARGS_KEY]
-
-                inst = type(self)(*saved_args, **saved_kwargs)
-                self.__dict__.update(inst.__dict__)
-
-            cls.__setstate__ = __setstate__
-
-        return cls
-
-    # pylint: enable=protected-access,invalid-name
-    return cls_decorator
-
-
-@configurable(pickleable=True)
-class CurriculumInitializer:
-    """Initializer that samples random initial states and goals."""
-
-    def __init__(self, difficulty=1, initial_dist=move_cube._CUBE_WIDTH,
-                 num_levels=4, num_episodes=5, fixed_goal=None):
-        """Initialize.
-
-        Args:
-            initial_dist (float): Distance from center of arena
-            num_levels (int): Number of steps to maximum radius
-            num_episodes (int): Number of episodes to compute mean over
-        """
-        self.difficulty = difficulty
-        self.num_levels = num_levels
-        self._current_level = 0
-        self.levels = np.linspace(initial_dist, MAX_DIST, num_levels)
-        self.final_dist = np.array([np.inf for _ in range(num_episodes)])
-        if difficulty == 4:
-            self.final_ori = np.array([np.inf for _ in range(num_episodes)])
-        self.fixed_goal = fixed_goal
-
-    @property
-    def current_level(self):
-        return min(self.num_levels - 1, self._current_level)
-
-    def random_xy(self, sample_radius_min=0., sample_radius=None):
-        # sample uniform position in circle (https://stackoverflow.com/a/50746409)
-        sample_radius_max = sample_radius or self.levels[self.current_level]
-        return random_xy(sample_radius_min, sample_radius_max)
-
-    def update_initializer(self, final_pose, goal_pose):
-        assert np.all(goal_pose.position == self.goal_pose.position)
-        self.final_dist = np.roll(self.final_dist, 1)
-        final_dist = np.linalg.norm(goal_pose.position - final_pose.position)
-        self.final_dist[0] = final_dist
-        if self.difficulty == 4:
-            self.final_ori = np.roll(self.final_ori, 1)
-            self.final_ori[0] = compute_orientation_error(goal_pose, final_pose,
-                                                          scale=False)
-
-        update_level = np.mean(self.final_dist) < DIST_THRESH
-        if self.difficulty == 4:
-            update_level = update_level and np.mean(self.final_ori) < ORI_THRESH
-
-        if update_level and self._current_level < self.num_levels - 1:
-            pre_sample_dist = self.goal_sample_radius
-            self._current_level += 1
-            post_sample_dist = self.goal_sample_radius
-            print("Old sampling distances: {}/New sampling distances: {}".format(
-                pre_sample_dist, post_sample_dist))
-
-    def get_initial_state(self):
-        """Get a random initial object pose (always on the ground)."""
-        x, y = self.random_xy()
-        self.initial_pose = move_cube.sample_goal(difficulty=-1)
-        z = self.initial_pose.position[-1]
-        self.initial_pose.position = np.array((x, y, z))
-        return self.initial_pose
-
-    @property
-    def goal_sample_radius(self):
-        if self.fixed_goal:
-            goal_dist = np.linalg.norm(self.fixed_goal.position)
-            return (goal_dist, goal_dist)
-        if self._current_level == self.num_levels - 1:
-            sample_radius_min = 0.
-        else:
-            sample_radius_min = self.levels[self.current_level]
-        sample_radius_max = self.levels[min(self.num_levels - 1, self._current_level + 1)]
-        return (sample_radius_min, sample_radius_max)
-
-    def get_goal(self):
-        """Get a random goal depending on the difficulty."""
-        if self.fixed_goal:
-            self.goal_pose = self.fixed_goal
-            return self.fixed_goal
-        # goal_sample_radius is further than past distances
-        sample_radius_min, sample_radius_max = self.goal_sample_radius
-        x, y = self.random_xy(sample_radius_min, sample_radius_max)
-        self.goal_pose = move_cube.sample_goal(difficulty=self.difficulty)
-        self.goal_pose.position = np.array((x, y, self.goal_pose.position[-1]))
-        return self.goal_pose
-
-
-@configurable(pickleable=True)
-class ReorientInitializer:
-    """Initializer that samples random initial states and goals."""
-    goal_pose = move_cube.Pose(np.array([0,0,move_cube._CUBE_WIDTH/2]), np.array([0,0,0,1]))
-
-    def __init__(self, difficulty=1, initial_dist=move_cube._CUBE_WIDTH):
-        self.difficulty = difficulty
-        self.initial_dist = initial_dist
-        self.random = np.random.RandomState()
-
-    def get_initial_state(self):
-        """Get a random initial object pose (always on the ground)."""
-        x, y = random_xy(self.initial_dist, MAX_DIST)
-        self.initial_pose = move_cube.sample_goal(difficulty=-1)
-        z = self.initial_pose.position[-1]
-        self.initial_pose.position = np.array((x, y, z))
-        if self.difficulty == 4:
-            self.initial_pose.orientation = Rotation.random(random_state=self.random).as_quat()
-        return self.initial_pose
-
-    def get_goal(self):
-        """Get a random goal depending on the difficulty."""
-        return self.goal_pose
-
-
-class RandomGoalOrientationInitializer:
-    init_pose = move_cube.Pose(np.array([0,0,move_cube._CUBE_WIDTH/2]), np.array([0,0,0,1]))
-
-    def __init__(self, difficulty=1, max_dist=np.pi):
-        self.difficulty = difficulty
-        self.max_dist = max_dist
-        self.random = np.random.RandomState()
-
-    def get_initial_state(self):
-        return self.init_pose
-
-    def get_goal(self):
-        goal =  move_cube.sample_goal(-1)
-        goal.position = np.zero(3)
-        return goal
-
-
-class RandomOrientationInitializer:
-    goal = move_cube.Pose(np.array([0,0,move_cube._CUBE_WIDTH/2]), np.array([0,0,0,1]))
-
-    def __init__(self, difficulty=4):
-        self.difficulty = difficulty
-
-    def get_initial_state(self):
-        return move_cube.sample_goal(-1)
-
-    def get_goal(self):
-        return self.goal
-
-
-@configurable(pickleable=True)
-class PushCubeEnv(gym.Env):
-    observation_names = [
-            "robot_position",
-            "robot_velocity",
-            "robot_tip_positions",
-            "object_position",
-            "object_orientation",
-            "goal_object_position",
-        ]
-
-    def __init__(
-        self,
-        initializer=None,
-        action_type=ActionType.POSITION,
-        frameskip=1,
-        visualization=False,
-        ):
-        """Initialize.
-
-        Args:
-            initializer: Initializer class for providing initial cube pose and
-                goal pose. If no initializer is provided, we will initialize in a way
-                which is be helpful for learning.
-            action_type (ActionType): Specify which type of actions to use.
-                See :class:`ActionType` for details.
-            frameskip (int):  Number of actual control steps to be performed in
-                one call of step().
-            visualization (bool): If true, the pyBullet GUI is run for
-                visualization.
-        """
-        # Basic initialization
-        # ====================
-        self.initializer = initializer
-        self.action_type = action_type
-        self.visualization = visualization
-
-        if frameskip < 1:
-            raise ValueError("frameskip cannot be less than 1.")
-        self.frameskip = frameskip
-
-        # will be initialized in reset()
-        self.platform = None
-
-        # Create the action and observation spaces
-        # ========================================
-
-        spaces = TriFingerPlatform.spaces
-
-        if self.action_type == ActionType.TORQUE:
-            self.action_space = spaces.robot_torque.gym
-        elif self.action_type == ActionType.POSITION:
-            self.action_space = spaces.robot_position.gym
-        elif self.action_type == ActionType.TORQUE_AND_POSITION:
-            self.action_space = gym.spaces.Dict(
-                {
-                    "torque": spaces.robot_torque.gym,
-                    "position": spaces.robot_position.gym,
-                }
-            )
-        else:
-            raise ValueError("Invalid action_type")
-
-        self.observation_space = gym.spaces.Dict(
-            {
-                "robot_position": spaces.robot_position.gym,
-                "robot_velocity": spaces.robot_velocity.gym,
-                "robot_tip_positions": gym.spaces.Box(
-                    low=np.array([spaces.object_position.low] * 3),
-                    high=np.array([spaces.object_position.high] * 3),
-                ),
-                "object_position": spaces.object_position.gym,
-                "object_orientation": spaces.object_orientation.gym,
-                "goal_object_position": spaces.object_position.gym,
-            }
-        )
-
-    def seed(self, seed=None):
-        self.np_random, seed = gym.utils.seeding.np_random(seed)
-        move_cube.random = self.np_random
-        return [seed]
-
-    def _gym_action_to_robot_action(self, gym_action):
-        # construct robot action depending on action type
-        if self.action_type == ActionType.TORQUE:
-            robot_action = self.platform.Action(torque=gym_action)
-        elif self.action_type == ActionType.POSITION:
-            robot_action = self.platform.Action(position=gym_action)
-        elif self.action_type == ActionType.TORQUE_AND_POSITION:
-            robot_action = self.platform.Action(
-                torque=gym_action["torque"], position=gym_action["position"]
-            )
-        else:
-            raise ValueError("Invalid action_type")
-
-        return robot_action
-
-    def reset(self):
-        # reset simulation
-        del self.platform
-
-        # initialize simulation
-        if self.initializer is None:
-            # if no initializer is given (which will be the case during training),
-            # we can initialize in any way desired. here, we initialize the cube always
-            # in the center of the arena, instead of randomly, as this appears to help
-            # training
-            initial_robot_position = TriFingerPlatform.spaces.robot_position.default
-            default_object_position = (
-                TriFingerPlatform.spaces.object_position.default
-            )
-            default_object_orientation = (
-                TriFingerPlatform.spaces.object_orientation.default
-            )
-            initial_object_pose = move_cube.Pose(
-                position=default_object_position,
-                orientation=default_object_orientation,
-            )
-            goal_object_pose = move_cube.sample_goal(difficulty=1)
-        else:
-            # if an initializer is given, i.e. during evaluation, we need to initialize
-            # according to it, to make sure we remain coherent with the standard CubeEnv.
-            # otherwise the trajectories produced during evaluation will be invalid.
-            initial_robot_position = TriFingerPlatform.spaces.robot_position.default
-            initial_object_pose=self.initializer.get_initial_state()
-            goal_object_pose = self.initializer.get_goal()
-
-        self.platform = TriFingerPlatform(
-            visualization=self.visualization,
-            initial_robot_position=initial_robot_position,
-            initial_object_pose=initial_object_pose,
-        )
-
-        self.goal = {
-            "position": goal_object_pose.position,
-            "orientation": goal_object_pose.orientation,
-        }
-        # visualize the goal
-        if self.visualization:
-            self.goal_marker = visual_objects.CubeMarker(
-                width=0.065,
-                position=goal_object_pose.position,
-                orientation=goal_object_pose.orientation,
-                physicsClientId=self.platform.simfinger._pybullet_client_id,
-            )
-            reset_camera()
-
-        self.info = {"difficulty": self.initializer.difficulty}
-
-        self.step_count = 0
-
-        return self._create_observation(0)
-
-    def _create_observation(self, t):
-        robot_observation = self.platform.get_robot_observation(t)
-        object_observation = self.platform.get_object_pose(t)
-        robot_tip_positions = self.platform.forward_kinematics(
-            robot_observation.position
-        )
-        robot_tip_positions = np.array(robot_tip_positions)
-
-        observation = {
-            "robot_position": robot_observation.position,
-            "robot_velocity": robot_observation.velocity,
-            "robot_tip_positions": robot_tip_positions,
-            "object_position": object_observation.position,
-            "object_orientation": object_observation.orientation,
-            "goal_object_position": self.goal["position"],
-        }
-        return observation
-
-    @staticmethod
-    def _compute_reward(previous_observation, observation):
-
-        # calculate first reward term
-        current_distance_from_block = np.linalg.norm(
-            observation["robot_tip_positions"] - observation["object_position"]
-        )
-        previous_distance_from_block = np.linalg.norm(
-            previous_observation["robot_tip_positions"]
-            - previous_observation["object_position"]
-        )
-
-        reward_term_1 = (
-            previous_distance_from_block - current_distance_from_block
-        )
-
-        # calculate second reward term
-        current_dist_to_goal = np.linalg.norm(
-            observation["goal_object_position"]
-            - observation["object_position"]
-        )
-        previous_dist_to_goal = np.linalg.norm(
-            previous_observation["goal_object_position"]
-            - previous_observation["object_position"]
-        )
-        reward_term_2 = previous_dist_to_goal - current_dist_to_goal
-
-        reward = 500 * reward_term_1 + 250 * reward_term_2
-        return reward
-
-    def step(self, action):
-        if self.platform is None:
-            raise RuntimeError("Call `reset()` before starting to step.")
-
-        if not self.action_space.contains(action):
-            raise ValueError(
-                "Given action is not contained in the action space."
-            )
-
-        num_steps = self.frameskip
-
-        # ensure episode length is not exceeded due to frameskip
-        step_count_after = self.step_count + num_steps
-        if step_count_after > move_cube.episode_length:
-            excess = step_count_after - move_cube.episode_length
-            num_steps = max(1, num_steps - excess)
-
-        reward = 0.0
-        for _ in range(num_steps):
-            self.step_count += 1
-            if self.step_count > move_cube.episode_length:
-                raise RuntimeError("Exceeded number of steps for one episode.")
-
-            # send action to robot
-            robot_action = self._gym_action_to_robot_action(action)
-            t = self.platform.append_desired_action(robot_action)
-
-            # Use observations of step t + 1 to follow what would be expected
-            # in a typical gym environment.  Note that on the real robot, this
-            # will not be possible
-            previous_observation = self._create_observation(t)
-            observation = self._create_observation(t + 1)
-
-            reward += self._compute_reward(
-                previous_observation=previous_observation,
-                observation=observation,
-            )
-
-        is_done = self.step_count == move_cube.episode_length
-        if is_done and isinstance(self.initializer, CurriculumInitializer):
-            goal_pose = self.goal
-            if not isinstance(goal_pose, move_cube.Pose):
-                goal_pose = move_cube.Pose.from_dict(goal_pose)
-            object_pose = move_cube.Pose.from_dict(dict(
-                position=observation['object_position'].flatten(),
-                orientation=observation['object_orientation'].flatten()))
-            self.initializer.update_initializer(object_pose, goal_pose)
-        return observation, reward, is_done, self.info
-
-
-@configurable(pickleable=True)
-class PushReorientCubeEnv(PushCubeEnv):
-    observation_names = [
-            "robot_position",
-            "robot_velocity",
-            "robot_tip_positions",
-            "object_position",
-            "object_orientation",
-            "goal_object_position",
-            "goal_object_orientation",
-        ]
-
-    def __init__(self, *args, **kwargs):
-        super(PushReorientCubeEnv, self).__init__(*args, **kwargs)
-
-        spaces = TriFingerPlatform.spaces
-
-        self.observation_space = gym.spaces.Dict(
-            {
-                "robot_position": spaces.robot_position.gym,
-                "robot_velocity": spaces.robot_velocity.gym,
-                "robot_tip_positions": gym.spaces.Box(
-                    low=np.array([spaces.object_position.low] * 3),
-                    high=np.array([spaces.object_position.high] * 3),
-                ),
-                "object_position": spaces.object_position.gym,
-                "object_orientation": spaces.object_orientation.gym,
-                "goal_object_position": spaces.object_position.gym,
-                "goal_object_orientation": spaces.object_orientation.gym,
-            }
-        )
-
-    def _create_observation(self, t):
-        robot_observation = self.platform.get_robot_observation(t)
-        object_observation = self.platform.get_object_pose(t)
-        robot_tip_positions = self.platform.forward_kinematics(
-            robot_observation.position
-        )
-        robot_tip_positions = np.array(robot_tip_positions)
-
-        observation = {
-            "robot_position": robot_observation.position,
-            "robot_velocity": robot_observation.velocity,
-            "robot_tip_positions": robot_tip_positions,
-            "object_position": object_observation.position,
-            "object_orientation": object_observation.orientation,
-            "goal_object_position": self.goal["position"],
-            "goal_object_orientation": self.goal["orientation"],
-        }
-        return observation
 
 
 @configurable(pickleable=True)
@@ -580,15 +52,19 @@ class SparseCubeEnv(CubeEnv):
         goal_pose = move_cube.Pose.from_dict(desired_goal)
         obj_pose = move_cube.Pose.from_dict(achieved_goal)
         pos_error = np.linalg.norm(goal_pose.position - obj_pose.position)
-        ori_error = compute_orientation_error(goal_pose, obj_pose, scale=False)
+        ori_error = compute_orientation_error(goal_pose, obj_pose)
         return float(pos_error < self.pos_thresh and ori_error < self.ori_thresh)
 
 
 @configurable(pickleable=True)
 class TaskSpaceWrapper(gym.ActionWrapper):
-    def __init__(self, env, goal_env=False, relative=True, scale=.008, ac_pen=0.001):
+    def __init__(self, env, goal_env=False, relative=False, scale=.3,
+                 ac_pen=0.):
         super(TaskSpaceWrapper, self).__init__(env)
-        assert self.unwrapped.action_type == ActionType.TORQUE, ''
+        self.action_log = []
+        self._save_npz = self.unwrapped.save_npz
+
+        # assert self.unwrapped.action_type in [ActionType.POSITION, ActionType.TORQUE]
         spaces = TriFingerPlatform.spaces
         self.goal_env = goal_env
         self.relative = relative
@@ -599,19 +75,42 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             high = np.ones_like(high)
         self.action_space = gym.spaces.Box(low=low, high=high)
         self.scale = scale
-        self.pinocchio_utils = None
+        pose = np.zeros(7)
+        pose[2] = _CUBOID_HEIGHT / 2
+        pose[-1] = 1
+        pose = move_cube.Pose.from_dict(dict(position=pose[:3], orientation=pose[3:]))
+        self._platform = TriFingerPlatform(
+                visualization=False,
+                initial_object_pose=pose,
+            )
+        self.pinocchio_utils = CustomPinocchioUtils(
+                    self._platform.simfinger.finger_urdf_path,
+                    self._platform.simfinger.tip_link_names)
         self.ac_pen = ac_pen
+        if self.goal_env:
+            obs_space = self.observation_space.spaces['observation']
+            obs_dict = obs_space.spaces
+        else:
+            obs_dict = self.observation_space.spaces
 
-    def reset(self):
-        obs = super(TaskSpaceWrapper, self).reset()
-        platform = self.unwrapped.platform
-        if self.pinocchio_utils is None:
-            self.pinocchio_utils = CustomPinocchioUtils(
-                    platform.simfinger.finger_urdf_path,
-                    platform.simfinger.tip_link_names)
+        if 'action' not in obs_dict:
+            obs_dict['action'] = self.action_space
+
+    def reset(self, **kwargs):
+        obs = super(TaskSpaceWrapper, self).reset(**kwargs)
         self._prev_obs = obs
         self._last_action = np.zeros_like(self.action_space.sample())
+        obs_dict = obs
+        if self.goal_env:
+            obs_dict = obs['observation']
+        obs_dict['action'] = self._last_action
         return obs
+
+    def write_action_log(self, observation, action, reward):
+        self.action_log.append(dict(
+            observation=observation, rl_action=action,
+            action=self.action(action), t=self.step_count,
+            reward=reward))
 
     def step(self, action):
         o, r, d, i = super(TaskSpaceWrapper, self).step(action)
@@ -620,28 +119,59 @@ class TaskSpaceWrapper(gym.ActionWrapper):
             r -= self.ac_pen * np.linalg.norm(action)
         else:
             r -= self.ac_pen * np.linalg.norm(self._last_action - action)
+        obs_dict = o
+        if self.goal_env:
+            obs_dict = obs_dict['observation']
+        obs_dict['action'] = action
         self._last_action =  action
         return o, r, d, i
 
-    def action(self, action):
-        obs = self._prev_obs
+    def action(self, action, obs=None):
+        obs = obs or self._prev_obs
         poskey, velkey = 'robot_position', 'robot_velocity'
+        obj_dict, objpos_key = obs, 'object_position'
         if self.goal_env:
+            obj_dict, objpos_key = obs['achieved_goal'], 'position'
             obs, poskey, velkey = obs['observation'], 'position', 'velocity'
         current_position, current_velocity = obs[poskey], obs[velkey]
-
+        obj_position = obj_dict[objpos_key]
         if self.relative:
-            fingertip_goals = self.pinocchio_utils.forward_kinematics(current_position.flatten())
+            action = action * 0.3  # scale all positions to be in -.3, .3 range
+            # fingertip_goals = obj_position + action.reshape((3,3))
+            # fingertip_goals = fingertip_goals.flatten()
+            if 'robot_tip_positions' in obs or 'tip_positions' in obs:
+                ftip_key = 'tip_positions' if self.goal_env else 'robot_tip_positions'
+                fingertip_goals = obs[ftip_key].flatten()
+            else:
+                fingertip_goals = self.pinocchio_utils.forward_kinematics(
+                        current_position.flatten())
             fingertip_goals = np.asarray(fingertip_goals)
-            fingertip_goals = fingertip_goals + self.scale * action.reshape((3,3))
+            fingertip_goals = fingertip_goals + action
         else:
             fingertip_goals = action
-        torque, goal_reached = c_utils.impedance_controller(
-                fingertip_goals, current_position, current_velocity,
-                self.pinocchio_utils, None, 0.007)
-        torque = np.clip(torque, self.unwrapped.action_space.low,
+
+        # currently not implemented
+        if self.unwrapped.action_type == ActionType.TORQUE:
+            raise NotImplementedError
+            # compute desired velocity
+            dt = self.frameskip * .001
+            desired_velocity = self.scale * action.reshape((3,3)) / dt
+            # TODO: use tip_forces_wf to indicate desired contact with object on fingertip
+            torque = c_utils.impedance_controller(
+                    tip_pos_desired_list=fingertip_goals, tip_vel_desired_list=desired_velocity,
+                    q_current=current_position, dq_current=current_velocity,
+                    custom_pinocchio_utils=self.pinocchio_utils, tip_forces_wf=None)
+            ac = np.clip(torque, self.unwrapped.action_space.low,
+                             self.unwrapped.action_space.high)
+        else:
+            if obs and np.all(action == 0):
+                ac = current_position
+            else:
+                ac, ft_err = self.pinocchio_utils.inverse_kinematics(
+                        fingertip_goals.reshape((3,3)), current_position)
+            ac = np.clip(ac.flatten(), self.unwrapped.action_space.low,
                          self.unwrapped.action_space.high)
-        return torque
+        return ac
 
 
 @configurable(pickleable=True)
@@ -649,7 +179,9 @@ class ScaledActionWrapper(gym.ActionWrapper):
     def __init__(self, env, goal_env=False, relative=True, scale=POS_SCALE,
                  lim_penalty=0.0):
         super(ScaledActionWrapper, self).__init__(env)
-        assert self.unwrapped.action_type == ActionType.POSITION, 'position control only'
+        self._save_npz = self.unwrapped.save_npz
+        assert self.unwrapped.action_type == ActionType.POSITION, \
+                'position control only'
         self.spaces = TriFingerPlatform.spaces
         self.goal_env = goal_env
         self.relative = relative
@@ -661,12 +193,19 @@ class ScaledActionWrapper(gym.ActionWrapper):
         self.action_space = gym.spaces.Box(low=low, high=high)
         self.scale = scale
         self.lim_penalty = lim_penalty
+        self.dt = self.frameskip * .001
+        self.action_log = []
 
-    def reset(self):
-        obs = super(ScaledActionWrapper, self).reset()
-        platform = self.unwrapped.platform
+    def write_action_log(self, observation, action, reward):
+        self.action_log.append(dict(
+            observation=observation, action=action,
+            scaled_action=self.action(action), t=self.step_count,
+            reward=reward))
+
+    def reset(self, **kwargs):
+        obs = super(ScaledActionWrapper, self).reset(**kwargs)
         self._prev_obs = obs
-        self._clipped_action = self._last_action = np.zeros_like(self.action_space.sample())
+        self._clipped_action = self._last_action = 0*self.action_space.sample()
         return obs
 
     def step(self, action):
@@ -676,34 +215,40 @@ class ScaledActionWrapper(gym.ActionWrapper):
         r += np.sum(self._clipped_action) * self.lim_penalty
         return o, r, d, i
 
-    def action(self, action):
-        obs = self._prev_obs
+    def action(self, action, obs=None):
+        obs = obs or self._prev_obs
         poskey, velkey = 'robot_position', 'robot_velocity'
         if self.goal_env:
             obs, poskey, velkey = obs['observation'], 'position', 'velocity'
         current_position, current_velocity = obs[poskey], obs[velkey]
         if self.relative:
             goal_position = current_position + self.scale * action
-            pos_low, pos_high = self.env.action_space.low, self.env.action_space.high
+            pos_low, pos_high = (self.env.action_space.low,
+                                 self.env.action_space.high)
         else:
-            pos_low, pos_high = self.spaces.robot_position.low, self.spaces.robot_position.high
+            pos_low, pos_high = (self.spaces.robot_position.low,
+                                 self.spaces.robot_position.high)
             pos_low = np.max([current_position - self.scale, pos_low], axis=0)
-            pos_high = np.min([current_position + self.scale, pos_high], axis=0)
+            pos_high = np.min([current_position + self.scale, pos_high],
+                              axis=0)
             goal_position = action
         action = np.clip(goal_position, pos_low, pos_high)
+        assert action in self.env.action_space, f'action {action} not in action_space'
         self._clipped_action = np.abs(action - goal_position)
         return action
 
 
 @configurable(pickleable=True)
 class RelativeGoalWrapper(gym.ObservationWrapper):
-    def __init__(self, env, keep_goal=False):
+    def __init__(self, env, keep_goal=True, use_quat=False):
         super(RelativeGoalWrapper, self).__init__(env)
         self._observation_keys = list(env.observation_space.spaces.keys())
         assert 'goal_object_position' in self._observation_keys, 'goal_object_position missing in observation'
-        self.position_only = 'goal_object_orientation' not in self._observation_keys
+        self.position_only = False # 'goal_orientation' not in self._observation_keys
+        self.use_quat = use_quat
         self.observation_names =  [k for k in self._observation_keys if 'goal_object' not in k]
         self.observation_names.append('relative_goal_object_position')
+        # add goal_object position if keep_goal, and orientation if not position_only 
         if keep_goal:
             self.observation_names.append('goal_object_position')
         if not self.position_only:
@@ -711,46 +256,62 @@ class RelativeGoalWrapper(gym.ObservationWrapper):
             if keep_goal:
                 self.observation_names.append('goal_object_orientation')
         obs_dict = {}
+
         for k in self.observation_names:
             if 'relative_goal_object' not in k:
                 obs_dict[k] = env.observation_space.spaces[k]
             elif k == 'relative_goal_object_position':
-                high = env.observation_space['goal_object_position'].high - env.observation_space['goal_object_position'].low
+                high = (env.observation_space['goal_object_position'].high
+                        - env.observation_space['goal_object_position'].low)
                 low = -high
                 obs_dict[k] = gym.spaces.Box(low=low, high=high)
             elif k == 'relative_goal_object_orientation':
-                high = env.observation_space['goal_object_orientation'].high - env.observation_space['goal_object_orientation'].low
-                low = -high
-                obs_dict[k] = gym.spaces.Box(low=low, high=high)
+                if use_quat:
+                    high = (env.observation_space['goal_object_orientation'].high
+                            - env.observation_space['goal_object_orientation'].low)
+                    low = -high
+                    obs_dict[k] = gym.spaces.Box(low=low, high=high)
+                else:
+                    low, high = -np.pi, np.pi
+                    obs_dict[k] = gym.spaces.Box(low=low, high=high, shape=(1,))
         self.observation_space = gym.spaces.Dict(obs_dict)
 
     def observation(self, obs):
         obs_dict = {k: obs[k] for k in self.observation_names if k in self._observation_keys}
         obs_dict['relative_goal_object_position'] = obs['goal_object_position'] - obs['object_position']
         if not self.position_only:
-            offset = (Rotation.from_quat(obs['goal_object_orientation'])
-                      * Rotation.from_quat(obs['object_orientation']).inv()).as_quat()
-            obs_dict['relative_goal_object_orientation'] = offset
+            goal_rot = Rotation.from_quat(obs['goal_object_orientation'])
+            actual_rot = Rotation.from_quat(obs['object_orientation'])
+            if self.use_quat:
+                obs_dict['relative_goal_object_orientation'] = (
+                        goal_rot*actual_rot.inv()).as_quat()
+            else:
+                obs_dict['relative_goal_object_orientation'] = get_theta_z_wf(
+                        goal_rot, actual_rot)
         return obs_dict
 
 
 @configurable(pickleable=True)
 class ReorientWrapper(gym.Wrapper):
     def __init__(self, env, goal_env=True, rew_bonus=REW_BONUS,
+                 rew_penalty=REW_PENALTY,
                  dist_thresh=0.09, ori_thresh=np.pi/6):
         super(ReorientWrapper, self).__init__(env)
         if not isinstance(self.unwrapped.initializer, ReorientInitializer):
-            initializer = ReorientInitializer(initial_dist=0.1)
+            initializer = ReorientInitializer(initial_dist=np.min(MAX_DIST, 0.01 + dist_thresh))
             self.unwrapped.initializer = initializer
         self.goal_env = goal_env
         self.rew_bonus = rew_bonus
+        self.rew_penalty = rew_penalty
         self.dist_thresh = dist_thresh
         self.ori_thresh = ori_thresh
 
     def step(self, action):
         o, r, d, i = super(ReorientWrapper, self).step(action)
         i['is_success'] = self.is_success(o)
-        if i['is_success']:
+        if not i['is_success'] and d:
+            r += self.rew_penalty
+        elif i['is_success']:
             r += self.rew_bonus
         return o, r, d, i
 
@@ -765,10 +326,11 @@ class ReorientWrapper(gym.Wrapper):
                          orientation=observation['object_orientation']))
 
         obj_dist = np.linalg.norm(obj_pose.position - goal_pose.position)
-        ori_dist = compute_orientation_error(goal_pose, obj_pose, quad=True)
+        ori_dist = compute_orientation_error(goal_pose, obj_pose)
         return obj_dist < self.dist_thresh and ori_dist < self.ori_thresh
 
 
+@configurable(pickleable=True)
 class FlattenGoalWrapper(gym.ObservationWrapper):
     """Wrapper to make rrc env baselines and VDS compatible"""
     def __init__(self, env):
@@ -788,155 +350,62 @@ class FlattenGoalWrapper(gym.ObservationWrapper):
 
     @property
     def goal(self):
-        return np.concatenate([self.unwrapped.goal['position'],
-                               self.unwrapped.goal['orientation']])
+        return np.concatenate([self.unwrapped.goal.orientation,
+                               self.unwrapped.goal.position])
 
     @goal.setter
     def goal(self, g):
         if isinstance(g, dict):
-            self.unwrapped.goal = g
+            self.unwrapped.goal = move_cube.Pose(**g)
             return
-        pos, ori = g[...,:3], g[...,3:]
-        self.unwrapped.goal = {'position': pos, 'orientation': ori}
+        pos, ori = g[...,4:], g[...,:4]
+        self.unwrapped.goal = move_cube.Pose(pos, ori)
 
     def compute_reward(self, achieved_goal, desired_goal, info):
         if len(achieved_goal.shape) > 1:
             r = []
             info = {"difficulty": self.initializer.difficulty}
             for i in range(achieved_goal.shape[0]):
-                pos, ori = achieved_goal[i,:3], achieved_goal[i,3:]
+                pos, ori = achieved_goal[i,4:], achieved_goal[i,:4]
                 ag = dict(position=pos, orientation=ori)
-                pos, ori = desired_goal[i,:3], desired_goal[i,3:]
+                pos, ori = desired_goal[i,4:], desired_goal[i,:4]
                 dg = dict(position=pos, orientation=ori)
                 r.append(self.env.compute_reward(ag, dg, info))
             return np.array(r)
-        achieved_goal = dict(position=achieved_goal[...,:3], orientation=achieved_goal[...,3:])
-        desired_goal = dict(position=desired_goal[...,:3], orientation=desired_goal[...,3:])
+        achieved_goal = dict(position=achieved_goal[4:], orientation=achieved_goal[:4])
+        desired_goal = dict(position=desired_goal[4:], orientation=desired_goal[:4])
         return self.env.compute_reward(achieved_goal, desired_goal, info)
 
     def _sample_goal(self):
-        return np.concatenate(list(self.initializer.get_goal().to_dict().values()))
-
-    def reset(self, *args, reset_goal=True):
-        self.env._elapsed_steps = 0
-        obs = super(FlattenGoalWrapper, self).reset(*args)
-        if reset_goal and self._sample_goal_fun is not None:
-            self.goal = self.sample_goal_fun(obs_dict=obs)
-        goal_object_pose = move_cube.Pose.from_dict(self.unwrapped.goal)
-        if self.unwrapped.visualization:
-            self.unwrapped.goal_marker = visual_objects.CubeMarker(
-                width=0.065,
-                position=goal_object_pose.position,
-                orientation=goal_object_pose.orientation,
-                physicsClientId=self.platform.simfinger._pybullet_client_id,
-            )
-        obs = self.unwrapped._create_observation(0)
-        return self.observation(obs)
+        goal = self.initializer.get_goal().to_dict()
+        return np.concatenate([goal['orientation'], goal['position']])
 
     def observation(self, observation):
         observation = {k: gym.spaces.flatten(self.env.observation_space[k], v)
-                for k, v in observation.items()}
+                       for k, v in observation.items()}
         return observation
 
 
-# DEPRECATED, USE CubeRewardWrapper INSTEAD
-class DistRewardWrapper(gym.RewardWrapper):
-    def __init__(self, env, target_dist=0.2, dist_coef=1., ori_coef=1.,
-                 ac_norm_pen=0.2, final_step_only=True, augment_reward=True,
-                 rew_fn='lin'):
-        super(DistRewardWrapper, self).__init__(env)
-        self._target_dist = target_dist  # 0.156
-        self._dist_coef = dist_coef
-        self._ori_coef = ori_coef
-        self._ac_norm_pen = ac_norm_pen
-        self._last_action = None
-        self.final_step_only = final_step_only
-        self.augment_reward = augment_reward
-        self.rew_fn = rew_fn
-        print('DistRewardWrapper is deprecated, use CubeRewardWrapper instead')
-
-    @property
-    def target_dist(self):
-        target_dist = self._target_dist
-        if target_dist is None:
-            if isinstance(self.initializer, CurriculumInitializer):
-                _, target_dist = self.initializer.goal_sample_radius
-                target_dist = 2 * target_dist  # use sample diameter
-            else:
-                target_dist = move_cube._ARENA_RADIUS
-        return target_dist
-
-    @property
-    def difficulty(self):
-        return self.unwrapped.initializer.difficulty
-
-    def reset(self, **reset_kwargs):
-        self._last_action = None
-        return super(DistRewardWrapper, self).reset(**reset_kwargs)
-
-    def step(self, action):
-        self._last_action = action
-        observation, reward, done, info = self.env.step(action)
-        if self.final_step_only and done:
-            return observation, reward, done, info
-        else:
-            return observation, self.reward(reward, info), done, info
-
-    def reward(self, reward, info):
-        final_dist = self.compute_goal_dist(info)
-        if self.rew_fn == 'lin':
-            rew = self._dist_coef * (1 - final_dist/self.target_dist)
-            if self.info['difficulty'] == 4:
-                rew += self._ori_coef * (1 - self.compute_orientation_error())
-        elif self.rew_fn == 'exp':
-            rew = self._dist_coef * np.exp(-final_dist/self.target_dist)
-            if self.info['difficulty'] == 4:
-                rew += self._ori_coef * np.exp(-self.compute_orientation_error())
-        if self.augment_reward:
-            rew += reward
-        if self._ac_norm_pen:
-            rew -= np.linalg.norm(self._last_action) * self._ac_norm_pen
-        return rew
-
-    def get_goal_object_pose(self):
-        goal_pose = self.unwrapped.goal
-        if not isinstance(goal_pose, move_cube.Pose):
-            goal_pose = move_cube.Pose.from_dict(goal_pose)
-        cube_state = self.unwrapped.platform.cube.get_state()
-        object_pose = move_cube.Pose(
-                np.asarray(cube_state[0]).flatten(),
-                np.asarray(cube_state[1]).flatten())
-        return goal_pose, object_pose
-
-    def compute_orientation_error(self, scale=True):
-        goal_pose, object_pose = self.get_goal_object_pose()
-        orientation_error = compute_orientation_error(goal_pose, object_pose,
-                                                      scale=scale, difficulty=self.difficulty)
-        return orientation_error
-
-    def compute_goal_dist(self, info):
-        goal_pose, object_pose = self.get_goal_object_pose()
-        pos_idx = 3 if info['difficulty'] > 3 else 2
-        goal_dist = np.linalg.norm(object_pose.position[:pos_idx] -
-                                   goal_pose.position[:pos_idx])
-        return goal_dist
-
-
+@configurable(pickleable=True)
 class CubeRewardWrapper(gym.Wrapper):
-    def __init__(self, env, target_dist=0.195, pos_coef=1., ori_coef=0.,
-                 fingertip_coef=0., goal_env=False, ac_norm_pen=0.2, rew_fn='exp',
-                 augment_reward=False):
+    def __init__(self, env, target_dist=0.156, pos_coef=1., ori_coef=0.,
+                 fingertip_coef=0., ac_norm_pen=0.2, goal_env=False, rew_fn='exp',
+                 augment_reward=False, min_ftip_height=0.01, max_velocity=0.175):
         super(CubeRewardWrapper, self).__init__(env)
-        self._target_dist = target_dist  # 0.156
+        self._target_dist = target_dist
         self._pos_coef = pos_coef
         self._ori_coef = ori_coef
         self._fingertip_coef = fingertip_coef
-        self._goal_env = goal_env
         self._ac_norm_pen = ac_norm_pen
+        self._goal_env = goal_env
         self._prev_action = None
         self._prev_obs = None
         self._augment_reward = augment_reward
+        self._min_ftip_height = min_ftip_height
+        self._max_velocity = max_velocity
         self.rew_fn = rew_fn
+        self.obj_pos = deque(maxlen=20)
+        self.obj_ori = deque(maxlen=20)
 
     @property
     def target_dist(self):
@@ -956,6 +425,8 @@ class CubeRewardWrapper(gym.Wrapper):
     def reset(self, **reset_kwargs):
         self._prev_action = None
         self._prev_obs = super(CubeRewardWrapper, self).reset(**reset_kwargs)
+        self.obj_pos.clear()
+        self.obj_ori.clear()
         return self._prev_obs
 
     def step(self, action):
@@ -973,6 +444,13 @@ class CubeRewardWrapper(gym.Wrapper):
             reward = self._compute_reward(goal_pose, object_pose, prev_object_pose)
             if self._fingertip_coef:
                 reward += self.compute_fingertip_reward(observation, self._prev_obs)
+
+        if self._goal_env:
+            observation = observation['observation']
+
+        if (observation['robot_velocity'] > self._max_velocity).any():
+            curr_vel = observation['robot_velocity']
+            reward += -np.sum(np.clip(curr_vel - self._max_velocity, 0, np.inf))*10
         if self._augment_reward:
             reward += r
 
@@ -990,8 +468,8 @@ class CubeRewardWrapper(gym.Wrapper):
             prev_ftip_pos = previous_observation['robot_tip_position']
             curr_ftip_pos = observation['robot_tip_position']
         else:
-            prev_ftip_pos = self.platform.forward_kinematics(previous_observation['robot_position'])
-            curr_ftip_pos = self.platform.forward_kinematics(observation['robot_position'])
+            prev_ftip_pos = np.asarray(self.platform.forward_kinematics(previous_observation['robot_position']))
+            curr_ftip_pos = np.asarray(self.platform.forward_kinematics(observation['robot_position']))
 
         current_distance_from_block = np.linalg.norm(
            curr_ftip_pos - observation["object_position"]
@@ -1001,10 +479,14 @@ class CubeRewardWrapper(gym.Wrapper):
             - previous_observation["object_position"]
         )
 
-        step_ftip_rew = (
+        ftip_rew = (
             previous_distance_from_block - current_distance_from_block
-        )
-        return self._fingertip_coef * step_ftip_rew
+        ) * self._fingertip_coef
+        ftip_pen = -np.sum(np.array(curr_ftip_pos[::3]) < self._min_ftip_height)
+        if ftip_pen != 0:
+            ftip_rew = ftip_pen
+        self.info['fingertip_rew'] = ftip_rew
+        return ftip_rew
 
     def compute_reward(self, achieved_goal, desired_goal, info):
         if isinstance(achieved_goal, dict):
@@ -1013,6 +495,10 @@ class CubeRewardWrapper(gym.Wrapper):
         else:
             obj_pos, obj_ori = achieved_goal[:3], achieved_goal[3:]
             goal_pos, goal_ori = desired_goal[:3], desired_goal[3:]
+        self.obj_pos.append(obj_pos)
+        self.obj_ori.append(obj_ori)
+        # sliding window average
+        obj_pos, obj_ori = np.mean(self.obj_pos, axis=0), np.mean(self.obj_ori, axis=0)
         goal_pose = move_cube.Pose(position=goal_pos, orientation=goal_ori)
         object_pose = move_cube.Pose(position=obj_pos, orientation=obj_ori)
         return self._compute_reward(goal_pose, object_pose, info=info)
@@ -1020,29 +506,40 @@ class CubeRewardWrapper(gym.Wrapper):
     def _compute_reward(self, goal_pose, object_pose, prev_object_pose=None, info=None):
         info = info or self.unwrapped.info
         pos_error = self.compute_position_error(goal_pose, object_pose)
+
+        # compute previous object pose error
         if prev_object_pose is not None:
             prev_pos_error = self.compute_position_error(goal_pose, prev_object_pose)
             step_rew = step_pos_rew = prev_pos_error - pos_error
         else:
             step_rew = 0
+
         if self.difficulty == 4 or self._ori_coef:
-            ori_error = compute_orientation_error(goal_pose, object_pose, scale=True)
+            ori_error = compute_orientation_error(goal_pose, object_pose)
             if prev_object_pose is not None:
-                prev_ori_error = compute_orientation_error(goal_pose, prev_object_pose, scale=True)
+                prev_ori_error = compute_orientation_error(goal_pose, prev_object_pose)
                 step_ori_rew = prev_ori_error - ori_error
                 step_rew = (step_pos_rew * self._pos_coef +
                             step_ori_rew * self._ori_coef)
             else:
                 step_rew = 0
+
+        # compute position and orientation joint reward based on chosen rew_fn 
         if self.rew_fn == 'lin':
             rew = self._pos_coef * (1 - pos_error/self.target_dist)
             if self.difficulty == 4 or self._ori_coef:
                 rew += self._ori_coef * (1 - ori_error)
         elif self.rew_fn == 'exp':
-            rew = self._pos_coef * np.exp(-pos_error/self.target_dist)
+            # pos error penalty
+            if pos_error >= self.target_dist:
+                rew = -1
+            else:
+                rew = self._pos_coef * np.exp(-pos_error/self.target_dist)
             if self.difficulty == 4 or self._ori_coef:
                 rew += self._ori_coef * np.exp(-ori_error)
 
+        # Add to info dict
+        # compute action penalty
         ac_penalty = -np.linalg.norm(self._prev_action) * self._ac_norm_pen
         info['ac_penalty'] = ac_penalty
         if step_rew:
@@ -1051,7 +548,8 @@ class CubeRewardWrapper(gym.Wrapper):
         info['pos_error'] = pos_error
         if self.difficulty == 4 or self._ori_coef:
             info['ori_error'] = ori_error
-        total_rew = step_rew * 3 + rew + ac_penalty
+        total_rew = step_rew + rew + ac_penalty
+        # if pos and ori error are below threshold 
         if pos_error < DIST_THRESH or ori_error < ORI_THRESH:
             return 2.5 * ((pos_error < DIST_THRESH) + (ori_error < ORI_THRESH))
         return total_rew
@@ -1079,7 +577,11 @@ class CubeRewardWrapper(gym.Wrapper):
                 observation = self.unflatten_observation(observation)
             pos, ori = observation['object_position'], observation['object_orientation'],
         elif 'achieved_goal' in observation:
-            pos, ori = observation['achieved_goal'][:3], observation['achieved_goal'][3:]
+            if isinstance(observation['achieved_goal'], dict):
+                pos = observation['achieved_goal']['position']
+                ori = observation['achieved_goal']['orientation']
+            else:
+                pos, ori = observation['achieved_goal'][:3], observation['achieved_goal'][3:]
         object_pose = move_cube.Pose(position=pos,
                                      orientation=ori)
         return goal_pose, object_pose
@@ -1089,6 +591,7 @@ class CubeRewardWrapper(gym.Wrapper):
         return pos_error
 
 
+@configurable(pickleable=True)
 class LogInfoWrapper(gym.Wrapper):
     valid_keys = ['dist', 'score', 'ori_dist', 'ori_scaled',
                   'is_success', 'is_success_ori', 'is_success_ori_dist']
@@ -1113,6 +616,8 @@ class LogInfoWrapper(gym.Wrapper):
         return goal_pose, object_pose
 
     def compute_position_error(self, info, score=False):
+        if 'pos_error' in info:
+            return info.get('pos_error')
         goal_pose, object_pose = self.get_goal_object_pose()
         if score:
             return move_cube.evaluate_state(goal_pose, object_pose,
@@ -1123,7 +628,10 @@ class LogInfoWrapper(gym.Wrapper):
 
     def compute_orientation_error(self, info, scale=False):
         goal_pose, object_pose = self.get_goal_object_pose()
-        return compute_orientation_error(goal_pose, object_pose, scale=scale)
+        ori_error = compute_orientation_error(goal_pose, object_pose)
+        if not scale:
+            ori_error = ori_error * np.pi
+        return ori_error
 
     def step(self, action):
         o, r, d, i = super(LogInfoWrapper, self).step(action)
@@ -1136,9 +644,9 @@ class LogInfoWrapper(gym.Wrapper):
                 elif shortened_k == 'dist' and final == d:
                     i[k] = self.compute_position_error(i, score=False)
                 elif shortened_k == 'ori_dist' and final == d:
-                    i[k] = self.compute_orientation_error(i, scale=False)
+                    i[k] = self.compute_orientation_error(i)
                 elif shortened_k == 'ori_scaled' and final ==  d:
-                    i[k] = self.compute_orientation_error(i, scale=True)
+                    i[k] = self.compute_orientation_error(i)
                 elif k == 'is_success' and d:
                     i[k] = self.compute_position_error(i) < DIST_THRESH
                 elif k == 'is_success_ori' and d:
@@ -1162,14 +670,15 @@ class LogInfoWrapper(gym.Wrapper):
         return o, r, d, self.info
 
 
+@configurable(pickleable=True)
 class StepRewardWrapper(gym.RewardWrapper):
     def __init__(self, env):
         super(StepRewardWrapper, self).__init__(env)
         self._last_rew = 0.
 
-    def reset(self):
+    def reset(self, **kwargs):
         self._last_rew = 0.
-        return super(StepRewardWrapper, self).reset()
+        return super(StepRewardWrapper, self).reset(**kwargs)
 
     def reward(self, reward):
         step_reward = reward - self._last_rew
@@ -1177,7 +686,239 @@ class StepRewardWrapper(gym.RewardWrapper):
         return step_reward
 
 
-def compute_orientation_error(goal_pose, actual_pose, scale=False,
+@configurable(pickleable=True)
+class ObservationNoiseParams:
+    def __init__(self, object_pos_std=.01, object_ori_std=0.,
+                 robot_pos_std=0., robot_vel_std=0., action_noise_loc=0.,
+                 action_noise_scale=0.005, object_mass=0.016,
+                 object_friction=1., joint_friction_scale=0.0):
+        self.object_pos_std = object_pos_std
+        self.object_ori_std = object_ori_std
+        self.robot_pos_std = robot_pos_std
+        self.robot_vel_std = robot_vel_std
+        self.action_noise_loc = action_noise_loc
+        self.action_noise_scale = action_noise_scale
+        self.object_mass = object_mass
+        self.object_friction = object_friction
+        self.joint_friction_scale = joint_friction_scale
+        self.joint_friction = np.random.sample(9) * joint_friction_scale
+
+    def randomize(self, **kwargs):
+        for kwarg in kwargs:
+            if kwarg in self.__dict__:
+                self.__dict__[kwarg] = kwargs.get(kwarg)
+        return
+
+
+@configurable(pickleable=True)
+class ObservationNoiseWrapper(gym.ObservationWrapper, gym.ActionWrapper):
+    def __init__(self, env, noise_params=None, goal_env=False):
+        super(ObservationNoiseWrapper, self).__init__(env)
+        self.noise_params = noise_params or ObservationNoiseParams()
+        self.goal_env = goal_env
+
+    def randomize_params(self):
+        self.noise_params.randomize()
+
+    def reset(self, randomize=False, **kwargs):
+        if randomize:
+            self.randomize_params(**kwargs)
+        ret = super(ObservationNoiseWrapper, self).reset(
+                joint_friction=self.noise_params.joint_friction,
+                object_mass=self.noise_params.object_mass)
+        if self.noise_params.object_friction != 1.:
+            lateral_friction = self.noise_params.object_friction
+            spinning_friction = .001 * self.noise_params.object_friction
+            pybullet.changeDynamics(
+                    bodyUniqueId=self.platform.cube.block_id,
+                    linkIndex=-1,
+                    lateralFriction=lateral_friction,
+                    spinningFriction=spinning_friction)
+        return ret
+
+    def step(self, action):
+        action = self.action(action)
+        return super(ObservationNoiseWrapper, self).step(action)
+
+    def action(self, action):
+        if self.unwrapped.resetting:
+            return action
+        if isinstance(action, dict):
+            n = action['torque'].size
+        else:
+            n = action.size
+        action_noise = np.random.normal(self.noise_params.action_noise_loc,
+                                   scale=self.noise_params.action_noise_scale,
+                                   size=n)
+        if isinstance(action, dict):
+            action['torque'] += action_noise
+            action['torque'] = np.clip(action['torque'],
+                    self.action_space['torque'].low,
+                    self.action_space['torque'].high)
+        else:
+            action += action_noise
+            action = np.clip(action, self.action_space.low, self.action_space.high)
+        return action
+
+    def observation(self, obs):
+        if self.goal_env:
+            object_position_key = 'position'
+            object_orientation_key = 'orientation'
+            object_dict = obs['achieved_goal']
+        else:
+            object_position_key = 'object_position'
+            object_orientation_key = 'object_orientation'
+            object_dict = obs
+        object_dict[object_position_key] += np.random.normal(
+                scale=self.noise_params.object_pos_std,
+                size=3
+            )
+        rot = Rotation.from_quat(object_dict[object_orientation_key])
+        xyz = rot.as_euler('xyz')
+        xyz += np.random.normal(
+                scale=self.noise_params.object_ori_std,
+                size=3
+            )
+        xyz = xyz % 2*np.pi
+        object_dict[object_orientation_key] = Rotation.from_euler('xyz', xyz).as_quat()
+        if self.goal_env:
+            robot_position_key = 'position'
+            robot_velocity_key = 'velocity'
+            robot_dict = obs['observation']
+        else:
+            robot_position_key = 'robot_position'
+            robot_velocity_key = 'robot_velocity'
+            robot_dict = obs
+
+        robot_dict[robot_position_key] += np.random.normal(
+                scale=self.noise_params.robot_pos_std,
+                size=robot_dict[robot_position_key].size
+            )
+        robot_dict[robot_velocity_key] += np.random.normal(
+                scale=self.noise_params.robot_vel_std,
+                size=robot_dict[robot_position_key].size
+            )
+        return obs
+
+
+@configurable(pickleable=True)
+class SingleFingerWrapper(gym.ObservationWrapper):
+
+    def __init__(self, env, finger_id=0, relative=False):
+        super(SingleFingerWrapper, self).__init__(env)
+        assert 0 <= finger_id < 3, f'finger_id was {finger_id}, must be in [0, 3)'
+        self.finger_id = finger_id
+        self.relative = relative
+        if not relative and not self.action_type == ActionType.TORQUE_AND_POSITION:
+           self.action_space = gym.spaces.Box(
+                low=self.env.action_space.low[:3],
+                high=self.env.action_space.high[:3])
+        else:
+            self.action_space = gym.spaces.Box(
+                low=-np.ones(3),
+                high=np.ones(3))
+            self.scale = POS_SCALE[:3]
+
+        self.observation_names = self.env.observation_names
+        obs_space_dict = self.observation_space.spaces
+
+        self._initial_action = np.array([0.,.8,-2]*3)
+        self._initial_action[finger_id*3:(finger_id+1)*3] = (
+                np.array([0.,  0.75, -1.24]))
+        if self.action_type == ActionType.TORQUE_AND_POSITION:
+            self.unwrapped._initial_action = {
+                    'position': self._initial_action,
+                    'torque': np.zeros(9)
+                    }
+        elif self.action_type == ActionType.POSITION:
+            self.unwrapped._initial_action = self._initial_action
+
+        for obs_key, obs_space in obs_space_dict.items():
+            if obs_key == 'robot_tip_forces':
+                obs_space_dict[obs_key] = gym.spaces.Box(
+                        low=0, high=1, shape=(1,))
+            elif obs_key == 'action':
+                obs_space_dict[obs_key] = self.action_space
+            elif 'robot' in obs_key:
+                obs_space_dict[obs_key] = gym.spaces.Box(
+                        low=obs_space.low[:3], high=obs_space.high[:3])
+        return
+
+    def observation(self, obs):
+        for key in self.observation_names:
+            if key == 'robot_tip_forces':
+                obs[key] = obs[key][self.finger_id:self.finger_id+1]
+            elif key == 'action':
+                obs[key] = obs[key][self.finger_id*3:(self.finger_id+1)*3]
+            elif 'robot' in key:
+                obs[key] = obs[key][self.finger_id*3:(self.finger_id+1)*3]
+        return obs
+
+    def reset(self, **kwargs):
+        self._prev_obs = None
+        obs = super(SingleFingerWrapper, self).reset(**kwargs)
+        self._prev_obs = obs
+        return obs
+
+    def step(self, action):
+        action = self.action(action)
+        try:
+            obs, r, d, i = super(SingleFingerWrapper, self).step(action)
+        except ValueError:
+            raise(ValueError, f"The following action was not accepted: {action}")
+        self._prev_obs = obs
+        return obs, r, d, i
+
+    def action(self, action):
+        current_pos = self._initial_action.copy()
+        if self._prev_obs is not None:
+            if isinstance(self.unwrapped, gym.GoalEnv):
+                current_pos[self.finger_id*3:(self.finger_id+1)*3] = self._prev_obs['observation']['position']
+            else:
+                current_pos[self.finger_id*3:(self.finger_id+1)*3] = self._prev_obs['robot_position']
+
+        if self.relative and self.action_type == ActionType.POSITION:
+            action = current_pos[self.finger_id*3:(self.finger_id+1)*3] + self.scale * action
+        if self.action_type == ActionType.TORQUE_AND_POSITION:
+            action = action * 0.397
+
+        t_action = self._initial_action.copy()
+        if self.action_type == ActionType.TORQUE_AND_POSITION:
+            torque = np.zeros(9)
+            torque[self.finger_id*3:(self.finger_id+1)*3] = action
+            current_pos = np.clip(
+                    current_pos, self.unwrapped.action_space['position'].low,
+                    self.unwrapped.action_space['position'].high)
+            torque = np.clip(torque, self.unwrapped.action_space['torque'].low,
+                    self.unwrapped.action_space['torque'].high)
+            t_action = {'position': current_pos, 'torque': torque}
+        else:
+            t_action[self.finger_id*3:(self.finger_id+1)*3] = action
+            t_action = np.clip(t_action, self.env.action_space.low,
+                               self.env.action_space.high)
+        return t_action
+
+
+# Phase 3 orientation error
+def compute_orientation_error(goal_pose, actual_pose):
+    goal_rot = Rotation.from_quat(goal_pose.orientation)
+    actual_rot = Rotation.from_quat(actual_pose.orientation)
+
+    y_axis = [0, 1, 0]
+    goal_direction_vector = goal_rot.apply(y_axis)
+    actual_direction_vector = actual_rot.apply(y_axis)
+
+    orientation_error = np.arccos(
+        goal_direction_vector.dot(actual_direction_vector)
+    )
+
+    # scale both position and orientation error to be within [0, 1] for
+    # their expected ranges
+    error = orientation_error / np.pi
+    return error
+
+
+def compute_orientation_error_old(goal_pose, actual_pose, scale=False,
                               yaw_only=False, quad=False):
     if yaw_only:
         goal_ori = Rotation.from_quat(goal_pose.orientation).as_euler('xyz')
@@ -1201,58 +942,21 @@ def compute_orientation_error(goal_pose, actual_pose, scale=False,
     return orientation_error
 
 
-def flatten_space(space):
-    """Flatten a space into a single ``Box``.
-    This is equivalent to ``flatten()``, but operates on the space itself. The
-    result always is a `Box` with flat boundaries. The box has exactly
-    ``flatdim(space)`` dimensions. Flattening a sample of the original space
-    has the same effect as taking a sample of the flattenend space.
-    Raises ``NotImplementedError`` if the space is not defined in
-    ``gym.spaces``.
-    Example::
-        >>> box = Box(0.0, 1.0, shape=(3, 4, 5))
-        >>> box
-        Box(3, 4, 5)
-        >>> flatten_space(box)
-        Box(60,)
-        >>> flatten(box, box.sample()) in flatten_space(box)
-        True
-    Example that flattens a discrete space::
-        >>> discrete = Discrete(5)
-        >>> flatten_space(discrete)
-        Box(5,)
-        >>> flatten(box, box.sample()) in flatten_space(box)
-        True
-    Example that recursively flattens a dict::
-        >>> space = Dict({"position": Discrete(2),
-        ...               "velocity": Box(0, 1, shape=(2, 2))})
-        >>> flatten_space(space)
-        Box(6,)
-        >>> flatten(space, space.sample()) in flatten_space(space)
-        True
-    """
-    if isinstance(space, Box):
-        return Box(space.low.flatten(), space.high.flatten())
-    if isinstance(space, Discrete):
-        return Box(low=0, high=1, shape=(space.n, ))
-    if isinstance(space, Tuple):
-        space = [flatten_space(s) for s in space.spaces]
-        return Box(
-            low=np.concatenate([s.low for s in space]),
-            high=np.concatenate([s.high for s in space]),
-        )
-    if isinstance(space, Dict):
-        space = [flatten_space(s) for s in space.spaces.values()]
-        return Box(
-            low=np.concatenate([s.low for s in space]),
-            high=np.concatenate([s.high for s in space]),
-        )
-    if isinstance(space, MultiBinary):
-        return Box(low=0, high=1, shape=(space.n, ))
-    if isinstance(space, MultiDiscrete):
-        return Box(
-            low=np.zeros_like(space.nvec),
-            high=space.nvec,
-        )
-    raise NotImplementedError
+
+def get_theta_z_wf(goal_rot, actual_rot):
+    y_axis = [0, 1, 0]
+
+    actual_direction_vector = actual_rot.apply(y_axis)
+
+    goal_direction_vector = goal_rot.apply(y_axis)
+    N = np.array([0, 0, 1]) # normal vector of ground plane
+    proj = goal_direction_vector - goal_direction_vector.dot(N) * N
+    goal_direction_vector = proj / np.linalg.norm(proj) # normalize projection
+
+    orientation_error = np.arccos(
+	goal_direction_vector.dot(actual_direction_vector)
+    )
+
+    return orientation_error
+
 
